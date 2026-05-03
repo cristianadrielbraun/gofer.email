@@ -86,7 +86,7 @@ func (db *DB) migrate() error {
 		currentVersion = 0
 	}
 
-	if currentVersion >= 2 {
+	if currentVersion >= 3 {
 		log.Printf("schema at version %d, no migration needed", currentVersion)
 		return nil
 	}
@@ -95,10 +95,7 @@ func (db *DB) migrate() error {
 		if _, err := tx.Exec(string(schema)); err != nil {
 			return fmt.Errorf("apply schema: %w", err)
 		}
-		if _, err := tx.Exec("INSERT OR REPLACE INTO schema_version (version) VALUES (2)"); err != nil {
-			return fmt.Errorf("update schema version: %w", err)
-		}
-		log.Println("schema migrated to version 2")
+		log.Println("schema initialized at version 3")
 	}
 
 	if currentVersion == 1 {
@@ -106,6 +103,13 @@ func (db *DB) migrate() error {
 			return fmt.Errorf("migrate v1 to v2: %w", err)
 		}
 		log.Println("schema migrated to version 2")
+	}
+
+	if currentVersion == 1 || currentVersion == 2 {
+		if err := migrateV2ToV3(tx); err != nil {
+			return fmt.Errorf("migrate v2 to v3: %w", err)
+		}
+		log.Println("schema migrated to version 3")
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -129,6 +133,33 @@ func migrateV1ToV2(tx *sql.Tx) error {
 		     VALUES (NEW.id, NEW.subject, NEW.from_name || ' <' || NEW.from_email || '>', '', COALESCE(NEW.preview_text, ''));
 		 END`,
 		`INSERT OR REPLACE INTO schema_version (version) VALUES (2)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV2ToV3(tx *sql.Tx) error {
+	migrations := []string{
+		`ALTER TABLE accounts ADD COLUMN imap_host TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE accounts ADD COLUMN imap_port INTEGER NOT NULL DEFAULT 993`,
+		`ALTER TABLE accounts ADD COLUMN imap_tls_mode TEXT NOT NULL DEFAULT 'tls'`,
+		`ALTER TABLE accounts ADD COLUMN smtp_host TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE accounts ADD COLUMN smtp_port INTEGER NOT NULL DEFAULT 465`,
+		`ALTER TABLE accounts ADD COLUMN smtp_tls_mode TEXT NOT NULL DEFAULT 'tls'`,
+		`ALTER TABLE accounts ADD COLUMN username TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE accounts ADD COLUMN encrypted_password BLOB`,
+		`ALTER TABLE accounts ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'plain'`,
+		`ALTER TABLE folders ADD COLUMN highest_seen_uid INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE folders ADD COLUMN highest_modseq INTEGER`,
+		`ALTER TABLE folders ADD COLUMN last_full_sync_at DATETIME`,
+		`ALTER TABLE folders ADD COLUMN last_incremental_sync_at DATETIME`,
+		`ALTER TABLE folders ADD COLUMN sync_error TEXT`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (3)`,
 	}
 
 	for _, m := range migrations {

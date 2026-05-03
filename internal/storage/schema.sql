@@ -14,6 +14,15 @@ CREATE TABLE IF NOT EXISTS accounts (
     display_name TEXT NOT NULL DEFAULT '',
     color TEXT NOT NULL DEFAULT '',
     initials TEXT NOT NULL DEFAULT '',
+    imap_host TEXT NOT NULL DEFAULT '',
+    imap_port INTEGER NOT NULL DEFAULT 993,
+    imap_tls_mode TEXT NOT NULL DEFAULT 'tls',
+    smtp_host TEXT NOT NULL DEFAULT '',
+    smtp_port INTEGER NOT NULL DEFAULT 465,
+    smtp_tls_mode TEXT NOT NULL DEFAULT 'tls',
+    username TEXT NOT NULL DEFAULT '',
+    encrypted_password BLOB,
+    auth_method TEXT NOT NULL DEFAULT 'plain',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -31,6 +40,11 @@ CREATE TABLE IF NOT EXISTS folders (
     uid_validity INTEGER,
     uid_next INTEGER,
     sync_cursor TEXT,
+    highest_seen_uid INTEGER NOT NULL DEFAULT 0,
+    highest_modseq INTEGER,
+    last_full_sync_at DATETIME,
+    last_incremental_sync_at DATETIME,
+    sync_error TEXT,
     total_count INTEGER NOT NULL DEFAULT 0,
     unread_count INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -203,3 +217,6 @@ ON message_labels(label_id);
 
 CREATE INDEX IF NOT EXISTS idx_message_search_docs_account
 ON message_search_docs(account_id);
+
+-- Schema version marker for fresh installs
+INSERT OR REPLACE INTO schema_version (version) VALUES (3);

@@ -1,0 +1,34 @@
+package models
+
+type AccountConfig struct {
+	AccountID   string
+	IMAPHost    string
+	IMAPPort    int
+	IMAPTLSMode string
+	SMTPHost    string
+	SMTPPort    int
+	SMTPTLSMode string
+	Username    string
+	AuthMethod  string
+}
+
+type ConnectionTestResult struct {
+	Success    bool   `json:"success"`
+	Service    string `json:"service"`
+	Message    string `json:"message"`
+	Error      string `json:"error,omitempty"`
+}
+
+type CreateAccountRequest struct {
+	EmailAddress string `json:"email_address"`
+	DisplayName  string `json:"display_name"`
+	IMAPHost     string `json:"imap_host"`
+	IMAPPort     int    `json:"imap_port"`
+	IMAPTLSMode  string `json:"imap_tls_mode"`
+	SMTPHost     string `json:"smtp_host"`
+	SMTPPort     int    `json:"smtp_port"`
+	SMTPTLSMode  string `json:"smtp_tls_mode"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	AuthMethod   string `json:"auth_method"`
+}
