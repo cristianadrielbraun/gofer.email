@@ -218,6 +218,86 @@ func (db *DB) UpdateFolderSyncState(ctx context.Context, folderID string, highes
 	return err
 }
 
+func (db *DB) UpdateFolderIncrementalSync(ctx context.Context, folderID string, highestUID uint32, uidValidity uint32, totalCount int) error {
+	_, err := db.Write().ExecContext(ctx,
+		`UPDATE folders SET highest_seen_uid = ?, uid_validity = ?, total_count = ?,
+		 last_incremental_sync_at = CURRENT_TIMESTAMP, sync_error = NULL, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ?`, highestUID, uidValidity, totalCount, folderID)
+	return err
+}
+
+func (db *DB) GetHighestSeenUID(ctx context.Context, folderID string) (uint32, error) {
+	var uid uint32
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT COALESCE(highest_seen_uid, 0) FROM folders WHERE id = ?`, folderID,
+	).Scan(&uid)
+	return uid, err
+}
+
+func (db *DB) GetAccountIDs(ctx context.Context) ([]string, error) {
+	rows, err := db.Read().QueryContext(ctx, `SELECT id FROM accounts ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (db *DB) GetFolderIDByRole(ctx context.Context, accountID, role string) (string, string, error) {
+	var id, remoteID string
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT id, remote_id FROM folders WHERE account_id = ? AND role = ? LIMIT 1`, accountID, role,
+	).Scan(&id, &remoteID)
+	if err == sql.ErrNoRows {
+		return "", "", nil
+	}
+	return id, remoteID, err
+}
+
+func (db *DB) RefreshFolderUnreadCount(ctx context.Context, folderID string) (int, error) {
+	var count int
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM message_folder_state
+		 WHERE folder_id = ? AND is_read = 0 AND is_deleted = 0`, folderID,
+	).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	_, err = db.Write().ExecContext(ctx,
+		`UPDATE folders SET unread_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		count, folderID)
+	return count, err
+}
+
+func (db *DB) GetAllFolderUnreadCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := db.Read().QueryContext(ctx,
+		`SELECT id, unread_count FROM folders`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var count int
+		if err := rows.Scan(&id, &count); err != nil {
+			return nil, err
+		}
+		result[id] = count
+	}
+	return result, nil
+}
+
 func (db *DB) GetFolderHighestUID(ctx context.Context, folderID string) (uint32, error) {
 	var uid uint32
 	err := db.Read().QueryRowContext(ctx,

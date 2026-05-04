@@ -4,6 +4,62 @@ document.addEventListener("DOMContentLoaded", function () {
   initVirtualScroll()
   setupFolderClickInterception()
   setupEmailSelectionTracking()
+  setupSSE()
+
+  function setupSSE() {
+    if (window.location.pathname === "/settings") return
+
+    var source = new EventSource("/api/events")
+
+    source.addEventListener("new-mail", function (e) {
+      var data
+      try { data = JSON.parse(e.data) } catch (_) { return }
+      if (!data || !data.folder_id) return
+
+      refreshSidebarUnread()
+      if (virtualMailList && virtualMailList.folderID === data.folder_id) {
+        virtualMailList.onNewEmail()
+      }
+    })
+
+    source.onerror = function () {
+      source.close()
+      setTimeout(setupSSE, 5000)
+    }
+  }
+
+  function refreshSidebarUnread() {
+    fetch("/api/folders/unread").then(function (r) { return r.json() }).then(function (counts) {
+      var badges = document.querySelectorAll("[data-folder-unread]")
+      for (var i = 0; i < badges.length; i++) {
+        var badge = badges[i]
+        var id = badge.dataset.folderUnread
+        if (counts[id] !== undefined) {
+          var n = counts[id]
+          badge.textContent = String(n)
+          badge.style.display = n > 0 ? "" : "none"
+        }
+      }
+      for (var id in counts) {
+        if (counts[id] > 0) {
+          var existing = document.querySelector('[data-folder-unread="' + id + '"]')
+          if (!existing) {
+            var link = document.querySelector('aside a[hx-get="/folder/' + id + '"]')
+            if (link) {
+              var span = link.querySelector("span.truncate")
+              if (span) {
+                var badge = document.createElement("span")
+                badge.dataset.folderUnread = id
+                badge.className = "min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums bg-sidebar-accent text-sidebar-foreground/80"
+                badge.textContent = String(counts[id])
+                link.insertBefore(badge, link.firstChild.nextSibling ? link.firstChild.nextSibling : null)
+              }
+            }
+          }
+        }
+      }
+    }).catch(function () {})
+  }
 
   function initVirtualScroll() {
     var container = document.getElementById("mail-list-scroll")

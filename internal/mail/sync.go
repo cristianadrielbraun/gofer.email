@@ -15,8 +15,10 @@ type SyncOrchestrator struct {
 	db           *storage.DB
 	accountStore *config.AccountStore
 	blobStore    *store.BlobStore
+	events       *EventBus
 	mu           sync.Mutex
 	running      map[string]bool
+	idleWatchers map[string]*imap.IdleWatcher
 }
 
 func NewSyncOrchestrator(db *storage.DB, accountStore *config.AccountStore, blobStore *store.BlobStore) *SyncOrchestrator {
@@ -24,12 +26,68 @@ func NewSyncOrchestrator(db *storage.DB, accountStore *config.AccountStore, blob
 		db:           db,
 		accountStore: accountStore,
 		blobStore:    blobStore,
+		events:       NewEventBus(),
 		running:      make(map[string]bool),
+		idleWatchers: make(map[string]*imap.IdleWatcher),
 	}
 }
 
 func (o *SyncOrchestrator) BlobStore() *store.BlobStore {
 	return o.blobStore
+}
+
+func (o *SyncOrchestrator) Events() *EventBus {
+	return o.events
+}
+
+func (o *SyncOrchestrator) Start(ctx context.Context) {
+	accounts, err := o.db.GetAccountIDs(ctx)
+	if err != nil {
+		log.Printf("sync start: get accounts: %v", err)
+		return
+	}
+
+	for _, accountID := range accounts {
+		o.startAccount(ctx, accountID)
+	}
+}
+
+func (o *SyncOrchestrator) startAccount(ctx context.Context, accountID string) {
+	if err := o.syncAccount(ctx, accountID); err != nil {
+		log.Printf("sync account %s: %v", accountID, err)
+	}
+
+	cfg, err := o.accountStore.GetConfig(ctx, accountID)
+	if err != nil {
+		log.Printf("sync idle %s: get config: %v", accountID, err)
+		return
+	}
+
+	password, err := o.accountStore.DecryptPassword(ctx, accountID)
+	if err != nil {
+		log.Printf("sync idle %s: decrypt: %v", accountID, err)
+		return
+	}
+
+	folderID, remoteName, err := o.db.GetFolderIDByRole(ctx, accountID, "inbox")
+	if err != nil {
+		log.Printf("sync idle %s: find inbox: %v", accountID, err)
+		return
+	}
+	if folderID == "" {
+		log.Printf("sync idle %s: no inbox folder found", accountID)
+		return
+	}
+
+	watcher := imap.NewIdleWatcher(cfg, password, remoteName, func() {
+		o.syncIncremental(ctx, accountID, folderID, remoteName)
+	})
+
+	o.mu.Lock()
+	o.idleWatchers[accountID] = watcher
+	o.mu.Unlock()
+
+	go watcher.Run(ctx)
 }
 
 func (o *SyncOrchestrator) SyncAccount(ctx context.Context, accountID string) {
@@ -76,7 +134,6 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string) er
 		return err
 	}
 
-	// Discover/upsert folders first
 	var folderInputs []storage.UpsertFolderInput
 	sortOrder := map[string]int{"inbox": 0, "starred": 1, "sent": 2, "drafts": 3, "archive": 4, "junk": 5, "trash": 6}
 
@@ -111,7 +168,6 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string) er
 		}
 	}
 
-	// Sync messages for each folder
 	for _, f := range folders {
 		select {
 		case <-ctx.Done():
@@ -140,7 +196,60 @@ func (o *SyncOrchestrator) syncFolderMessages(ctx context.Context, client *imap.
 	if result != nil {
 		o.db.UpdateFolderSyncState(ctx, folderID, result.HighestUID, result.UIDValidity, int(result.NumMessages))
 	}
+	o.db.RefreshFolderUnreadCount(ctx, folderID)
 	log.Printf("synced %s/%s: %d messages", accountID, remoteName, result.TotalFetched)
+}
+
+func (o *SyncOrchestrator) syncIncremental(ctx context.Context, accountID, folderID, remoteName string) {
+	highestUID, err := o.db.GetHighestSeenUID(ctx, folderID)
+	if err != nil {
+		log.Printf("incremental %s/%s: get uid: %v", accountID, remoteName, err)
+		return
+	}
+
+	cfg, err := o.accountStore.GetConfig(ctx, accountID)
+	if err != nil {
+		log.Printf("incremental %s/%s: config: %v", accountID, remoteName, err)
+		return
+	}
+
+	password, err := o.accountStore.DecryptPassword(ctx, accountID)
+	if err != nil {
+		log.Printf("incremental %s/%s: password: %v", accountID, remoteName, err)
+		return
+	}
+
+	client, err := imap.NewClient(ctx, cfg, password)
+	if err != nil {
+		log.Printf("incremental %s/%s: connect: %v", accountID, remoteName, err)
+		return
+	}
+	defer client.Close()
+
+	result, err := client.SyncFolderIncremental(ctx, folderID, remoteName, highestUID, func(msgs []storage.SyncMessage) error {
+		return o.db.UpsertSyncMessages(ctx, msgs)
+	})
+	if err != nil {
+		log.Printf("incremental %s/%s: %v", accountID, remoteName, err)
+		return
+	}
+
+	if result.TotalFetched > 0 {
+		log.Printf("incremental %s/%s: %d new messages", accountID, remoteName, result.TotalFetched)
+	}
+
+	if result != nil {
+		o.db.UpdateFolderIncrementalSync(ctx, folderID, result.HighestUID, result.UIDValidity, int(result.NumMessages))
+	}
+
+	unread, _ := o.db.RefreshFolderUnreadCount(ctx, folderID)
+
+	o.events.Publish(Event{
+		Type:      EventNewMail,
+		AccountID: accountID,
+		FolderID:  folderID,
+	})
+	_ = unread
 }
 
 func folderIDFromRemote(accountID, remoteName string) string {

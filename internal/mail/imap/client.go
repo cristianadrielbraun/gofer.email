@@ -31,7 +31,7 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, cfg *models.AccountConfig, password string) (*Client, error) {
-	c, err := connect(ctx, cfg, password)
+	c, err := ConnectWithConfig(cfg, password, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -42,9 +42,12 @@ func NewClient(ctx context.Context, cfg *models.AccountConfig, password string) 
 	}, nil
 }
 
-func connect(ctx context.Context, cfg *models.AccountConfig, password string) (*imapclient.Client, error) {
-	options := &imapclient.Options{
-		Dialer: &net.Dialer{Timeout: 15 * time.Second},
+func ConnectWithConfig(cfg *models.AccountConfig, password string, options *imapclient.Options) (*imapclient.Client, error) {
+	if options == nil {
+		options = &imapclient.Options{}
+	}
+	if options.Dialer == nil {
+		options.Dialer = &net.Dialer{Timeout: 15 * time.Second}
 	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.IMAPHost, cfg.IMAPPort)
@@ -167,7 +170,7 @@ func (c *Client) ListFolders(ctx context.Context) ([]FolderInfo, error) {
 }
 
 func TestConnection(ctx context.Context, cfg *models.AccountConfig, password string) error {
-	c, err := connect(ctx, cfg, password)
+	c, err := ConnectWithConfig(cfg, password, nil)
 	if err != nil {
 		return err
 	}

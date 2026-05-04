@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -39,6 +40,10 @@ func main() {
 	blobStore := store.NewBlobStore(filepath.Join(dataDir, "accounts"))
 
 	syncer := mail.NewSyncOrchestrator(db, accountStore, blobStore)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go syncer.Start(ctx)
 
 	mux := http.NewServeMux()
 	h := handler.New(db, accountStore, syncer, blobStore)

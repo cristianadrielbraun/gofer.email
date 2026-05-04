@@ -123,11 +123,13 @@ templ SidebarFolderLink(folder models.Folder, activeFolder string, accountID str
 		</span>
 		<span class="flex-1 truncate">{ folder.Name }</span>
 		if folder.Unread > 0 {
-			<span class={
-				"min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
-				templ.KV("bg-sidebar-primary/20 text-sidebar-primary", activeFolder == folder.ID),
-				templ.KV("bg-sidebar-accent text-sidebar-foreground/80", activeFolder != folder.ID),
-			}>
+			<span
+				data-folder-unread={ folder.ID }
+				class={
+					"min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
+					templ.KV("bg-sidebar-primary/20 text-sidebar-primary", activeFolder == folder.ID),
+					templ.KV("bg-sidebar-accent text-sidebar-foreground/80", activeFolder != folder.ID),
+				}>
 				{ fmt.Sprintf("%d", folder.Unread) }
 			</span>
 		}

@@ -46,6 +46,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/accounts/{id}", h.handleDeleteAccount)
 	mux.HandleFunc("GET /settings", h.handleSettings)
 	mux.HandleFunc("GET /api/attachments/{id}/download", h.handleAttachmentDownload)
+	mux.HandleFunc("GET /api/events", h.handleSSE)
+	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 }
 
 func setupAssetsRoutes(mux *http.ServeMux) {
@@ -530,4 +532,49 @@ func (h *Handler) handleAttachmentDownload(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	http.ServeContent(w, r, filename, time.Time{}, f)
+}
+
+func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	ch := h.syncer.Events().Subscribe()
+	defer h.syncer.Events().Unsubscribe(ch)
+
+	fmt.Fprintf(w, "event: connected\ndata: {}\n\n")
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case event := <-ch:
+			data, _ := json.Marshal(map[string]string{
+				"type":       string(event.Type),
+				"account_id": event.AccountID,
+				"folder_id":  event.FolderID,
+			})
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
+			flusher.Flush()
+		}
+	}
+}
+
+func (h *Handler) handleFolderUnreadCounts(w http.ResponseWriter, r *http.Request) {
+	counts, err := h.db.GetAllFolderUnreadCounts(r.Context())
+	if err != nil {
+		http.Error(w, "failed to get unread counts", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(counts)
 }
