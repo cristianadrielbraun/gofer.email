@@ -86,7 +86,7 @@ func (db *DB) migrate() error {
 		currentVersion = 0
 	}
 
-	if currentVersion >= 4 {
+	if currentVersion >= 5 {
 		log.Printf("schema at version %d, no migration needed", currentVersion)
 		return nil
 	}
@@ -95,7 +95,7 @@ func (db *DB) migrate() error {
 		if _, err := tx.Exec(string(schema)); err != nil {
 			return fmt.Errorf("apply schema: %w", err)
 		}
-		log.Println("schema initialized at version 4")
+		log.Println("schema initialized at version 5")
 	}
 
 	if currentVersion == 1 {
@@ -117,6 +117,13 @@ func (db *DB) migrate() error {
 			return fmt.Errorf("migrate v3 to v4: %w", err)
 		}
 		log.Println("schema migrated to version 4")
+	}
+
+	if currentVersion == 1 || currentVersion == 2 || currentVersion == 3 || currentVersion == 4 {
+		if err := migrateV4ToV5(tx); err != nil {
+			return fmt.Errorf("migrate v4 to v5: %w", err)
+		}
+		log.Println("schema migrated to version 5")
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -182,6 +189,21 @@ func migrateV3ToV4(tx *sql.Tx) error {
 		`ALTER TABLE accounts ADD COLUMN smtp_username TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE accounts ADD COLUMN encrypted_smtp_password BLOB`,
 		`INSERT OR REPLACE INTO schema_version (version) VALUES (4)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV4ToV5(tx *sql.Tx) error {
+	migrations := []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_account_internet_msg_id
+		 ON messages(account_id, internet_message_id)`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (5)`,
 	}
 
 	for _, m := range migrations {

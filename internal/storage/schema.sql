@@ -190,8 +190,8 @@ ON messages(account_id, thread_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_remote_id
 ON messages(account_id, remote_message_id);
 
-CREATE INDEX IF NOT EXISTS idx_messages_internet_msg_id
-ON messages(internet_message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_account_internet_msg_id
+ON messages(account_id, internet_message_id);
 
 CREATE INDEX IF NOT EXISTS idx_folder_state_folder_date
 ON message_folder_state(folder_id, synced_at DESC);
@@ -221,4 +221,4 @@ CREATE INDEX IF NOT EXISTS idx_message_search_docs_account
 ON message_search_docs(account_id);
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (4);
+INSERT OR REPLACE INTO schema_version (version) VALUES (5);
