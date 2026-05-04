@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"gofer.email/internal/config"
 	mail "gofer.email/internal/mail"
@@ -481,18 +482,10 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 		views.ConnectionTestResults(results, accountID, wizardType).Render(r.Context(), w)
 		return
 	}
-	allSuccess := true
-	for _, r := range results {
-		if !r.Success {
-			allSuccess = false
-			break
-		}
-	}
-	if allSuccess {
-		views.SettingsTestButtonSuccess(accountID).Render(r.Context(), w)
-	} else {
-		views.SettingsTestButtonError(accountID, results).Render(r.Context(), w)
-	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"results": results,
+	})
 }
 
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
