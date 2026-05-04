@@ -5,6 +5,8 @@ import (
 	"gofer.email/internal/models"
 
 	"gofer.email/components/button"
+	"gofer.email/components/checkbox"
+	"gofer.email/components/selectbox"
 	"gofer.email/components/dialog"
 	"gofer.email/components/icon"
 	"gofer.email/components/input"
@@ -114,6 +116,7 @@ templ AddAccountDialog() {
 				<div class="h-px flex-1 bg-border"></div>
 				<div class="wizard-dot" data-step="2"></div>
 			</div>
+			@selectbox.Script()
 			<style>
 				.wizard-dot { width: 8px; height: 8px; border-radius: 9999px; background: oklch(0.7 0 0); transition: background 0.3s; flex-shrink: 0; }
 				.wizard-dot.active { background: oklch(0.55 0.18 50); }
@@ -231,11 +234,16 @@ templ AddAccountDialog() {
 								</div>
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Encryption</label>
-									<select name="imap_tls_mode" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-										<option value="tls" selected>TLS</option>
-										<option value="starttls">STARTTLS</option>
-										<option value="none">None</option>
-									</select>
+									@selectbox.SelectBox() {
+										@selectbox.Trigger(selectbox.TriggerProps{Name: "imap_tls_mode"}) {
+											@selectbox.Value(selectbox.ValueProps{Placeholder: "TLS"}) { TLS }
+										}
+										@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+											@selectbox.Item(selectbox.ItemProps{Value: "tls", Selected: true}) { TLS }
+											@selectbox.Item(selectbox.ItemProps{Value: "starttls"}) { STARTTLS }
+											@selectbox.Item(selectbox.ItemProps{Value: "none"}) { None }
+										}
+									}
 								</div>
 							</div>
 							<hr class="my-4 border-border"/>
@@ -264,10 +272,15 @@ templ AddAccountDialog() {
 								</div>
 								<div class="col-span-2">
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Method</label>
-									<select name="auth_method" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-										<option value="plain" selected>PLAIN</option>
-										<option value="oauth2">OAuth2</option>
-									</select>
+									@selectbox.SelectBox() {
+										@selectbox.Trigger(selectbox.TriggerProps{Name: "auth_method"}) {
+											@selectbox.Value(selectbox.ValueProps{Placeholder: "PLAIN"}) { PLAIN }
+										}
+										@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+											@selectbox.Item(selectbox.ItemProps{Value: "plain", Selected: true}) { PLAIN }
+											@selectbox.Item(selectbox.ItemProps{Value: "oauth2"}) { OAuth2 }
+										}
+									}
 								</div>
 							</div>
 							<div class="flex justify-between pt-6">
@@ -309,16 +322,25 @@ templ AddAccountDialog() {
 								</div>
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Encryption</label>
-									<select name="smtp_tls_mode" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-										<option value="tls" selected>TLS</option>
-										<option value="starttls">STARTTLS</option>
-										<option value="none">None</option>
-									</select>
+									@selectbox.SelectBox() {
+										@selectbox.Trigger(selectbox.TriggerProps{Name: "smtp_tls_mode"}) {
+											@selectbox.Value(selectbox.ValueProps{Placeholder: "TLS"}) { TLS }
+										}
+										@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+											@selectbox.Item(selectbox.ItemProps{Value: "tls", Selected: true}) { TLS }
+											@selectbox.Item(selectbox.ItemProps{Value: "starttls"}) { STARTTLS }
+											@selectbox.Item(selectbox.ItemProps{Value: "none"}) { None }
+										}
+									}
 								</div>
 							</div>
 							<hr class="my-4 border-border"/>
 							<label class="flex items-center gap-2 cursor-pointer mb-4">
-								<input type="checkbox" id="smtp-same-auth" checked onchange="toggleSmtpAuth(this.checked)" class="rounded border-border"/>
+								@checkbox.Checkbox(checkbox.Props{
+									ID:         "smtp-same-auth",
+									Checked:    true,
+									Attributes: templ.Attributes{"onchange": "toggleSmtpAuth(this.checked)"},
+								})
 								<span class="text-sm">Use same login as incoming mail</span>
 							</label>
 							<div id="smtp-auth-fields" class="opacity-50">
