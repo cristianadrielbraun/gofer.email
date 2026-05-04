@@ -66,17 +66,31 @@ func (s *AccountStore) DecryptPassword(ctx context.Context, accountID string) (s
 	return s.decrypt(encrypted)
 }
 
+func (s *AccountStore) DecryptSmtpPassword(ctx context.Context, accountID string) (string, error) {
+	var encrypted []byte
+	err := s.db.Read().QueryRowContext(ctx,
+		`SELECT encrypted_smtp_password FROM accounts WHERE id = ?`, accountID,
+	).Scan(&encrypted)
+	if err != nil {
+		return "", fmt.Errorf("query smtp password: %w", err)
+	}
+	if encrypted == nil {
+		return "", nil
+	}
+	return s.decrypt(encrypted)
+}
+
 func (s *AccountStore) GetConfig(ctx context.Context, accountID string) (*models.AccountConfig, error) {
 	var cfg models.AccountConfig
 	cfg.AccountID = accountID
 	err := s.db.Read().QueryRowContext(ctx,
 		`SELECT imap_host, imap_port, imap_tls_mode,
 		        smtp_host, smtp_port, smtp_tls_mode,
-		        username, auth_method
+		        username, auth_method, smtp_username
 		 FROM accounts WHERE id = ?`, accountID,
 	).Scan(&cfg.IMAPHost, &cfg.IMAPPort, &cfg.IMAPTLSMode,
 		&cfg.SMTPHost, &cfg.SMTPPort, &cfg.SMTPTLSMode,
-		&cfg.Username, &cfg.AuthMethod)
+		&cfg.Username, &cfg.AuthMethod, &cfg.SmtpUsername)
 	if err != nil {
 		return nil, fmt.Errorf("query account config: %w", err)
 	}
@@ -105,6 +119,14 @@ func (s *AccountStore) CreateAccount(ctx context.Context, req *models.CreateAcco
 		req.AuthMethod = "plain"
 	}
 
+	var encryptedSmtpPw []byte
+	if req.SmtpPassword != "" {
+		encryptedSmtpPw, err = s.encrypt(req.SmtpPassword)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt smtp password: %w", err)
+		}
+	}
+
 	id := generateAccountID(req.EmailAddress)
 	initials := extractInitials(req.DisplayName)
 	color := generateColor(id)
@@ -113,12 +135,14 @@ func (s *AccountStore) CreateAccount(ctx context.Context, req *models.CreateAcco
 		`INSERT INTO accounts (id, email_address, display_name, color, initials,
 		  imap_host, imap_port, imap_tls_mode,
 		  smtp_host, smtp_port, smtp_tls_mode,
-		  username, encrypted_password, auth_method)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  username, encrypted_password, auth_method,
+		  smtp_username, encrypted_smtp_password)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, req.EmailAddress, req.DisplayName, color, initials,
 		req.IMAPHost, req.IMAPPort, req.IMAPTLSMode,
 		req.SMTPHost, req.SMTPPort, req.SMTPTLSMode,
-		req.Username, encrypted, req.AuthMethod)
+		req.Username, encrypted, req.AuthMethod,
+		req.SmtpUsername, encryptedSmtpPw)
 	if err != nil {
 		return nil, fmt.Errorf("insert account: %w", err)
 	}
@@ -183,6 +207,18 @@ func (s *AccountStore) UpdateAccount(ctx context.Context, accountID string, req 
 	if req.AuthMethod != "" {
 		setClauses = append(setClauses, "auth_method = ?")
 		args = append(args, req.AuthMethod)
+	}
+	if req.SmtpUsername != "" {
+		setClauses = append(setClauses, "smtp_username = ?")
+		args = append(args, req.SmtpUsername)
+	}
+	if req.SmtpPassword != "" {
+		encrypted, err := s.encrypt(req.SmtpPassword)
+		if err != nil {
+			return fmt.Errorf("encrypt smtp password: %w", err)
+		}
+		setClauses = append(setClauses, "encrypted_smtp_password = ?")
+		args = append(args, encrypted)
 	}
 
 	if len(setClauses) == 0 {

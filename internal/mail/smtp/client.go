@@ -67,18 +67,23 @@ func NewClient(ctx context.Context, cfg *models.AccountConfig, password string) 
 		return nil, fmt.Errorf("ehlo: %w", err)
 	}
 
+	smtpUsername := cfg.SmtpUsername
+	if smtpUsername == "" {
+		smtpUsername = cfg.Username
+	}
+
 	switch cfg.AuthMethod {
 	case "plain":
-		saslClient := sasl.NewPlainClient("", cfg.Username, password)
+		saslClient := sasl.NewPlainClient("", smtpUsername, password)
 		err = client.Auth(saslClient)
 	case "oauth2":
 		saslClient := sasl.NewOAuthBearerClient(&sasl.OAuthBearerOptions{
-			Username: cfg.Username,
+			Username: smtpUsername,
 			Token:    password,
 		})
 		err = client.Auth(saslClient)
 	default:
-		saslClient := sasl.NewPlainClient("", cfg.Username, password)
+		saslClient := sasl.NewPlainClient("", smtpUsername, password)
 		err = client.Auth(saslClient)
 	}
 

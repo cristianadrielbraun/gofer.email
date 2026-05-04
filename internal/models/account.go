@@ -1,15 +1,16 @@
 package models
 
 type AccountConfig struct {
-	AccountID   string
-	IMAPHost    string
-	IMAPPort    int
-	IMAPTLSMode string
-	SMTPHost    string
-	SMTPPort    int
-	SMTPTLSMode string
-	Username    string
-	AuthMethod  string
+	AccountID    string
+	IMAPHost     string
+	IMAPPort     int
+	IMAPTLSMode  string
+	SMTPHost     string
+	SMTPPort     int
+	SMTPTLSMode  string
+	Username     string
+	AuthMethod   string
+	SmtpUsername string
 }
 
 type ConnectionTestResult struct {
@@ -31,4 +32,6 @@ type CreateAccountRequest struct {
 	Username     string `json:"username"`
 	Password     string `json:"password"`
 	AuthMethod   string `json:"auth_method"`
+	SmtpUsername string `json:"smtp_username"`
+	SmtpPassword string `json:"smtp_password"`
 }

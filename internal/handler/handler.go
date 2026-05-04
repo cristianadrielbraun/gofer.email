@@ -31,7 +31,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /search", h.handleSearch)
 	mux.HandleFunc("POST /api/accounts", h.handleCreateAccount)
 	mux.HandleFunc("POST /api/accounts/{id}/test", h.handleTestAccount)
-	mux.HandleFunc("GET /settings/account-form", h.handleAccountForm)
 	mux.HandleFunc("GET /settings", h.handleSettings)
 }
 
@@ -205,6 +204,8 @@ func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		Username:     r.FormValue("username"),
 		Password:     r.FormValue("password"),
 		AuthMethod:   r.FormValue("auth_method"),
+		SmtpUsername: r.FormValue("smtp_username"),
+		SmtpPassword: r.FormValue("smtp_password"),
 	}
 
 	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" || req.Password == "" {
@@ -258,7 +259,17 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	results = append(results, imapResult)
 
-	smtpErr := smtpclient.TestConnection(r.Context(), cfg, password)
+	smtpPassword := password
+	if cfg.SmtpUsername != "" {
+		smtpPw, err := h.accountStore.DecryptSmtpPassword(r.Context(), accountID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("decrypt smtp password: %v", err), http.StatusInternalServerError)
+			return
+		}
+		smtpPassword = smtpPw
+	}
+
+	smtpErr := smtpclient.TestConnection(r.Context(), cfg, smtpPassword)
 	smtpResult := models.ConnectionTestResult{
 		Service: "smtp",
 		Message: fmt.Sprintf("%s:%d (%s)", cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPTLSMode),
@@ -273,11 +284,6 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	views.ConnectionTestResults(results, accountID).Render(r.Context(), w)
-}
-
-func (h *Handler) handleAccountForm(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	views.AccountForm().Render(r.Context(), w)
 }
 
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {

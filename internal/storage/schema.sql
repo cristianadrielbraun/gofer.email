@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     username TEXT NOT NULL DEFAULT '',
     encrypted_password BLOB,
     auth_method TEXT NOT NULL DEFAULT 'plain',
+    smtp_username TEXT NOT NULL DEFAULT '',
+    encrypted_smtp_password BLOB,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -219,4 +221,4 @@ CREATE INDEX IF NOT EXISTS idx_message_search_docs_account
 ON message_search_docs(account_id);
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (3);
+INSERT OR REPLACE INTO schema_version (version) VALUES (4);
