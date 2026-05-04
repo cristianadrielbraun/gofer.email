@@ -5,6 +5,19 @@ document.addEventListener("DOMContentLoaded", function () {
   setupFolderClickInterception()
   setupEmailSelectionTracking()
   setupSSE()
+  setupMailListActions()
+
+  function setupMailListActions() {
+    document.addEventListener("click", function (e) {
+      var starBtn = e.target.closest(".star-btn")
+      if (starBtn) {
+        e.preventDefault()
+        e.stopPropagation()
+        var emailId = starBtn.dataset.emailId
+        if (emailId) toggleStar(emailId)
+      }
+    })
+  }
 
   function setupSSE() {
     if (window.location.pathname === "/settings") return
@@ -34,6 +47,10 @@ document.addEventListener("DOMContentLoaded", function () {
       } else {
         showSendStatus("failed", data.error || "Failed to send")
       }
+    })
+
+    source.addEventListener("mutation", function (e) {
+      refreshSidebarUnread()
     })
 
     source.onerror = function () {
@@ -267,4 +284,53 @@ function handleReply(mode) {
   setTimeout(function () {
     if (mode === "forward" && toField) toField.focus()
   }, 100)
+}
+
+function toggleRead(emailId) {
+  fetch("/api/messages/" + emailId + "/read", { method: "POST" })
+    .then(function (r) { return r.json() })
+    .then(function (data) {
+      if (virtualMailList) virtualMailList.onNewEmail()
+      refreshSidebarUnread()
+    })
+    .catch(function () {})
+}
+
+function toggleStar(emailId) {
+  fetch("/api/messages/" + emailId + "/star", { method: "POST" })
+    .then(function (r) { return r.json() })
+    .then(function (data) {
+      var starBtn = document.querySelector('[data-star-email="' + emailId + '"]')
+      if (starBtn) {
+        if (data.is_starred) {
+          starBtn.innerHTML = starBtn.innerHTML.replace("text-muted-foreground/30", "text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.3)]")
+        } else {
+          starBtn.innerHTML = starBtn.innerHTML.replace("text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.3)]", "text-muted-foreground/30")
+        }
+      }
+      if (virtualMailList) virtualMailList.onNewEmail()
+    })
+    .catch(function () {})
+}
+
+function deleteMessage(emailId) {
+  fetch("/api/messages/" + emailId, { method: "DELETE" })
+    .then(function () {
+      if (virtualMailList) virtualMailList.onNewEmail()
+      refreshSidebarUnread()
+    })
+    .catch(function () {})
+}
+
+function moveMessage(emailId, folderId) {
+  fetch("/api/messages/" + emailId + "/move", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "folder_id=" + encodeURIComponent(folderId)
+  })
+    .then(function () {
+      if (virtualMailList) virtualMailList.onNewEmail()
+      refreshSidebarUnread()
+    })
+    .catch(function () {})
 }

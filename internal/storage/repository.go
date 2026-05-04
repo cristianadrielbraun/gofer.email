@@ -923,3 +923,148 @@ func (db *DB) GetMessageBodyPaths(ctx context.Context, messageID int64) (textPat
 	).Scan(&textPath, &htmlPath)
 	return
 }
+
+type MessageMutationInfo struct {
+	AccountID        string
+	FolderID         string
+	FolderRemoteID   string
+	RemoteUID        uint32
+	FolderRole       string
+}
+
+func (db *DB) GetMessageMutationInfo(ctx context.Context, messageID int64) (*MessageMutationInfo, error) {
+	var info MessageMutationInfo
+	var remoteUID sql.NullInt64
+	var role string
+
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT m.account_id, mfs.folder_id, f.remote_id, mfs.remote_uid, f.role
+		 FROM messages m
+		 JOIN message_folder_state mfs ON m.id = mfs.message_id
+		 JOIN folders f ON mfs.folder_id = f.id
+		 WHERE m.id = ?
+		 LIMIT 1`, messageID,
+	).Scan(&info.AccountID, &info.FolderID, &info.FolderRemoteID, &remoteUID, &role)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query mutation info: %w", err)
+	}
+
+	info.FolderRole = role
+	if remoteUID.Valid {
+		info.RemoteUID = uint32(remoteUID.Int64)
+	}
+	return &info, nil
+}
+
+func (db *DB) SetMessageRead(ctx context.Context, messageID int64, isRead bool) error {
+	_, err := db.Write().ExecContext(ctx,
+		`UPDATE message_folder_state SET is_read = ? WHERE message_id = ?`,
+		isRead, messageID)
+	if err != nil {
+		return err
+	}
+
+	var folderID string
+	db.Read().QueryRowContext(ctx,
+		`SELECT folder_id FROM message_folder_state WHERE message_id = ? LIMIT 1`, messageID,
+	).Scan(&folderID)
+	if folderID != "" {
+		db.RefreshFolderUnreadCount(ctx, folderID)
+	}
+	return nil
+}
+
+func (db *DB) SetMessageStarred(ctx context.Context, messageID int64, isStarred bool) error {
+	_, err := db.Write().ExecContext(ctx,
+		`UPDATE message_folder_state SET is_starred = ? WHERE message_id = ?`,
+		isStarred, messageID)
+	return err
+}
+
+func (db *DB) MarkMessageDeleted(ctx context.Context, messageID int64) error {
+	_, err := db.Write().ExecContext(ctx,
+		`UPDATE message_folder_state SET is_deleted = 1 WHERE message_id = ?`,
+		messageID)
+	if err != nil {
+		return err
+	}
+
+	var folderID string
+	db.Read().QueryRowContext(ctx,
+		`SELECT folder_id FROM message_folder_state WHERE message_id = ? LIMIT 1`, messageID,
+	).Scan(&folderID)
+	if folderID != "" {
+		db.RefreshFolderUnreadCount(ctx, folderID)
+	}
+	return nil
+}
+
+func (db *DB) RemoveMessageFromFolder(ctx context.Context, messageID int64, folderID string) error {
+	_, err := db.Write().ExecContext(ctx,
+		`DELETE FROM message_folder_state WHERE message_id = ? AND folder_id = ?`,
+		messageID, folderID)
+	if err != nil {
+		return err
+	}
+	db.RefreshFolderUnreadCount(ctx, folderID)
+	return nil
+}
+
+func (db *DB) AddMessageToFolder(ctx context.Context, messageID int64, folderID string, remoteUID uint32, isRead, isStarred bool) error {
+	_, err := db.Write().ExecContext(ctx,
+		`INSERT INTO message_folder_state (message_id, folder_id, remote_uid, is_read, is_starred, is_flagged, is_draft, is_deleted, synced_at)
+		 VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?)
+		 ON CONFLICT(message_id, folder_id) DO UPDATE SET
+			remote_uid = excluded.remote_uid`,
+		messageID, folderID, remoteUID, isRead, isStarred, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	db.RefreshFolderUnreadCount(ctx, folderID)
+	return nil
+}
+
+func (db *DB) GetMessageAllFolderStates(ctx context.Context, messageID int64) ([]struct {
+	FolderID  string
+	RemoteUID uint32
+	IsRead    bool
+	IsStarred bool
+}, error) {
+	rows, err := db.Read().QueryContext(ctx,
+		`SELECT folder_id, remote_uid, is_read, is_starred FROM message_folder_state WHERE message_id = ?`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []struct {
+		FolderID  string
+		RemoteUID uint32
+		IsRead    bool
+		IsStarred bool
+	}
+	for rows.Next() {
+		var item struct {
+			FolderID  string
+			RemoteUID uint32
+			IsRead    bool
+			IsStarred bool
+		}
+		var isRead, isStarred int
+		var remoteUID sql.NullInt64
+		if err := rows.Scan(&item.FolderID, &remoteUID, &isRead, &isStarred); err != nil {
+			return nil, err
+		}
+		if remoteUID.Valid {
+			item.RemoteUID = uint32(remoteUID.Int64)
+		}
+		item.IsRead = isRead == 1
+		item.IsStarred = isStarred == 1
+		results = append(results, item)
+	}
+	return results, nil
+}

@@ -209,7 +209,7 @@ templ MailListItem(email models.Email, position int, selectedEmail *models.Email
 				if email.IsStarred {
 					@icon.Star(icon.Props{Class: "size-3.5 text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.4)]"})
 				} else {
-					<button class="opacity-0 group-hover:opacity-100 transition-opacity">
+					<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn" data-email-id={ email.ID }>
 						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/30"})
 					</button>
 				}
@@ -309,7 +309,7 @@ templ MailListItemsFragment(emails []models.Email, folderID string, windowStart,
 						if email.IsStarred {
 							@icon.Star(icon.Props{Class: "size-3.5 text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.4)]"})
 						} else {
-							<button class="opacity-0 group-hover:opacity-100 transition-opacity">
+							<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn" data-email-id={ email.ID }>
 								@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/30"})
 							</button>
 						}

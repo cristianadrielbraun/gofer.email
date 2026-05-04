@@ -5,9 +5,10 @@ import "sync"
 type EventType string
 
 const (
-	EventNewMail     EventType = "new-mail"
-	EventSyncComplete EventType = "sync-complete"
-	EventSendResult  EventType = "send-result"
+	EventNewMail      EventType = "new-mail"
+	EventSyncComplete  EventType = "sync-complete"
+	EventSendResult   EventType = "send-result"
+	EventMutation     EventType = "mutation"
 )
 
 type Event struct {
