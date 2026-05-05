@@ -1230,7 +1230,8 @@ func (db *DB) SetUISettings(ctx context.Context, settings map[string]string) err
 
 func defaultUISettings() map[string]string {
 	return map[string]string{
-		"theme": "dark",
+		"theme":       "dark",
+		"theme_style": "classic",
 	}
 }
 

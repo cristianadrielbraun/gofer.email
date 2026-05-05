@@ -197,7 +197,7 @@ import "./chartjs.js";
       }, 50);
     }).observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class", "style"],
+      attributeFilter: ["class", "style", "data-theme"],
     });
 
     // Observe for new charts

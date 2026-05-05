@@ -39,3 +39,14 @@ func uiSettingGet(settings map[string]string, key, fallback string) string {
 	}
 	return fallback
 }
+
+func themeClass(settings map[string]string) string {
+	if uiSettingGet(settings, "theme", "dark") == "dark" {
+		return "dark"
+	}
+	return ""
+}
+
+func themeStyle(settings map[string]string) string {
+	return uiSettingGet(settings, "theme_style", "classic")
+}

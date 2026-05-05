@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./themes/classic.css";
+@import "./themes/minimal.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -72,70 +74,6 @@
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-:root {
-  --radius: 0.65rem;
-  --background: #d6cfc2;
-  --foreground: #2c2418;
-  --card: #efe8dc;
-  --card-foreground: #2c2418;
-  --popover: #efe8dc;
-  --popover-foreground: #2c2418;
-  --primary: #c77b30;
-  --primary-foreground: #ffffff;
-  --secondary: #e0d8cc;
-  --secondary-foreground: #2c2418;
-  --muted: #d8d0c4;
-  --muted-foreground: #7a6f60;
-  --accent: #e8dcc8;
-  --accent-foreground: #2c2418;
-  --destructive: #c44040;
-  --border: #c4b9a8;
-  --input: #c4b9a8;
-  --ring: #c77b30;
-  --sidebar: #1e1a14;
-  --sidebar-foreground: #b8a88c;
-  --sidebar-primary: #c77b30;
-  --sidebar-primary-foreground: #fff8ee;
-  --sidebar-accent: #2a241c;
-  --sidebar-accent-foreground: #e0d4c0;
-  --sidebar-border: #3a3228;
-  --sidebar-ring: #c77b30;
-  --paper: #f8f2e6;
-  --paper-foreground: #2c2418;
-  --copper: #c77b30;
-  --brass: #b8a060;
-  --ink: #1a1408;
-}
-
-.dark {
-  --background: #141210;
-  --foreground: #e0d4c0;
-  --card: #1e1a14;
-  --card-foreground: #e0d4c0;
-  --popover: #252018;
-  --popover-foreground: #e0d4c0;
-  --primary: #d49040;
-  --primary-foreground: #1a1408;
-  --secondary: #252018;
-  --secondary-foreground: #e0d4c0;
-  --muted: #1e1a14;
-  --muted-foreground: #7a6f60;
-  --accent: #28221a;
-  --accent-foreground: #e0d4c0;
-  --destructive: #e05050;
-  --border: #3a3228;
-  --input: #3a3228;
-  --ring: #d49040;
-  --sidebar: #12100c;
-  --sidebar-foreground: #8a7e6c;
-  --sidebar-primary: #d49040;
-  --sidebar-primary-foreground: #1a1408;
-  --sidebar-accent: #1e1a14;
-  --sidebar-accent-foreground: #d8ccb4;
-  --sidebar-border: #2a241c;
-  --sidebar-ring: #d49040;
 }
 
 @layer base {
@@ -232,7 +170,9 @@
 .divider-etched {
   border: none;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--color-sidebar-border), transparent);
+  margin-left: 1rem;
+  margin-right: 1rem;
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
 }
 
 /* === MAIL LIST ITEM (VIRTUAL SCROLL) === */
@@ -289,19 +229,26 @@
 .envelope {
   background: var(--color-card);
   border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
-  box-shadow: var(--shadow-card);
   transition: all 0.2s ease;
 }
 
+[data-theme="classic"]:not(.dark) .envelope,
+[data-theme="minimal"]:not(.dark) .envelope {
+  border-color: color-mix(in srgb, var(--color-border) 80%, transparent);
+}
+
 .envelope:hover {
-  box-shadow: var(--shadow-card-hover);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-foreground) 20%, transparent);
+}
+
+[data-theme="classic"]:not(.dark) .envelope:hover,
+[data-theme="minimal"]:not(.dark) .envelope:hover {
+  background: color-mix(in srgb, var(--color-foreground) 4%, var(--color-card));
 }
 
 .envelope-active {
   background: var(--color-accent);
-  border-color: var(--color-copper);
-  box-shadow: var(--shadow-card-hover), 0 0 0 1px var(--color-copper);
+  border-color: color-mix(in srgb, var(--color-foreground) 25%, var(--color-accent));
 }
 
 /* === PROSE FOR EMAIL BODY === */

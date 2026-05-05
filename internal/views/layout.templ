@@ -11,7 +11,7 @@ import (
 
 templ Layout(accounts []models.Account, activeFolder string, emails []models.Email, selectedEmail *models.Email, totalCount int, uiSettings map[string]string) {
 	<!DOCTYPE html>
-	<html lang="en" class="dark">
+	<html lang="en" class={ themeClass(uiSettings) } data-theme={ themeStyle(uiSettings) }>
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -20,13 +20,12 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
 			<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
 			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script>window._goferUISettings={ uiSettingsJSON(uiSettings) }</script>
 			@dialog.Script()
 			@dropdown.Script()
 			@tabs.Script()
 			@tooltip.Script()
 		</head>
-		<body class="bg-background text-foreground antialiased surface-desk">
+		<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings={ uiSettingsJSON(uiSettings) }>
 			<div class="flex h-screen overflow-hidden">
 				@Sidebar(accounts, activeFolder, uiSettingGet(uiSettings, "sidebar_width", "256px"))
 				@ResizeHandle("sidebar")
@@ -87,7 +86,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 
 templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) {
 	<!DOCTYPE html>
-	<html lang="en" class="dark">
+	<html lang="en" class={ themeClass(uiSettings) } data-theme={ themeStyle(uiSettings) }>
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -96,18 +95,17 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
 			<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
 			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script>window._goferUISettings={ uiSettingsJSON(uiSettings) }</script>
 			@dialog.Script()
 			@dropdown.Script()
 			@tabs.Script()
 			@tooltip.Script()
 		</head>
-		<body class="bg-background text-foreground antialiased surface-desk">
+		<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings={ uiSettingsJSON(uiSettings) }>
 			<div class="flex h-screen overflow-hidden">
 				@Sidebar(accounts, "", uiSettingGet(uiSettings, "sidebar_width", "256px"))
 				@ResizeHandle("sidebar")
 				<div id="main-content" class="flex flex-1 min-w-0">
-					@SettingsPage(accounts, syncSettings, activeTab)
+					@SettingsPage(accounts, syncSettings, activeTab, uiSettings)
 				</div>
 			</div>
 			@ComposeDialog(accounts)
@@ -186,9 +184,9 @@ templ MailContentPartial(emails []models.Email, activeFolder string, selectedEma
 	</div>
 }
 
-templ SettingsPartial(accounts []models.Account, syncSettings models.SyncSettings, activeTab string) {
+templ SettingsPartial(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) {
 	<div id="main-content" class="flex flex-1 min-w-0">
-		@SettingsPage(accounts, syncSettings, activeTab)
+		@SettingsPage(accounts, syncSettings, activeTab, uiSettings)
 	</div>
 	@AddAccountDialog()
 	<div id="edit-account-container"></div>

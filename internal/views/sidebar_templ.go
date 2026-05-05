@@ -378,7 +378,7 @@ func SidebarAccountSection(account models.Account, activeFolder string) templ.Co
 			templ_7745c5c3_Var12 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"mb-3\"><div class=\"flex items-center gap-2.5 px-2 py-2 text-sm font-semibold text-sidebar-accent-foreground debossed\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"mb-3\"><div class=\"flex items-center gap-2.5 px-2 py-2 text-sm font-semibold text-sidebar-accent-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -507,7 +507,7 @@ func SidebarFolderLink(folder models.Folder, activeFolder string, accountID stri
 		}
 		ctx = templ.ClearChildren(ctx)
 		var templ_7745c5c3_Var18 = []any{"flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-md text-[13px] transition-all duration-150",
-			templ.KV("bg-sidebar-accent text-sidebar-primary font-medium shadow-[0_1px_0_rgba(0,0,0,0.2)_inset,0_-1px_0_rgba(255,255,255,0.03)_inset]", activeFolder == folder.ID),
+			templ.KV("bg-sidebar-accent text-sidebar-primary font-medium", activeFolder == folder.ID),
 			templ.KV("text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground", activeFolder != folder.ID),
 		}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var18...)

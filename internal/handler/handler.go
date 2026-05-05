@@ -621,33 +621,35 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx)
 	syncSettings := h.buildSyncSettings(ctx, accounts)
+	uiSettings := h.db.GetUISettings(ctx)
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		views.SettingsPartial(accounts, syncSettings, "accounts").Render(ctx, w)
+		views.SettingsPartial(accounts, syncSettings, "accounts", uiSettings).Render(ctx, w)
 		return
 	}
 
-	views.SettingsLayout(accounts, syncSettings, "accounts", h.db.GetUISettings(ctx)).Render(ctx, w)
+	views.SettingsLayout(accounts, syncSettings, "accounts", uiSettings).Render(ctx, w)
 }
 
 func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 	tab := r.PathValue("tab")
-	if tab != "accounts" && tab != "sync" {
+	if tab != "accounts" && tab != "sync" && tab != "appearance" {
 		http.NotFound(w, r)
 		return
 	}
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx)
 	syncSettings := h.buildSyncSettings(ctx, accounts)
+	uiSettings := h.db.GetUISettings(ctx)
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		views.SettingsPartial(accounts, syncSettings, tab).Render(ctx, w)
+		views.SettingsPartial(accounts, syncSettings, tab, uiSettings).Render(ctx, w)
 		return
 	}
 
-	views.SettingsLayout(accounts, syncSettings, tab, h.db.GetUISettings(ctx)).Render(ctx, w)
+	views.SettingsLayout(accounts, syncSettings, tab, uiSettings).Render(ctx, w)
 }
 
 func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Account) models.SyncSettings {

@@ -29,9 +29,17 @@ var GoferSettings;
     }
   }
 
+  function applyThemeStyle(style) {
+    var html = document.documentElement;
+    html.setAttribute("data-theme", style || "classic");
+  }
+
   function applySetting(key, value) {
     if (key === "theme") {
       applyTheme(value);
+    }
+    if (key === "theme_style") {
+      applyThemeStyle(value);
     }
     if (key === "sidebar_width") {
       var panel = document.querySelector("aside");
@@ -51,8 +59,11 @@ var GoferSettings;
 
   GoferSettings = {
     init: function () {
-      if (window._goferUISettings) {
-        _cache = window._goferUISettings;
+      var bodySettings = document.body ? document.body.dataset.uiSettings : null;
+      if (bodySettings) {
+        try {
+          _cache = JSON.parse(bodySettings);
+        } catch (_) {}
       } else {
         readCache();
         for (var k in _cache) {

@@ -1,0 +1,191 @@
+/* === MINIMAL THEME === */
+
+[data-theme="minimal"] {
+  --radius: 0.5rem;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #f5f5f5;
+  --card-foreground: #0a0a0a;
+  --popover: #f5f5f5;
+  --popover-foreground: #0a0a0a;
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f0f0f0;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #0a0a0a;
+  --destructive: #dc2626;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #0a0a0a;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #525252;
+  --sidebar-primary: #0a0a0a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #0a0a0a;
+  --paper: #ffffff;
+  --paper-foreground: #0a0a0a;
+  --copper: #0a0a0a;
+  --brass: #737373;
+  --ink: #0a0a0a;
+}
+
+[data-theme="minimal"].dark {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #141414;
+  --card-foreground: #fafafa;
+  --popover: #141414;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #fafafa;
+  --muted: #1a1a1a;
+  --muted-foreground: #a3a3a3;
+  --accent: #1a1a1a;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --border: #262626;
+  --input: #262626;
+  --ring: #fafafa;
+  --sidebar: #0f0f0f;
+  --sidebar-foreground: #a3a3a3;
+  --sidebar-primary: #fafafa;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #262626;
+  --sidebar-ring: #fafafa;
+  --paper: #0a0a0a;
+  --paper-foreground: #fafafa;
+  --copper: #fafafa;
+  --brass: #a3a3a3;
+  --ink: #fafafa;
+}
+
+/* === STRUCTURAL OVERRIDES === */
+
+[data-theme="minimal"] .surface-desk {
+  background: var(--background);
+}
+
+[data-theme="minimal"] .surface-leather {
+  background: var(--sidebar);
+}
+
+[data-theme="minimal"] .surface-paper {
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: none;
+}
+
+[data-theme="minimal"].dark .surface-paper {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+[data-theme="minimal"] .raised {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+[data-theme="minimal"] .btn-skeuo {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .btn-skeuo:hover {
+  background: color-mix(in srgb, var(--primary) 90%, #000);
+}
+
+[data-theme="minimal"] .btn-skeuo:active {
+  box-shadow: none;
+  transform: none;
+}
+
+[data-theme="minimal"] .envelope {
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .envelope:hover {
+  box-shadow: none;
+  transform: none;
+  border-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
+[data-theme="minimal"] .envelope-active {
+  border-color: var(--primary);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .compose-titlebar {
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+[data-theme="minimal"] .compose-body {
+  background: var(--background);
+}
+
+[data-theme="minimal"] .compose-fields {
+  border-bottom: 1px solid var(--border);
+}
+
+[data-theme="minimal"] .compose-field-row {
+  border-bottom: 1px solid var(--border);
+}
+
+[data-theme="minimal"] .compose-field-label {
+  color: var(--muted-foreground);
+}
+
+[data-theme="minimal"] .compose-toolbar {
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+[data-theme="minimal"] .compose-footer {
+  border-top: 1px solid var(--border);
+  background: var(--muted);
+}
+
+[data-theme="minimal"] .compose-send-btn {
+  background: var(--primary);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .compose-send-btn:hover {
+  background: color-mix(in srgb, var(--primary) 90%, #000);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .compose-send-btn:active {
+  box-shadow: none;
+  transform: none;
+}
+
+[data-theme="minimal"] .compose-draft-btn {
+  background: var(--muted);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .compose-draft-btn:hover {
+  background: color-mix(in srgb, var(--muted) 80%, transparent);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .compose-seal {
+  background: var(--primary);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] .divider-etched {
+  background: var(--border);
+}
