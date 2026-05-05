@@ -22,7 +22,7 @@ import (
 	"gofer.email/components/tabs"
 )
 
-func SettingsPage(accounts []models.Account, syncSettings models.SyncSettings) templ.Component {
+func SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, activeTab string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -89,7 +89,7 @@ func SettingsPage(accounts []models.Account, syncSettings models.SyncSettings) t
 					}
 					return nil
 				})
-				templ_7745c5c3_Err = tabs.Trigger(tabs.TriggerProps{Value: "accounts", IsActive: true}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = tabs.Trigger(tabs.TriggerProps{Value: "accounts", IsActive: activeTab == "accounts"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -115,7 +115,7 @@ func SettingsPage(accounts []models.Account, syncSettings models.SyncSettings) t
 					}
 					return nil
 				})
-				templ_7745c5c3_Err = tabs.Trigger(tabs.TriggerProps{Value: "sync"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var5), templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = tabs.Trigger(tabs.TriggerProps{Value: "sync", IsActive: activeTab == "sync"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var5), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -147,7 +147,7 @@ func SettingsPage(accounts []models.Account, syncSettings models.SyncSettings) t
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = tabs.Content(tabs.ContentProps{Value: "accounts", IsActive: true}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var6), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = tabs.Content(tabs.ContentProps{Value: "accounts", IsActive: activeTab == "accounts"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var6), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -173,7 +173,7 @@ func SettingsPage(accounts []models.Account, syncSettings models.SyncSettings) t
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = tabs.Content(tabs.ContentProps{Value: "sync"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = tabs.Content(tabs.ContentProps{Value: "sync", IsActive: activeTab == "sync"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2802,7 +2802,7 @@ func AccountFormError(message string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 172, "</p></div><div class=\"flex justify-end pt-2\"><a href=\"/settings\" class=\"inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md border border-border hover:bg-accent\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 172, "</p></div><div class=\"flex justify-end pt-2\"><a href=\"/settings/accounts\" class=\"inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md border border-border hover:bg-accent\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3006,12 +3006,12 @@ func ConnectionTestResults(results []models.ConnectionTestResult, accountID stri
 				return templ_7745c5c3_Err
 			}
 			if hasFailure {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 194, "<a href=\"/settings\" class=\"inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors\">Save Anyway</a> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 194, "<a href=\"/settings/accounts\" class=\"inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors\">Save Anyway</a> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 195, "<a href=\"/settings\" class=\"inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors\">Done</a></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 195, "<a href=\"/settings/accounts\" class=\"inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors\">Done</a></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

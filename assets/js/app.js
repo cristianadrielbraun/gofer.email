@@ -99,6 +99,16 @@ document.addEventListener("DOMContentLoaded", function () {
     var folderID = container.dataset.folderId || "inbox"
     virtualMailList = new VirtualMailList(container, { folderID: folderID })
     virtualMailList.hydrateFromDOM()
+    container._virtualMailList = virtualMailList
+
+    var selectedId = virtualMailList.selectedEmailId
+    if (window.location.pathname === "/" || window.location.pathname.startsWith("/?")) {
+      var path = "/" + folderID
+      if (selectedId) path += "/" + selectedId
+      history.replaceState({ folder: folderID, email: selectedId || null }, "", path)
+    } else {
+      history.replaceState({ folder: folderID, email: selectedId || null }, "", window.location.pathname)
+    }
   }
 
   function setupFolderClickInterception() {

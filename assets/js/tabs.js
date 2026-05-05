@@ -36,6 +36,13 @@
     const value = trigger.getAttribute("data-tui-tabs-value");
     if (tabsId && value) {
       setActiveTab(tabsId, value);
+
+      if (window.location.pathname.startsWith("/settings")) {
+        var url = "/settings/" + value;
+        if (window.location.pathname !== url) {
+          history.pushState({ settingsTab: value }, "", url);
+        }
+      }
     }
   });
 
@@ -69,4 +76,16 @@
   window.tui.tabs = {
     setActive: setActiveTab,
   };
+
+  window.addEventListener("popstate", (e) => {
+    if (!window.location.pathname.startsWith("/settings")) return;
+    if (!e.state || !e.state.settingsTab) return;
+    var tab = e.state.settingsTab;
+    var container = document.querySelector("[data-tui-tabs]");
+    if (!container) return;
+    var tabsId = container.getAttribute("data-tui-tabs-id");
+    if (tabsId && tab) {
+      setActiveTab(tabsId, tab);
+    }
+  });
 })();

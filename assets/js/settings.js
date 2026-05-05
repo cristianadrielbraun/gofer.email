@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", function () {
   setupTestButtonAnimation()
+  setupSettingsHistory()
 
   function setupTestButtonAnimation() {
     document.body.addEventListener("htmx:beforeRequest", function (e) {
@@ -140,4 +141,12 @@ function escapeHtml(text) {
   var el = document.createElement("span")
   el.textContent = text
   return el.innerHTML
+}
+
+function setupSettingsHistory() {
+  if (!window.location.pathname.startsWith("/settings")) return
+  var parts = window.location.pathname.replace(/\/+$/, "").split("/")
+  var tab = parts[2] || "accounts"
+  if (tab !== "accounts" && tab !== "sync") tab = "accounts"
+  history.replaceState({ settingsTab: tab }, "", window.location.pathname)
 }

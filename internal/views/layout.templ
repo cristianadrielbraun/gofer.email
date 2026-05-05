@@ -42,7 +42,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 	</html>
 }
 
-templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings) {
+templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings, activeTab string) {
 	<!DOCTYPE html>
 	<html lang="en" class="dark">
 		<head>
@@ -61,7 +61,7 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<div class="flex h-screen overflow-hidden">
 				@Sidebar(accounts, "")
-				@SettingsPage(accounts, syncSettings)
+				@SettingsPage(accounts, syncSettings, activeTab)
 			</div>
 			<div id="mail-list" class="hidden"></div>
 			@ComposeDialog(accounts)

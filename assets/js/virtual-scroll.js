@@ -330,7 +330,8 @@ class VirtualMailList {
     this.render()
   }
 
-  async switchFolder(folderID) {
+  async switchFolder(folderID, pushState) {
+    if (pushState === undefined) pushState = true
     this.reset()
     this.folderID = folderID
 
@@ -359,6 +360,7 @@ class VirtualMailList {
 
     this.render()
     this.updateHeader()
+    if (pushState) this.pushUrl()
   }
 
   reset() {
@@ -383,6 +385,17 @@ class VirtualMailList {
     this.prevFirst = null
     this.prevLast = null
     this.render()
+    this.pushUrl()
+  }
+
+  pushUrl() {
+    var path = "/" + this.folderID
+    if (this.selectedEmailId) {
+      path += "/" + this.selectedEmailId
+    }
+    if (window.location.pathname + window.location.search !== path) {
+      history.pushState({ folder: this.folderID, email: this.selectedEmailId }, "", path)
+    }
   }
 
   showNewEmailBanner() {
@@ -463,3 +476,39 @@ class VirtualMailList {
 }
 
 window.VirtualMailList = VirtualMailList
+
+window.addEventListener("popstate", function (e) {
+  if (!e.state || !e.state.folder) return
+  var container = document.getElementById("mail-list-scroll")
+  if (!container || !container._virtualMailList) return
+  var vml = container._virtualMailList
+  var folderID = e.state.folder
+  if (folderID && folderID !== vml.folderID) {
+    vml.switchFolder(folderID, false)
+    var sidebar = document.querySelector("aside")
+    if (sidebar) {
+      var sidebarLinks = sidebar.querySelectorAll("a[hx-get^='/folder/']")
+      for (var i = 0; i < sidebarLinks.length; i++) {
+        sidebarLinks[i].classList.remove(
+          "bg-sidebar-accent",
+          "text-sidebar-primary",
+          "font-medium"
+        )
+        sidebarLinks[i].classList.add("text-sidebar-foreground")
+      }
+      var activeLink = sidebar.querySelector('a[hx-get="/folder/' + folderID + '"]')
+      if (activeLink) {
+        activeLink.classList.add("bg-sidebar-accent", "text-sidebar-primary", "font-medium")
+        activeLink.classList.remove("text-sidebar-foreground")
+      }
+    }
+  } else if (e.state.email && e.state.email !== vml.selectedEmailId) {
+    vml.selectedEmailId = e.state.email
+    vml.prevFirst = null
+    vml.prevLast = null
+    vml.render()
+    if (typeof htmx !== "undefined") {
+      htmx.ajax("GET", "/email/" + e.state.email, "#mail-view")
+    }
+  }
+})

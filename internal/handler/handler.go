@@ -40,6 +40,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", h.handleIndex)
 	mux.HandleFunc("GET /email/{id}", h.handleEmailPartial)
 	mux.HandleFunc("GET /folder/{id}", h.handleFolderPartial)
+	mux.HandleFunc("GET /folder/{id}/{email}", h.handleFolderWithEmail)
 	mux.HandleFunc("GET /mail/folder/{id}/items", h.handleMailItems)
 	mux.HandleFunc("GET /search", h.handleSearch)
 	mux.HandleFunc("POST /api/accounts", h.handleCreateAccount)
@@ -48,6 +49,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/accounts/{id}/test", h.handleTestAccount)
 	mux.HandleFunc("DELETE /api/accounts/{id}", h.handleDeleteAccount)
 	mux.HandleFunc("GET /settings", h.handleSettings)
+	mux.HandleFunc("GET /settings/{tab}", h.handleSettingsTab)
 	mux.HandleFunc("POST /api/settings/sync", h.handleSaveSyncSettings)
 	mux.HandleFunc("GET /api/attachments/{id}/download", h.handleAttachmentDownload)
 	mux.HandleFunc("GET /api/events", h.handleSSE)
@@ -88,6 +90,34 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	emailID := r.URL.Query().Get("email")
 	ctx := r.Context()
 
+	accounts, _ := h.db.GetAccounts(ctx)
+	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
+
+	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
+	var emails []models.Email
+	if page != nil {
+		emails = page.Emails
+	}
+
+	var selectedEmail *models.Email
+	if emailID != "" {
+		selectedEmail, _ = h.db.GetEmailByID(ctx, emailID)
+	}
+	if selectedEmail == nil && len(emails) > 0 {
+		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
+	}
+
+	views.Layout(accounts, folderID, emails, selectedEmail, totalCount).Render(ctx, w)
+}
+
+func (h *Handler) handleFolderWithEmail(w http.ResponseWriter, r *http.Request) {
+	folderID := r.PathValue("id")
+	emailID := r.PathValue("email")
+	if folderID == "" {
+		folderID = "inbox"
+	}
+
+	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx)
 	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
 
@@ -426,7 +456,7 @@ func (h *Handler) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Hx-Redirect", "/settings")
+	w.Header().Set("Hx-Redirect", "/settings/accounts")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -500,10 +530,26 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/settings" {
+		http.Redirect(w, r, "/settings/accounts", http.StatusMovedPermanently)
+		return
+	}
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx)
 	syncSettings := h.buildSyncSettings(ctx, accounts)
-	views.SettingsLayout(accounts, syncSettings).Render(ctx, w)
+	views.SettingsLayout(accounts, syncSettings, "accounts").Render(ctx, w)
+}
+
+func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
+	tab := r.PathValue("tab")
+	if tab != "accounts" && tab != "sync" {
+		http.NotFound(w, r)
+		return
+	}
+	ctx := r.Context()
+	accounts, _ := h.db.GetAccounts(ctx)
+	syncSettings := h.buildSyncSettings(ctx, accounts)
+	views.SettingsLayout(accounts, syncSettings, tab).Render(ctx, w)
 }
 
 func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Account) models.SyncSettings {
