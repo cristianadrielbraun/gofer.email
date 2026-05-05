@@ -73,7 +73,7 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 	<div class="mt-6 space-y-6">
 		<div class="bg-card rounded-lg border p-6">
 			<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Sync Frequency</h3>
-			<form id="sync-settings-form" hx-post="/api/settings/sync" hx-swap="none" hx-on::after-request="location.reload()" class="space-y-4">
+			<form id="sync-settings-form" action="/api/settings/sync" method="POST" class="space-y-4">
 				<div>
 					<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Check for new messages every</label>
 					@selectbox.SelectBox() {
@@ -163,14 +163,31 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 				}
 
 				<div class="flex justify-end pt-2">
-					@button.Button(button.Props{
-						Size:  button.SizeSm,
-						Class: "btn-skeuo",
-						Type:  "submit",
-					}) {
-						@icon.Check(icon.Props{Class: "size-4"})
-						Save
-					}
+					<button
+						type="submit"
+						id="sync-save-btn"
+						disabled
+						class="btn-skeuo inline-flex items-center justify-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+					>
+						<span class="inline-flex items-center gap-1.5">
+							<span class="sync-btn-idle inline-flex items-center gap-1.5">
+								@icon.Check(icon.Props{Class: "size-4"})
+								Save
+							</span>
+							<span class="sync-btn-saving hidden items-center gap-1.5">
+								<div class="size-4 border-2 border-current/30 border-t-current rounded-full animate-spin"></div>
+								Saving
+							</span>
+							<span class="sync-btn-saved hidden items-center gap-1.5">
+								<svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path class="sync-check-icon" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+								Saved
+							</span>
+							<span class="sync-btn-error hidden items-center gap-1.5">
+								<svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path class="sync-x-icon" stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M6 18L18 6"/></svg>
+								Failed
+							</span>
+						</span>
+					</button>
 				</div>
 			</form>
 		</div>
@@ -186,6 +203,16 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 		}
 		.sync-pill-enter { animation: sync-pill-in 220ms ease-out; }
 		.sync-pill-exit { animation: sync-pill-out 160ms ease-in forwards; }
+		@keyframes check-draw {
+			0% { stroke-dashoffset: 24; }
+			100% { stroke-dashoffset: 0; }
+		}
+		@keyframes x-draw {
+			0% { stroke-dashoffset: 12; }
+			100% { stroke-dashoffset: 0; }
+		}
+		.sync-check-icon { stroke-dasharray: 24; stroke-dashoffset: 24; animation: check-draw 300ms ease-out 100ms forwards; }
+		.sync-x-icon { stroke-dasharray: 12; stroke-dashoffset: 12; animation: x-draw 250ms ease-out 100ms forwards; }
 	</style>
 	<script>
 	(function() {
@@ -279,12 +306,100 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 			if (pill) {
 				e.preventDefault();
 				togglePill(pill);
+				markDirty();
 				return;
 			}
 			var warnBtn = e.target.closest('[data-sync-warning-toggle]');
 			if (warnBtn) {
 				toggleSyncWarning(warnBtn);
 			}
+		});
+
+		function markDirty() {
+			var btn = document.getElementById('sync-save-btn');
+			if (btn) btn.disabled = false;
+		}
+
+		var syncBtnTimer = null;
+		function setButtonState(state) {
+			var btn = document.getElementById('sync-save-btn');
+			if (!btn) return;
+
+			if (syncBtnTimer) { clearTimeout(syncBtnTimer); syncBtnTimer = null; }
+
+			var fromW = btn.offsetWidth;
+			btn.style.width = fromW + 'px';
+
+			btn.querySelectorAll('.sync-btn-idle,.sync-btn-saving,.sync-btn-saved,.sync-btn-error').forEach(function(el) {
+				el.classList.add('hidden');
+				el.classList.remove('inline-flex');
+			});
+			var target = btn.querySelector('.sync-btn-' + state);
+			if (target) { target.classList.remove('hidden'); target.classList.add('inline-flex'); }
+
+			btn.classList.remove('btn-skeuo', 'bg-emerald-600', 'hover:bg-emerald-700', 'text-white', 'bg-destructive', 'hover:bg-destructive/90');
+			if (state === 'saved') {
+				btn.classList.add('bg-emerald-600', 'hover:bg-emerald-700', 'text-white');
+			} else if (state === 'error') {
+				btn.classList.add('bg-destructive', 'hover:bg-destructive/90', 'text-white');
+			} else {
+				btn.classList.add('btn-skeuo');
+			}
+
+			btn.disabled = false;
+
+			var toW = btn.scrollWidth;
+			btn.style.width = fromW + 'px';
+
+			requestAnimationFrame(function() {
+				btn.style.transition = 'width 200ms ease, background-color 200ms ease, opacity 200ms ease, color 200ms ease';
+				btn.style.width = toW + 'px';
+
+				syncBtnTimer = setTimeout(function() {
+					btn.style.width = '';
+					btn.style.transition = '';
+					if (state === 'saving') btn.disabled = true;
+					syncBtnTimer = null;
+				}, 220);
+			});
+		}
+
+		document.getElementById('sync-settings-form').addEventListener('submit', function(e) {
+			e.preventDefault();
+			var form = this;
+			var btn = document.getElementById('sync-save-btn');
+			setButtonState('saving');
+
+			var formData = new FormData(form);
+			var params = new URLSearchParams();
+			formData.forEach(function(value, key) {
+				params.append(key, value);
+			});
+			fetch('/api/settings/sync', {
+				method: 'POST',
+				body: params,
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' }
+			}).then(function(res) {
+				if (!res.ok) throw new Error(res.statusText);
+				return res.json();
+			}).then(function() {
+				setButtonState('saved');
+				syncBtnTimer = setTimeout(function() {
+					setButtonState('idle');
+					syncBtnTimer = setTimeout(function() {
+						document.getElementById('sync-save-btn').disabled = true;
+					}, 220);
+				}, 2000);
+			}).catch(function() {
+				setButtonState('error');
+				syncBtnTimer = setTimeout(function() {
+					setButtonState('idle');
+				}, 3000);
+			});
+		});
+
+		document.querySelector('#sync-settings-form [data-tui-selectbox-content]')?.addEventListener('click', function() {
+			setTimeout(markDirty, 50);
 		});
 
 		updateHiddenInputs();
