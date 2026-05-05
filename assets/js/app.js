@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function setupSSE() {
-    if (window.location.pathname === "/settings") return
+    if (window.location.pathname.startsWith("/settings")) return
 
     var source = new EventSource("/api/events")
 
@@ -102,13 +102,9 @@ document.addEventListener("DOMContentLoaded", function () {
     container._virtualMailList = virtualMailList
 
     var selectedId = virtualMailList.selectedEmailId
-    if (window.location.pathname === "/" || window.location.pathname.startsWith("/?")) {
-      var path = "/" + folderID
-      if (selectedId) path += "/" + selectedId
-      history.replaceState({ folder: folderID, email: selectedId || null }, "", path)
-    } else {
-      history.replaceState({ folder: folderID, email: selectedId || null }, "", window.location.pathname)
-    }
+    var path = "/folder/" + folderID
+    if (selectedId) path += "/" + selectedId
+    history.replaceState({ folder: folderID, email: selectedId || null }, "", path)
   }
 
   function setupFolderClickInterception() {
@@ -118,7 +114,6 @@ document.addEventListener("DOMContentLoaded", function () {
     sidebar.addEventListener("click", function (e) {
       var link = e.target.closest('a[hx-get^="/folder/"]')
       if (!link) return
-      if (!virtualMailList) return
 
       e.preventDefault()
       e.stopPropagation()
@@ -142,7 +137,15 @@ document.addEventListener("DOMContentLoaded", function () {
       )
       link.classList.remove("text-sidebar-foreground")
 
-      virtualMailList.switchFolder(folderID)
+      var mainContent = document.getElementById("main-content")
+      var isOnSettings = mainContent && mainContent.querySelector("[data-tui-tabs]")
+      if (isOnSettings || !virtualMailList) {
+        if (typeof htmx !== "undefined") {
+          htmx.ajax("GET", "/folder/" + folderID + "/full", {target: "#main-content", swap: "outerHTML"})
+        }
+      } else {
+        virtualMailList.switchFolder(folderID)
+      }
     })
   }
 
@@ -160,6 +163,23 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     })
   }
+
+  document.body.addEventListener("htmx:afterSettle", function (evt) {
+    var scroll = document.getElementById("mail-list-scroll")
+    if (!scroll || scroll._virtualMailList) return
+    if (!evt.target || !evt.target.querySelector) return
+    if (!evt.target.querySelector("#mail-list-scroll")) return
+
+    var folderID = scroll.dataset.folderId || "inbox"
+    virtualMailList = new VirtualMailList(scroll, { folderID: folderID })
+    virtualMailList.hydrateFromDOM()
+    scroll._virtualMailList = virtualMailList
+
+    var selectedId = virtualMailList.selectedEmailId
+    var path = "/folder/" + folderID
+    if (selectedId) path += "/" + selectedId
+    history.replaceState({ folder: folderID, email: selectedId || null }, "", path)
+  })
 })
 
 var sendStatusTimer = null

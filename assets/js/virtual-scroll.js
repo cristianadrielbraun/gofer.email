@@ -389,11 +389,11 @@ class VirtualMailList {
   }
 
   pushUrl() {
-    var path = "/" + this.folderID
+    var path = "/folder/" + this.folderID
     if (this.selectedEmailId) {
       path += "/" + this.selectedEmailId
     }
-    if (window.location.pathname + window.location.search !== path) {
+    if (window.location.pathname !== path) {
       history.pushState({ folder: this.folderID, email: this.selectedEmailId }, "", path)
     }
   }
@@ -478,9 +478,25 @@ class VirtualMailList {
 window.VirtualMailList = VirtualMailList
 
 window.addEventListener("popstate", function (e) {
-  if (!e.state || !e.state.folder) return
+  if (!e.state) return
+
+  if (e.state.settingsTab) {
+    if (typeof htmx !== "undefined") {
+      htmx.ajax("GET", "/settings/" + e.state.settingsTab, {target: "#main-content", swap: "outerHTML"})
+    }
+    return
+  }
+
+  if (!e.state.folder) return
+
   var container = document.getElementById("mail-list-scroll")
-  if (!container || !container._virtualMailList) return
+  if (!container || !container._virtualMailList) {
+    if (typeof htmx !== "undefined") {
+      htmx.ajax("GET", "/folder/" + e.state.folder + "/full", {target: "#main-content", swap: "outerHTML"})
+    }
+    return
+  }
+
   var vml = container._virtualMailList
   var folderID = e.state.folder
   if (folderID && folderID !== vml.folderID) {

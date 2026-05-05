@@ -82,7 +82,12 @@
     if (!e.state || !e.state.settingsTab) return;
     var tab = e.state.settingsTab;
     var container = document.querySelector("[data-tui-tabs]");
-    if (!container) return;
+    if (!container) {
+      if (typeof htmx !== "undefined") {
+        htmx.ajax("GET", "/settings/" + tab, {target: "#main-content", swap: "outerHTML"});
+      }
+      return;
+    }
     var tabsId = container.getAttribute("data-tui-tabs-id");
     if (tabsId && tab) {
       setActiveTab(tabsId, tab);

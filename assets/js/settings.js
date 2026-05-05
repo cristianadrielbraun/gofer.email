@@ -150,3 +150,9 @@ function setupSettingsHistory() {
   if (tab !== "accounts" && tab !== "sync") tab = "accounts"
   history.replaceState({ settingsTab: tab }, "", window.location.pathname)
 }
+
+document.body.addEventListener("htmx:afterSettle", function (e) {
+  if (!e.target || !e.target.querySelector) return
+  if (!e.target.querySelector("[data-tui-tabs]")) return
+  setupSettingsHistory()
+})

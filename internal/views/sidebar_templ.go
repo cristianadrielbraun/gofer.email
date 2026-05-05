@@ -719,7 +719,7 @@ func SidebarFooter() templ.Component {
 			templ_7745c5c3_Var27 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<div class=\"px-4 py-3 border-t border-sidebar-border\"><a href=\"/settings/accounts\" class=\"w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60 transition-colors text-[13px]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<div class=\"px-4 py-3 border-t border-sidebar-border\"><a href=\"/settings/accounts\" hx-get=\"/settings/accounts\" hx-target=\"#main-content\" hx-swap=\"outerHTML\" hx-push-url=\"/settings/accounts\" class=\"w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60 transition-colors text-[13px]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

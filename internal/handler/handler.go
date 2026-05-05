@@ -40,6 +40,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", h.handleIndex)
 	mux.HandleFunc("GET /email/{id}", h.handleEmailPartial)
 	mux.HandleFunc("GET /folder/{id}", h.handleFolderPartial)
+	mux.HandleFunc("GET /folder/{id}/full", h.handleFolderFull)
 	mux.HandleFunc("GET /folder/{id}/{email}", h.handleFolderWithEmail)
 	mux.HandleFunc("GET /mail/folder/{id}/items", h.handleMailItems)
 	mux.HandleFunc("GET /search", h.handleSearch)
@@ -246,18 +247,34 @@ func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
 		folderID = "inbox"
 	}
 
+	ctx := r.Context()
+	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
+
+	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
+	var emails []models.Email
+	if page != nil {
+		emails = page.Emails
+	}
+
+	var selectedEmail *models.Email
+	if len(emails) > 0 {
+		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
+	}
+
 	if r.Header.Get("HX-Request") == "true" {
-		currentURL := r.Header.Get("HX-Current-URL")
-		if currentURL != "" && strings.Contains(currentURL, "/settings") {
-			w.Header().Set("HX-Redirect", fmt.Sprintf("/?folder=%s", folderID))
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		if currentURL == "" && r.Referer() != "" && strings.Contains(r.Referer(), "/settings") {
-			w.Header().Set("HX-Redirect", fmt.Sprintf("/?folder=%s", folderID))
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+		w.Header().Set("Content-Type", "text/html")
+		views.FolderPartial(emails, folderID, selectedEmail, totalCount).Render(ctx, w)
+		return
+	}
+
+	accounts, _ := h.db.GetAccounts(ctx)
+	views.Layout(accounts, folderID, emails, selectedEmail, totalCount).Render(ctx, w)
+}
+
+func (h *Handler) handleFolderFull(w http.ResponseWriter, r *http.Request) {
+	folderID := r.PathValue("id")
+	if folderID == "" {
+		folderID = "inbox"
 	}
 
 	ctx := r.Context()
@@ -275,7 +292,7 @@ func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	views.FolderPartial(emails, folderID, selectedEmail, totalCount).Render(ctx, w)
+	views.MailContentPartial(emails, folderID, selectedEmail, totalCount).Render(ctx, w)
 }
 
 func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
@@ -537,6 +554,13 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx)
 	syncSettings := h.buildSyncSettings(ctx, accounts)
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		views.SettingsPartial(accounts, syncSettings, "accounts").Render(ctx, w)
+		return
+	}
+
 	views.SettingsLayout(accounts, syncSettings, "accounts").Render(ctx, w)
 }
 
@@ -549,6 +573,13 @@ func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx)
 	syncSettings := h.buildSyncSettings(ctx, accounts)
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		views.SettingsPartial(accounts, syncSettings, tab).Render(ctx, w)
+		return
+	}
+
 	views.SettingsLayout(accounts, syncSettings, tab).Render(ctx, w)
 }
 
