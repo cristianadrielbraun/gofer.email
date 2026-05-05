@@ -135,10 +135,10 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 											@icon.Zap(icon.Props{Class: "size-3 text-amber-500"})
 											<span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Real-time</span>
 										</div>
-										<div class="flex flex-wrap gap-1.5 ml-4 min-h-[28px]" data-idle-zone={ account.AccountEmail }>
+										<div class="flex flex-wrap gap-1.5 ml-4 min-h-[28px]" data-idle-zone={ account.AccountID }>
 											for _, f := range account.Folders {
 												if f.IsIDLE {
-													@syncFolderPill(f, true, settings.SyncIntervalMinutes)
+													@syncFolderPill(f, true, settings.SyncIntervalMinutes, account.AccountID)
 												}
 											}
 										</div>
@@ -148,10 +148,10 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 											@icon.Clock(icon.Props{Class: "size-3 text-muted-foreground"})
 											<span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Polling ({ strconv.Itoa(settings.SyncIntervalMinutes) } min)</span>
 										</div>
-										<div class="flex flex-wrap gap-1.5 ml-4 min-h-[28px]" data-poll-zone={ account.AccountEmail }>
+										<div class="flex flex-wrap gap-1.5 ml-4 min-h-[28px]" data-poll-zone={ account.AccountID }>
 											for _, f := range account.Folders {
 												if !f.IsIDLE {
-													@syncFolderPill(f, false, settings.SyncIntervalMinutes)
+													@syncFolderPill(f, false, settings.SyncIntervalMinutes, account.AccountID)
 												}
 											}
 										</div>
@@ -292,13 +292,30 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 		function updateHiddenInputs() {
 			var container = document.getElementById('idle-folders-inputs');
 			container.innerHTML = '';
+			var seenAccounts = {};
 			document.querySelectorAll('[data-idle-zone] [data-role]').forEach(function(pill) {
+				var accountID = pill.dataset.accountId;
+				var role = pill.dataset.role;
 				var input = document.createElement('input');
 				input.type = 'hidden';
 				input.name = 'idle_folders';
-				input.value = pill.dataset.role;
+				input.value = accountID + ':' + role;
 				container.appendChild(input);
+				seenAccounts[accountID] = true;
 			});
+			document.querySelectorAll('[data-poll-zone]').forEach(function(zone) {
+				var accountID = zone.getAttribute('data-poll-zone');
+				if (!seenAccounts[accountID]) {
+					seenAccounts[accountID] = true;
+				}
+			});
+			for (var aid in seenAccounts) {
+				var input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = 'account_ids';
+				input.value = aid;
+				container.appendChild(input);
+			}
 		}
 
 		document.addEventListener('click', function(e) {
@@ -408,11 +425,12 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 	</script>
 }
 
-templ syncFolderPill(f models.FolderSyncStatus, isIDLE bool, interval int) {
+templ syncFolderPill(f models.FolderSyncStatus, isIDLE bool, interval int, accountID string) {
 	<button
 		type="button"
 		data-sync-pill
 		data-role={ f.Role }
+		data-account-id={ accountID }
 		data-interval={ strconv.Itoa(interval) }
 		class={
 			"inline-flex items-center gap-1.5 px-2.5 rounded-md border text-xs font-medium cursor-pointer transition-transform hover:scale-[1.02] will-change-transform backface-hidden",

@@ -58,6 +58,7 @@ type SyncSettings struct {
 }
 
 type AccountSyncStatus struct {
+	AccountID   string
 	AccountName string
 	AccountEmail string
 	Color       string

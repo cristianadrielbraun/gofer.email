@@ -508,7 +508,6 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Account) models.SyncSettings {
 	syncInterval := h.db.GetSyncInterval(ctx)
-	idleRoles := h.db.GetIdleFolders(ctx)
 
 	var accountStatuses []models.AccountSyncStatus
 	for _, account := range accounts {
@@ -517,7 +516,10 @@ func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Accou
 			continue
 		}
 
+		idleRoles := h.db.GetIdleFoldersForAccount(ctx, account.ID)
+
 		var status models.AccountSyncStatus
+		status.AccountID = account.ID
 		status.AccountName = account.Name
 		status.AccountEmail = account.Email
 		status.Color = account.Color
@@ -612,8 +614,22 @@ func (h *Handler) handleSaveSyncSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	idleFolders := r.Form["idle_folders"]
-	if err := h.db.SetIdleFolders(ctx, idleFolders); err != nil {
+	perAccount := make(map[string][]string)
+	for _, entry := range r.Form["idle_folders"] {
+		parts := strings.SplitN(entry, ":", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			perAccount[parts[0]] = append(perAccount[parts[0]], parts[1])
+		}
+	}
+
+	allAccountIDs := r.Form["account_ids"]
+	for _, aid := range allAccountIDs {
+		if _, exists := perAccount[aid]; !exists {
+			perAccount[aid] = []string{"none"}
+		}
+	}
+
+	if err := h.db.SetIdleFoldersAll(ctx, perAccount); err != nil {
 		http.Error(w, "save idle folders failed", http.StatusInternalServerError)
 		return
 	}

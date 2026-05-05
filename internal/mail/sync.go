@@ -84,7 +84,7 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 		return
 	}
 
-	idleRoles := o.db.GetIdleFolders(ctx)
+	idleRoles := o.db.GetIdleFoldersForAccount(ctx, accountID)
 	var watchers []*imap.IdleWatcher
 
 	for role := range idleRoles {

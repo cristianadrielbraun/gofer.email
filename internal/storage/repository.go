@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"os"
@@ -1069,11 +1070,33 @@ func (db *DB) GetSyncInterval(ctx context.Context) int {
 	return n
 }
 
-func (db *DB) GetIdleFolders(ctx context.Context) map[string]bool {
+func (db *DB) GetIdleFoldersForAccount(ctx context.Context, accountID string) map[string]bool {
 	val, err := db.GetSetting(ctx, "idle_folders")
 	if err != nil || val == "" {
 		return map[string]bool{"inbox": true, "sent": true, "drafts": true}
 	}
+	if val == "none" {
+		return map[string]bool{}
+	}
+
+	var perAccount map[string][]string
+	if err := json.Unmarshal([]byte(val), &perAccount); err == nil {
+		roles := perAccount[accountID]
+		if roles == nil {
+			return map[string]bool{"inbox": true, "sent": true, "drafts": true}
+		}
+		if len(roles) == 1 && roles[0] == "none" {
+			return map[string]bool{}
+		}
+		result := make(map[string]bool)
+		for _, role := range roles {
+			if role != "" {
+				result[role] = true
+			}
+		}
+		return result
+	}
+
 	result := make(map[string]bool)
 	for _, role := range strings.Split(val, ",") {
 		role = strings.TrimSpace(role)
@@ -1084,9 +1107,12 @@ func (db *DB) GetIdleFolders(ctx context.Context) map[string]bool {
 	return result
 }
 
-func (db *DB) SetIdleFolders(ctx context.Context, roles []string) error {
-	val := strings.Join(roles, ",")
-	return db.SetSetting(ctx, "idle_folders", val)
+func (db *DB) SetIdleFoldersAll(ctx context.Context, perAccount map[string][]string) error {
+	val, err := json.Marshal(perAccount)
+	if err != nil {
+		return err
+	}
+	return db.SetSetting(ctx, "idle_folders", string(val))
 }
 
 func (db *DB) GetFoldersForAccount(ctx context.Context, accountID string) ([]FolderSyncInfo, error) {
