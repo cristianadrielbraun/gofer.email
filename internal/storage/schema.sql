@@ -221,4 +221,11 @@ CREATE INDEX IF NOT EXISTS idx_message_search_docs_account
 ON message_search_docs(account_id);
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (5);
+INSERT OR REPLACE INTO schema_version (version) VALUES (6);
+
+-- Application settings
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

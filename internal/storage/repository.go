@@ -1040,6 +1040,55 @@ type FolderSyncInfo struct {
 	TotalCount          int
 }
 
+func (db *DB) GetSetting(ctx context.Context, key string) (string, error) {
+	var value string
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT value FROM app_settings WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
+}
+
+func (db *DB) SetSetting(ctx context.Context, key, value string) error {
+	_, err := db.Write().ExecContext(ctx,
+		`INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`, key, value)
+	return err
+}
+
+func (db *DB) GetSyncInterval(ctx context.Context) int {
+	val, err := db.GetSetting(ctx, "sync_interval_minutes")
+	if err != nil || val == "" {
+		return 5
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil || n < 1 {
+		return 5
+	}
+	return n
+}
+
+func (db *DB) GetIdleFolders(ctx context.Context) map[string]bool {
+	val, err := db.GetSetting(ctx, "idle_folders")
+	if err != nil || val == "" {
+		return map[string]bool{"inbox": true, "sent": true, "drafts": true}
+	}
+	result := make(map[string]bool)
+	for _, role := range strings.Split(val, ",") {
+		role = strings.TrimSpace(role)
+		if role != "" {
+			result[role] = true
+		}
+	}
+	return result
+}
+
+func (db *DB) SetIdleFolders(ctx context.Context, roles []string) error {
+	val := strings.Join(roles, ",")
+	return db.SetSetting(ctx, "idle_folders", val)
+}
+
 func (db *DB) GetFoldersForAccount(ctx context.Context, accountID string) ([]FolderSyncInfo, error) {
 	rows, err := db.Read().QueryContext(ctx,
 		`SELECT id, account_id, remote_id, role,

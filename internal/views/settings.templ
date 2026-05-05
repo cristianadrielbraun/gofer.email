@@ -14,7 +14,7 @@ import (
 	"gofer.email/components/tabs"
 )
 
-templ SettingsPage(accounts []models.Account) {
+templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings) {
 	<div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 		<div class="flex-1 overflow-y-auto">
 			<div class="max-w-3xl px-8 py-10">
@@ -27,9 +27,15 @@ templ SettingsPage(accounts []models.Account) {
 						@tabs.Trigger(tabs.TriggerProps{Value: "accounts", IsActive: true}) {
 							Accounts
 						}
+						@tabs.Trigger(tabs.TriggerProps{Value: "sync"}) {
+							Sync
+						}
 					}
 					@tabs.Content(tabs.ContentProps{Value: "accounts", IsActive: true}) {
 						@SettingsAccountsTab(accounts)
+					}
+					@tabs.Content(tabs.ContentProps{Value: "sync"}) {
+						@SettingsSyncTab(syncSettings)
 					}
 				}
 			</div>
@@ -61,6 +67,256 @@ templ SettingsAccountsTab(accounts []models.Account) {
 			</div>
 		}
 	</div>
+}
+
+templ SettingsSyncTab(settings models.SyncSettings) {
+	<div class="mt-6 space-y-6">
+		<div class="bg-card rounded-lg border p-6">
+			<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Sync Frequency</h3>
+			<form id="sync-settings-form" hx-post="/api/settings/sync" hx-swap="none" hx-on::after-request="location.reload()" class="space-y-4">
+				<div>
+					<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Check for new messages every</label>
+					@selectbox.SelectBox() {
+						@selectbox.Trigger(selectbox.TriggerProps{Name: "sync_interval_minutes"}) {
+							@selectbox.Value(selectbox.ValueProps{Placeholder: "5 minutes"}) {
+								{ strconv.Itoa(settings.SyncIntervalMinutes) } min
+							}
+						}
+						@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+							@selectbox.Item(selectbox.ItemProps{Value: "1", Selected: settings.SyncIntervalMinutes == 1}) { 1 minute }
+							@selectbox.Item(selectbox.ItemProps{Value: "5", Selected: settings.SyncIntervalMinutes == 5}) { 5 minutes }
+							@selectbox.Item(selectbox.ItemProps{Value: "10", Selected: settings.SyncIntervalMinutes == 10}) { 10 minutes }
+							@selectbox.Item(selectbox.ItemProps{Value: "15", Selected: settings.SyncIntervalMinutes == 15}) { 15 minutes }
+							@selectbox.Item(selectbox.ItemProps{Value: "30", Selected: settings.SyncIntervalMinutes == 30}) { 30 minutes }
+						}
+					}
+				</div>
+				<p class="text-xs text-muted-foreground leading-relaxed">
+					Controls how often polled folders are checked for changes.
+				</p>
+
+				if len(settings.Accounts) > 0 {
+					<hr class="border-border"/>
+					<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Folder Sync Mode</h3>
+					<p class="text-xs text-muted-foreground leading-relaxed mb-3">
+						Click a folder to switch between real-time push notifications and periodic polling.
+					</p>
+					<button
+						type="button"
+						data-sync-warning-toggle
+						class="flex items-center gap-1.5 text-xs text-amber-600/70 dark:text-amber-400/60 hover:text-amber-600 dark:hover:text-amber-400 transition-colors mb-3"
+					>
+						@icon.TriangleAlert(icon.Props{Class: "size-3"})
+						Real-time folders use persistent connections
+						<svg class="sync-warn-icon size-3 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+					</button>
+					<div class="sync-warn-body overflow-hidden transition-all duration-300 ease-in-out" style="max-height:0;opacity:0;margin-bottom:0">
+						<div class="flex items-start gap-2.5 px-3 py-2 rounded-md bg-amber-500/5 border border-amber-500/15 mb-4">
+							@icon.TriangleAlert(icon.Props{Class: "size-3.5 text-amber-500 mt-0.5 shrink-0"})
+							<p class="text-xs text-amber-600 dark:text-amber-400/80 leading-relaxed">
+								Each real-time folder holds open a persistent IMAP connection. Most servers limit concurrent connections (typically 5–15). Enabling real-time on too many folders may cause connection errors or prevent new folders from syncing.
+							</p>
+						</div>
+					</div>
+					<div id="idle-folders-inputs"></div>
+					<div class="space-y-5" data-sync-folders={ strconv.Itoa(settings.SyncIntervalMinutes) }>
+						for _, account := range settings.Accounts {
+							<div>
+								<div class="flex items-center gap-2.5 mb-3">
+									<div class={ "size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white", account.Color }>
+										{ account.Initials }
+									</div>
+									<span class="text-sm font-medium">{ account.AccountName }</span>
+									<span class="text-xs text-muted-foreground">{ account.AccountEmail }</span>
+								</div>
+								<div class="ml-7 space-y-2">
+									<div>
+										<div class="flex items-center gap-1.5 mb-1.5">
+											@icon.Zap(icon.Props{Class: "size-3 text-amber-500"})
+											<span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Real-time</span>
+										</div>
+										<div class="flex flex-wrap gap-1.5 ml-4 min-h-[28px]" data-idle-zone={ account.AccountEmail }>
+											for _, f := range account.Folders {
+												if f.IsIDLE {
+													@syncFolderPill(f, true, settings.SyncIntervalMinutes)
+												}
+											}
+										</div>
+									</div>
+									<div>
+										<div class="flex items-center gap-1.5 mb-1.5">
+											@icon.Clock(icon.Props{Class: "size-3 text-muted-foreground"})
+											<span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Polling ({ strconv.Itoa(settings.SyncIntervalMinutes) } min)</span>
+										</div>
+										<div class="flex flex-wrap gap-1.5 ml-4 min-h-[28px]" data-poll-zone={ account.AccountEmail }>
+											for _, f := range account.Folders {
+												if !f.IsIDLE {
+													@syncFolderPill(f, false, settings.SyncIntervalMinutes)
+												}
+											}
+										</div>
+									</div>
+								</div>
+							</div>
+						}
+					</div>
+				}
+
+				<div class="flex justify-end pt-2">
+					@button.Button(button.Props{
+						Size:  button.SizeSm,
+						Class: "btn-skeuo",
+						Type:  "submit",
+					}) {
+						@icon.Check(icon.Props{Class: "size-4"})
+						Save
+					}
+				</div>
+			</form>
+		</div>
+	</div>
+	<style>
+		@keyframes sync-pill-in {
+			0% { opacity: 0; transform: scale(0.9); }
+			100% { opacity: 1; transform: scale(1); }
+		}
+		@keyframes sync-pill-out {
+			0% { opacity: 1; transform: scale(1); }
+			100% { opacity: 0; transform: scale(0.9); }
+		}
+		.sync-pill-enter { animation: sync-pill-in 220ms ease-out; }
+		.sync-pill-exit { animation: sync-pill-out 160ms ease-in forwards; }
+	</style>
+	<script>
+	(function() {
+		function toggleSyncWarning(btn) {
+			var body = btn.nextElementSibling;
+			var icon = btn.querySelector('.sync-warn-icon');
+			var isOpen = body.style.maxHeight && body.style.maxHeight !== '0px';
+			if (isOpen) {
+				body.style.maxHeight = '0px';
+				body.style.opacity = '0';
+				icon.classList.remove('rotate-180');
+			} else {
+				body.style.maxHeight = body.scrollHeight + 'px';
+				body.style.opacity = '1';
+				icon.classList.add('rotate-180');
+			}
+		}
+
+		function togglePill(pill) {
+			if (pill.classList.contains('sync-pill-exit')) return;
+
+			var container = pill.closest('.space-y-2');
+			if (!container) return;
+			var idleZone = container.querySelector('[data-idle-zone]');
+			var pollZone = container.querySelector('[data-poll-zone]');
+			if (!idleZone || !pollZone) return;
+
+			var toIdle = !!pill.closest('[data-poll-zone]');
+			var target = toIdle ? idleZone : pollZone;
+
+			pill.classList.add('sync-pill-exit');
+			pill.addEventListener('animationend', function onExit() {
+				pill.removeEventListener('animationend', onExit);
+				pill.classList.remove('sync-pill-exit');
+
+				if (toIdle) {
+					pill.className = pill.className.replace(/bg-muted\/50 border-border text-muted-foreground/g, 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400');
+					pill.querySelector('.sync-label').textContent = 'real-time';
+				} else {
+					pill.className = pill.className.replace(/bg-amber-500\/10 border-amber-500\/20 text-amber-600 dark:text-amber-400/g, 'bg-muted/50 border-border text-muted-foreground');
+					pill.querySelector('.sync-label').textContent = pill.dataset.interval + ' min';
+				}
+
+				target.appendChild(pill);
+				pill.classList.add('sync-pill-enter');
+				pill.addEventListener('animationend', function onEnter() {
+					pill.removeEventListener('animationend', onEnter);
+					pill.classList.remove('sync-pill-enter');
+				});
+
+				updateEmptyStates(container);
+				updateHiddenInputs();
+			});
+		}
+
+		function updateEmptyStates(container) {
+			var zones = container
+				? container.querySelectorAll('[data-idle-zone],[data-poll-zone]')
+				: document.querySelectorAll('[data-idle-zone],[data-poll-zone]');
+			zones.forEach(updateZoneEmpty);
+		}
+
+		function updateZoneEmpty(zone) {
+			var pills = zone.querySelectorAll('[data-sync-pill]');
+			var existing = zone.querySelector('.sync-empty-state');
+			if (pills.length === 0 && !existing) {
+				var el = document.createElement('span');
+				el.className = 'sync-empty-state inline-flex items-center px-2.5 rounded-md border border-dashed border-border text-[11px] text-muted-foreground/50';
+				el.style.height = '26px';
+				el.textContent = 'None selected';
+				zone.appendChild(el);
+			} else if (pills.length > 0 && existing) {
+				existing.remove();
+			}
+		}
+
+		function updateHiddenInputs() {
+			var container = document.getElementById('idle-folders-inputs');
+			container.innerHTML = '';
+			document.querySelectorAll('[data-idle-zone] [data-role]').forEach(function(pill) {
+				var input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = 'idle_folders';
+				input.value = pill.dataset.role;
+				container.appendChild(input);
+			});
+		}
+
+		document.addEventListener('click', function(e) {
+			var pill = e.target.closest('[data-sync-pill]');
+			if (pill) {
+				e.preventDefault();
+				togglePill(pill);
+				return;
+			}
+			var warnBtn = e.target.closest('[data-sync-warning-toggle]');
+			if (warnBtn) {
+				toggleSyncWarning(warnBtn);
+			}
+		});
+
+		updateHiddenInputs();
+		updateEmptyStates();
+	})();
+	</script>
+}
+
+templ syncFolderPill(f models.FolderSyncStatus, isIDLE bool, interval int) {
+	<button
+		type="button"
+		data-sync-pill
+		data-role={ f.Role }
+		data-interval={ strconv.Itoa(interval) }
+		class={
+			"inline-flex items-center gap-1.5 px-2.5 rounded-md border text-xs font-medium cursor-pointer transition-transform hover:scale-[1.02] will-change-transform backface-hidden",
+			templ.KV("bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400", isIDLE),
+			templ.KV("bg-muted/50 border-border text-muted-foreground", !isIDLE),
+		}
+		style="height:26px"
+	>
+		{{ folderIcon := icon.Icon(f.Icon) }}
+		@folderIcon(icon.Props{Class: "size-3"})
+		{ f.Name }
+		<span class="sync-label text-[10px] opacity-70">
+			if isIDLE {
+				real-time
+			} else {
+				{ strconv.Itoa(interval) } min
+			}
+		</span>
+	</button>
 }
 
 templ SettingsNoAccounts() {

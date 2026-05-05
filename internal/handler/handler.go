@@ -48,6 +48,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/accounts/{id}/test", h.handleTestAccount)
 	mux.HandleFunc("DELETE /api/accounts/{id}", h.handleDeleteAccount)
 	mux.HandleFunc("GET /settings", h.handleSettings)
+	mux.HandleFunc("POST /api/settings/sync", h.handleSaveSyncSettings)
 	mux.HandleFunc("GET /api/attachments/{id}/download", h.handleAttachmentDownload)
 	mux.HandleFunc("GET /api/events", h.handleSSE)
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
@@ -501,7 +502,127 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx)
-	views.SettingsLayout(accounts).Render(ctx, w)
+	syncSettings := h.buildSyncSettings(ctx, accounts)
+	views.SettingsLayout(accounts, syncSettings).Render(ctx, w)
+}
+
+func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Account) models.SyncSettings {
+	syncInterval := h.db.GetSyncInterval(ctx)
+	idleRoles := h.db.GetIdleFolders(ctx)
+
+	var accountStatuses []models.AccountSyncStatus
+	for _, account := range accounts {
+		folders, err := h.db.GetFoldersForAccount(ctx, account.ID)
+		if err != nil {
+			continue
+		}
+
+		var status models.AccountSyncStatus
+		status.AccountName = account.Name
+		status.AccountEmail = account.Email
+		status.Color = account.Color
+		status.Initials = account.Initials
+
+		for _, f := range folders {
+			lastSynced := ""
+			if f.LastIncrementalAt.Valid {
+				lastSynced = formatSyncTime(f.LastIncrementalAt.Time)
+			} else if f.LastFullSyncAt.Valid {
+				lastSynced = formatSyncTime(f.LastFullSyncAt.Time)
+			}
+
+			name := f.Role
+			if name == "custom" {
+				name = f.RemoteID
+			}
+
+			status.Folders = append(status.Folders, models.FolderSyncStatus{
+				Name:         name,
+				Icon:         folderIconFromRole(f.Role),
+				Role:         f.Role,
+				LastSyncedAt: lastSynced,
+				MessageCount: f.TotalCount,
+				IsIDLE:       idleRoles[f.Role],
+			})
+		}
+
+		accountStatuses = append(accountStatuses, status)
+	}
+
+	return models.SyncSettings{
+		SyncIntervalMinutes: syncInterval,
+		Accounts:            accountStatuses,
+	}
+}
+
+func formatSyncTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		return fmt.Sprintf("%dm ago", int(diff.Minutes()))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(diff.Hours()))
+	default:
+		return t.Format("Jan 2")
+	}
+}
+
+func folderIconFromRole(role string) string {
+	switch role {
+	case "inbox":
+		return "inbox"
+	case "sent":
+		return "send"
+	case "drafts":
+		return "file-pen"
+	case "trash":
+		return "trash-2"
+	case "junk":
+		return "shield-alert"
+	case "archive":
+		return "archive"
+	case "starred":
+		return "star"
+	default:
+		return "folder"
+	}
+}
+
+func (h *Handler) handleSaveSyncSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	val := r.FormValue("sync_interval_minutes")
+	n, err := strconv.Atoi(val)
+	if err != nil || n < 1 {
+		http.Error(w, "invalid interval", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.SetSetting(ctx, "sync_interval_minutes", strconv.Itoa(n)); err != nil {
+		http.Error(w, "save failed", http.StatusInternalServerError)
+		return
+	}
+
+	idleFolders := r.Form["idle_folders"]
+	if err := h.db.SetIdleFolders(ctx, idleFolders); err != nil {
+		http.Error(w, "save idle folders failed", http.StatusInternalServerError)
+		return
+	}
+
+	h.syncer.UpdateInterval(n)
+	h.syncer.RestartIDLEWatchers(ctx)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
 func atoiDefault(s string, def int) int {

@@ -51,3 +51,25 @@ type CreateAccountRequest struct {
 	SmtpUsername string `json:"smtp_username"`
 	SmtpPassword string `json:"smtp_password"`
 }
+
+type SyncSettings struct {
+	SyncIntervalMinutes int
+	Accounts            []AccountSyncStatus
+}
+
+type AccountSyncStatus struct {
+	AccountName string
+	AccountEmail string
+	Color       string
+	Initials    string
+	Folders     []FolderSyncStatus
+}
+
+type FolderSyncStatus struct {
+	Name          string
+	Icon          string
+	Role          string
+	LastSyncedAt  string
+	MessageCount  int
+	IsIDLE        bool
+}

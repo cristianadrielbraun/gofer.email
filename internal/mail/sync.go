@@ -21,6 +21,8 @@ type SyncOrchestrator struct {
 	running      map[string]bool
 	idleWatchers map[string][]*imap.IdleWatcher
 	cancelFuncs  map[string]context.CancelFunc
+	interval     int
+	intervalMu   sync.RWMutex
 }
 
 func NewSyncOrchestrator(db *storage.DB, accountStore *config.AccountStore, blobStore *store.BlobStore) *SyncOrchestrator {
@@ -32,6 +34,7 @@ func NewSyncOrchestrator(db *storage.DB, accountStore *config.AccountStore, blob
 		running:      make(map[string]bool),
 		idleWatchers: make(map[string][]*imap.IdleWatcher),
 		cancelFuncs:  make(map[string]context.CancelFunc),
+		interval:     5,
 	}
 }
 
@@ -43,11 +46,81 @@ func (o *SyncOrchestrator) Events() *EventBus {
 	return o.events
 }
 
+func (o *SyncOrchestrator) UpdateInterval(minutes int) {
+	o.intervalMu.Lock()
+	o.interval = minutes
+	o.intervalMu.Unlock()
+}
+
+func (o *SyncOrchestrator) RestartIDLEWatchers(ctx context.Context) {
+	o.mu.Lock()
+	for accountID, watchers := range o.idleWatchers {
+		for _, w := range watchers {
+			w.Close()
+		}
+		delete(o.idleWatchers, accountID)
+	}
+	o.mu.Unlock()
+
+	accounts, err := o.db.GetAccountIDs(ctx)
+	if err != nil {
+		return
+	}
+
+	for _, accountID := range accounts {
+		o.startIDLEWatchers(ctx, accountID)
+	}
+}
+func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID string) {
+	cfg, err := o.accountStore.GetConfig(ctx, accountID)
+	if err != nil {
+		log.Printf("idle %s: config: %v", accountID, err)
+		return
+	}
+
+	password, err := o.accountStore.DecryptPassword(ctx, accountID)
+	if err != nil {
+		log.Printf("idle %s: password: %v", accountID, err)
+		return
+	}
+
+	idleRoles := o.db.GetIdleFolders(ctx)
+	var watchers []*imap.IdleWatcher
+
+	for role := range idleRoles {
+		folderID, remoteName, err := o.db.GetFolderIDByRole(ctx, accountID, role)
+		if err != nil || folderID == "" {
+			continue
+		}
+
+		fID := folderID
+		watcher := imap.NewIdleWatcher(cfg, password, remoteName, func() {
+			o.syncIncremental(ctx, accountID, fID, remoteName)
+		})
+		watchers = append(watchers, watcher)
+		go watcher.Run(ctx)
+	}
+
+	o.mu.Lock()
+	o.idleWatchers[accountID] = watchers
+	o.mu.Unlock()
+}
+
+func (o *SyncOrchestrator) getInterval() int {
+	o.intervalMu.RLock()
+	defer o.intervalMu.RUnlock()
+	return o.interval
+}
+
 func (o *SyncOrchestrator) Start(ctx context.Context) {
 	accounts, err := o.db.GetAccountIDs(ctx)
 	if err != nil {
 		log.Printf("sync start: get accounts: %v", err)
 		return
+	}
+
+	if interval := o.db.GetSyncInterval(ctx); interval > 0 {
+		o.interval = interval
 	}
 
 	for _, accountID := range accounts {
@@ -60,41 +133,7 @@ func (o *SyncOrchestrator) startAccount(ctx context.Context, accountID string) {
 		log.Printf("sync account %s: %v", accountID, err)
 	}
 
-	cfg, err := o.accountStore.GetConfig(ctx, accountID)
-	if err != nil {
-		log.Printf("sync idle %s: get config: %v", accountID, err)
-		return
-	}
-
-	password, err := o.accountStore.DecryptPassword(ctx, accountID)
-	if err != nil {
-		log.Printf("sync idle %s: decrypt: %v", accountID, err)
-		return
-	}
-
-	idleFolders := []string{"inbox"}
-	var watchers []*imap.IdleWatcher
-
-	for _, role := range idleFolders {
-		folderID, remoteName, err := o.db.GetFolderIDByRole(ctx, accountID, role)
-		if err != nil {
-			log.Printf("sync idle %s: find %s: %v", accountID, role, err)
-			continue
-		}
-		if folderID == "" {
-			continue
-		}
-
-		watcher := imap.NewIdleWatcher(cfg, password, remoteName, func() {
-			o.syncIncremental(ctx, accountID, folderID, remoteName)
-		})
-		watchers = append(watchers, watcher)
-		go watcher.Run(ctx)
-	}
-
-	o.mu.Lock()
-	o.idleWatchers[accountID] = watchers
-	o.mu.Unlock()
+	o.startIDLEWatchers(ctx, accountID)
 
 	accountCtx, cancel := context.WithCancel(ctx)
 	o.mu.Lock()
@@ -105,26 +144,22 @@ func (o *SyncOrchestrator) startAccount(ctx context.Context, accountID string) {
 }
 
 func (o *SyncOrchestrator) runPeriodicSync(ctx context.Context, accountID string) {
-	mediumPriorityRoles := map[string]bool{"sent": true, "drafts": true, "starred": true}
-
-	mediumTicker := time.NewTicker(5 * time.Minute)
-	defer mediumTicker.Stop()
-	lowTicker := time.NewTicker(30 * time.Minute)
-	defer lowTicker.Stop()
-
 	for {
+		interval := time.Duration(o.getInterval()) * time.Minute
+		if interval < time.Minute {
+			interval = time.Minute
+		}
+
 		select {
 		case <-ctx.Done():
 			return
-		case <-mediumTicker.C:
-			o.periodicSync(ctx, accountID, mediumPriorityRoles, 5*time.Minute)
-		case <-lowTicker.C:
-			o.periodicSync(ctx, accountID, nil, 30*time.Minute)
+		case <-time.After(interval):
+			o.periodicSync(ctx, accountID)
 		}
 	}
 }
 
-func (o *SyncOrchestrator) periodicSync(ctx context.Context, accountID string, onlyRoles map[string]bool, interval time.Duration) {
+func (o *SyncOrchestrator) periodicSync(ctx context.Context, accountID string) {
 	folders, err := o.db.GetFoldersForAccount(ctx, accountID)
 	if err != nil {
 		log.Printf("periodic %s: get folders: %v", accountID, err)
@@ -155,16 +190,6 @@ func (o *SyncOrchestrator) periodicSync(ctx context.Context, accountID string, o
 		case <-ctx.Done():
 			return
 		default:
-		}
-
-		if onlyRoles != nil && !onlyRoles[folder.Role] {
-			continue
-		}
-
-		if folder.Role == "inbox" {
-			if folder.LastIncrementalAt.Valid && time.Since(folder.LastIncrementalAt.Time) < interval {
-				continue
-			}
 		}
 
 		if err := o.fullFolderSync(ctx, client, accountID, folder); err != nil {

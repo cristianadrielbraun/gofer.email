@@ -86,7 +86,7 @@ func (db *DB) migrate() error {
 		currentVersion = 0
 	}
 
-	if currentVersion >= 5 {
+	if currentVersion >= 6 {
 		log.Printf("schema at version %d, no migration needed", currentVersion)
 		return nil
 	}
@@ -95,35 +95,37 @@ func (db *DB) migrate() error {
 		if _, err := tx.Exec(string(schema)); err != nil {
 			return fmt.Errorf("apply schema: %w", err)
 		}
-		log.Println("schema initialized at version 5")
+		log.Println("schema initialized at version 6")
 	}
 
-	if currentVersion == 1 {
+	if currentVersion >= 1 && currentVersion <= 1 {
 		if err := migrateV1ToV2(tx); err != nil {
 			return fmt.Errorf("migrate v1 to v2: %w", err)
 		}
-		log.Println("schema migrated to version 2")
 	}
 
-	if currentVersion == 1 || currentVersion == 2 {
+	if currentVersion >= 1 && currentVersion <= 2 {
 		if err := migrateV2ToV3(tx); err != nil {
 			return fmt.Errorf("migrate v2 to v3: %w", err)
 		}
-		log.Println("schema migrated to version 3")
 	}
 
-	if currentVersion == 1 || currentVersion == 2 || currentVersion == 3 {
+	if currentVersion >= 1 && currentVersion <= 3 {
 		if err := migrateV3ToV4(tx); err != nil {
 			return fmt.Errorf("migrate v3 to v4: %w", err)
 		}
-		log.Println("schema migrated to version 4")
 	}
 
-	if currentVersion == 1 || currentVersion == 2 || currentVersion == 3 || currentVersion == 4 {
+	if currentVersion >= 1 && currentVersion <= 4 {
 		if err := migrateV4ToV5(tx); err != nil {
 			return fmt.Errorf("migrate v4 to v5: %w", err)
 		}
-		log.Println("schema migrated to version 5")
+	}
+
+	if currentVersion <= 5 {
+		if err := migrateV5ToV6(tx); err != nil {
+			return fmt.Errorf("migrate v5 to v6: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -204,6 +206,24 @@ func migrateV4ToV5(tx *sql.Tx) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_account_internet_msg_id
 		 ON messages(account_id, internet_message_id)`,
 		`INSERT OR REPLACE INTO schema_version (version) VALUES (5)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV5ToV6(tx *sql.Tx) error {
+	migrations := []string{
+		`CREATE TABLE IF NOT EXISTS app_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (6)`,
 	}
 
 	for _, m := range migrations {
