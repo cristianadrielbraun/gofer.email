@@ -207,3 +207,9 @@
 [data-theme="minimal"] .divider-etched {
   background: var(--border);
 }
+
+[data-theme="minimal"] [data-folder-unread],
+[data-theme="minimal"] #mail-folder-count {
+  border-radius: 0;
+  box-shadow: none;
+}

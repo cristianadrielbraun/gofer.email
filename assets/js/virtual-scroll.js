@@ -363,6 +363,7 @@ class VirtualMailList {
       if (firstItem) {
         this.selectedEmailId = firstItem.id
         if (typeof htmx !== "undefined") {
+          if (typeof showMailViewLoading === "function") showMailViewLoading()
           htmx.ajax("GET", "/email/" + firstItem.id, "#mail-view")
         }
       }
@@ -559,6 +560,7 @@ window.addEventListener("popstate", function (e) {
     vml.prevLast = null
     vml.render()
     if (typeof htmx !== "undefined") {
+      if (typeof showMailViewLoading === "function") showMailViewLoading()
       htmx.ajax("GET", "/email/" + e.state.email, "#mail-view")
     }
   }

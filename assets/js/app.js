@@ -150,6 +150,16 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function setupEmailSelectionTracking() {
+    document.body.addEventListener("htmx:beforeRequest", function (evt) {
+      if (
+        evt.detail.pathInfo &&
+        evt.detail.pathInfo.requestPath &&
+        evt.detail.pathInfo.requestPath.match(/^\/email\/[^/]+$/)
+      ) {
+        showMailViewLoading()
+      }
+    })
+
     document.body.addEventListener("htmx:afterRequest", function (evt) {
       if (!virtualMailList) return
 
@@ -162,6 +172,59 @@ document.addEventListener("DOMContentLoaded", function () {
         virtualMailList.onEmailSelected(emailId)
       }
     })
+  }
+
+  function showMailViewLoading() {
+    var mailView = document.getElementById("mail-view")
+    if (!mailView) return
+    mailView.innerHTML =
+      '<div class="flex flex-col h-full p-2">' +
+        '<div class="surface-paper rounded-md flex flex-col h-full overflow-hidden animate-mail-loading">' +
+          '<div class="flex items-center justify-between px-6 py-2.5">' +
+            '<div class="flex items-center gap-1">' +
+              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
+              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
+              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
+              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
+            '</div>' +
+            '<div class="flex items-center gap-2">' +
+              '<div class="h-5 w-14 rounded bg-ink/5 animate-pulse"></div>' +
+              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="h-px bg-gradient-to-r from-transparent via-amber-900/10 to-transparent"></div>' +
+          '<div class="flex-1 overflow-y-auto">' +
+            '<div class="max-w-3xl mx-auto px-8 py-6">' +
+              '<div class="flex items-start gap-4">' +
+                '<div class="size-11 rounded-full bg-ink/8 animate-pulse shrink-0"></div>' +
+                '<div class="flex-1 space-y-2">' +
+                  '<div class="flex items-center gap-2">' +
+                    '<div class="h-4 w-32 rounded bg-ink/6 animate-pulse"></div>' +
+                    '<div class="h-3 w-40 rounded bg-ink/4 animate-pulse"></div>' +
+                  '</div>' +
+                  '<div class="h-3 w-24 rounded bg-ink/4 animate-pulse"></div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="h-px bg-gradient-to-r from-transparent via-ink/10 to-transparent my-6"></div>' +
+              '<div class="space-y-3">' +
+                '<div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div>' +
+                '<div class="h-4 w-5/6 rounded bg-ink/5 animate-pulse"></div>' +
+                '<div class="h-4 w-4/5 rounded bg-ink/5 animate-pulse"></div>' +
+                '<div class="h-4 w-3/5 rounded bg-ink/5 animate-pulse"></div>' +
+                '<div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div>' +
+                '<div class="h-4 w-2/3 rounded bg-ink/5 animate-pulse"></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="px-6 py-3 border-t border-ink/6">' +
+            '<div class="flex items-center gap-2">' +
+              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] animate-pulse"></div>' +
+              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] animate-pulse"></div>' +
+              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] animate-pulse"></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
   }
 
   document.body.addEventListener("htmx:afterSettle", function (evt) {
