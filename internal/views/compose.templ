@@ -13,24 +13,24 @@ import (
 templ ComposeDialog(accounts []models.Account) {
 	@dialog.Dialog(dialog.Props{
 		ID: "compose-dialog",
-		Class: "[&_[data-tui-dialog-panel]]:flex [&_[data-tui-dialog-panel]]:flex-col [&_[data-tui-dialog-panel]]:gap-3",
+		Class: "[&_[data-tui-dialog-panel]]:!flex [&_[data-tui-dialog-panel]]:flex-col [&_[data-tui-dialog-panel]]:h-full [&_[data-tui-dialog-panel]]:min-h-0 [&_[data-tui-dialog-panel]]:gap-3",
 	}) {
 		@dialog.Trigger() {
 			<span></span>
 		}
 		@dialog.Content(dialog.ContentProps{
-			Class: "sm:max-w-2xl flex flex-col max-h-[85vh]",
+			Class: "sm:max-w-4xl w-full h-[50vh] min-h-[250px] flex flex-col",
 		}) {
 			@dialog.Header() {
 				@dialog.Title() {
 					New Message
 				}
 			}
-			<div id="compose-form" class="flex flex-col min-h-0 gap-3">
+			<div id="compose-form" class="flex flex-col flex-1 min-h-0 gap-3 pt-2">
 				<input type="hidden" name="account_id" id="compose-account-id" value={ composeDefaultAccountID(accounts) }/>
 				<input type="hidden" name="in_reply_to" id="compose-in-reply-to" value=""/>
 				<input type="hidden" name="references" id="compose-references" value=""/>
-				<div class="space-y-0">
+				<div class="space-y-1">
 					@ComposeField("To", "to", "recipient@example.com")
 					<div id="cc-field" class="hidden">
 						@ComposeField("Cc", "cc", "")
@@ -38,16 +38,18 @@ templ ComposeDialog(accounts []models.Account) {
 					<div id="bcc-field" class="hidden">
 						@ComposeField("Bcc", "bcc", "")
 					</div>
-					<div class="flex items-center gap-2 pt-1">
+					<div id="cc-bcc-buttons" class="flex items-center gap-2 pt-1">
 						<button
+							id="cc-btn"
 							type="button"
 							class="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
-							onclick="document.getElementById('cc-field').classList.toggle('hidden')"
+							onclick="document.getElementById('cc-field').classList.remove('hidden'); document.getElementById('cc-btn').classList.add('hidden')"
 						>Cc</button>
 						<button
+							id="bcc-btn"
 							type="button"
 							class="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
-							onclick="document.getElementById('bcc-field').classList.toggle('hidden')"
+							onclick="document.getElementById('bcc-field').classList.remove('hidden'); document.getElementById('bcc-btn').classList.add('hidden')"
 						>Bcc</button>
 					</div>
 				</div>
@@ -59,7 +61,7 @@ templ ComposeDialog(accounts []models.Account) {
 					})
 				</div>
 				@ComposeToolbar()
-				<div class="flex-1 min-h-[120px] overflow-y-auto">
+				<div class="flex-1 min-h-0 overflow-y-auto">
 					@textarea.Textarea(textarea.Props{
 						Name:        "body",
 						Placeholder: "Write your message...",
