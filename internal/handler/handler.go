@@ -62,6 +62,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /compose", h.handleCompose)
 	mux.HandleFunc("POST /api/messages/{id}/read", h.handleToggleRead)
 	mux.HandleFunc("POST /api/messages/{id}/star", h.handleToggleStar)
+	mux.HandleFunc("POST /api/messages/{id}/thread/read", h.handleToggleThreadRead)
+	mux.HandleFunc("POST /api/messages/{id}/thread/archive", h.handleArchiveThread)
+	mux.HandleFunc("DELETE /api/messages/{id}/thread", h.handleDeleteThread)
 	mux.HandleFunc("DELETE /api/messages/{id}", h.handleDeleteMessage)
 	mux.HandleFunc("POST /api/messages/{id}/move", h.handleMoveMessage)
 	mux.HandleFunc("POST /api/messages/{id}/refetch", h.handleRefetchBody)
@@ -170,10 +173,13 @@ func (h *Handler) handleEmailPartial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	views.MailViewContent(email).Render(ctx, w)
+	thread, _ := h.db.GetThreadMessages(ctx, email.AccountID, email.ThreadID)
+	views.MailViewContent(email, thread).Render(ctx, w)
 }
 
-var emailResizeScript = []byte(`<script>(function(){function r(){parent.postMessage({type:'emailBodyResize',height:document.documentElement.scrollHeight},'*')}r();document.querySelectorAll('img').forEach(function(i){i.onload=r});if(typeof MutationObserver!=='undefined'){new MutationObserver(r).observe(document.body,{childList:true,subtree:true})}})();</script>`)
+func emailResizeScript(emailID string) []byte {
+	return []byte(fmt.Sprintf(`<script>(function(){var id=%q;function r(){parent.postMessage({type:'emailBodyResize',emailId:id,height:document.documentElement.scrollHeight},'*')}r();document.querySelectorAll('img').forEach(function(i){i.onload=r});if(typeof MutationObserver!=='undefined'){new MutationObserver(r).observe(document.body,{childList:true,subtree:true})}})();</script>`, emailID))
+}
 
 func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	emailID := r.PathValue("id")
@@ -206,7 +212,7 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	link := r.URL.Query().Get("link")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buildBodyDocument(body, emailResizeScript, theme, bg, fg, link))
+	w.Write(buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link))
 }
 
 func safeEmailCSSColor(value, fallback string) string {
@@ -444,6 +450,7 @@ func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) 
 	}
 
 	h.db.UpdateMessageHeaders(ctx, msgID, parsed.Subject, parsed.FromName, parsed.FromEmail, snippet)
+	h.db.UpdateMessageThreadHeaders(ctx, msgID, accountID, parsed.InReplyTo, parsed.References, parsed.Subject)
 
 	var toRecs, ccRecs []storage.Recipient
 	for _, r := range parsed.To {
@@ -1139,6 +1146,7 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 	if body != "" {
 		htmlBody = "<html><body><pre style=\"white-space:pre-wrap;font-family:sans-serif\">" + template.HTMLEscapeString(body) + "</pre></body></html>"
 	}
+	inReplyTo, references := h.validComposeThreadHeaders(ctx, accountID, r.FormValue("subject"), r.FormValue("in_reply_to"), r.FormValue("references"))
 
 	msg := &message.OutgoingMessage{
 		FromName:   account.Name,
@@ -1149,8 +1157,10 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 		Subject:    r.FormValue("subject"),
 		TextBody:   body,
 		HTMLBody:   htmlBody,
-		InReplyTo:  r.FormValue("in_reply_to"),
-		References: r.FormValue("references"),
+		InReplyTo:  inReplyTo,
+		References: references,
+		MessageID:  message.NewMessageID(),
+		Date:       time.Now().UTC(),
 	}
 
 	go func() {
@@ -1167,6 +1177,7 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 		} else {
 			switch result {
 			case models.SendSuccess:
+				h.saveSentMessage(context.Background(), accountID, msg)
 				evt.Status = "sent"
 			case models.SendAmbiguous:
 				evt.Status = "ambiguous"
@@ -1183,6 +1194,100 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "sending"})
+}
+
+func (h *Handler) saveSentMessage(ctx context.Context, accountID string, msg *message.OutgoingMessage) {
+	sentFolderID, _, err := h.db.GetFolderIDByRole(ctx, accountID, "sent")
+	if err != nil || sentFolderID == "" {
+		return
+	}
+
+	toRecipients := make([]storage.Recipient, 0, len(msg.To))
+	for _, addr := range msg.To {
+		toRecipients = append(toRecipients, storage.Recipient{Name: addr.Name, Email: addr.Address})
+	}
+	ccRecipients := make([]storage.Recipient, 0, len(msg.CC))
+	for _, addr := range msg.CC {
+		ccRecipients = append(ccRecipients, storage.Recipient{Name: addr.Name, Email: addr.Address})
+	}
+
+	snippet := sentSnippet(msg.TextBody, msg.Subject)
+	if err := h.db.UpsertSyncMessages(ctx, []storage.SyncMessage{{
+		AccountID:    accountID,
+		FolderID:     sentFolderID,
+		MessageID:    msg.MessageID,
+		InReplyTo:    msg.InReplyTo,
+		References:   msg.References,
+		Subject:      msg.Subject,
+		FromName:     msg.FromName,
+		FromEmail:    msg.FromEmail,
+		DateSent:     msg.Date,
+		Snippet:      snippet,
+		IsRead:       true,
+		ToRecipients: toRecipients,
+		CCRecipients: ccRecipients,
+	}}); err != nil {
+		return
+	}
+
+	localID, err := h.db.GetMessageLocalIDByInternetID(ctx, accountID, msg.MessageID)
+	if err != nil || localID == 0 {
+		return
+	}
+
+	var textPath, htmlPath, rawPath string
+	if msg.TextBody != "" {
+		if p, err := h.blobStore.StoreBodyText(ctx, accountID, localID, []byte(msg.TextBody)); err == nil {
+			textPath = p
+		}
+	}
+	if msg.HTMLBody != "" {
+		if p, err := h.blobStore.StoreBodyHTML(ctx, accountID, localID, message.SanitizeHTML([]byte(msg.HTMLBody))); err == nil {
+			htmlPath = p
+		}
+	}
+	if raw, err := message.BuildMIMEMessage(msg); err == nil {
+		if p, err := h.blobStore.StoreRaw(ctx, accountID, localID, raw); err == nil {
+			rawPath = p
+		}
+	}
+	_ = h.db.UpdateMessageBody(ctx, localID, textPath, htmlPath, rawPath, snippet)
+	h.publishMutation(accountID, sentFolderID)
+}
+
+func (h *Handler) validComposeThreadHeaders(ctx context.Context, accountID, subject, inReplyToRaw, referencesRaw string) (string, string) {
+	if !message.IsReplyOrForwardSubject(subject) {
+		return "", ""
+	}
+	ids := message.ParseMessageIDs(inReplyToRaw)
+	if len(ids) == 0 {
+		return "", ""
+	}
+	parentID := ids[0]
+
+	var parentSubject string
+	err := h.db.Read().QueryRowContext(ctx,
+		`SELECT normalized_subject FROM messages WHERE account_id = ? AND message_id_normalized = ? LIMIT 1`, accountID, parentID,
+	).Scan(&parentSubject)
+	if err != nil || parentSubject == "" || parentSubject != message.BaseSubject(subject) {
+		return "", ""
+	}
+
+	inReplyTo := "<" + parentID + ">"
+	return inReplyTo, message.FormatReferences(referencesRaw, inReplyTo)
+}
+
+func sentSnippet(body, subject string) string {
+	snippet := strings.TrimSpace(body)
+	if snippet == "" {
+		return subject
+	}
+	snippet = strings.Join(strings.Fields(snippet), " ")
+	runes := []rune(snippet)
+	if len(runes) > 180 {
+		return string(runes[:180])
+	}
+	return snippet
 }
 
 func (h *Handler) getMessageInfo(ctx context.Context, idStr string) (int64, *storage.MessageMutationInfo, error) {
@@ -1218,6 +1323,28 @@ func (h *Handler) publishMutation(accountID, folderID string) {
 		AccountID: accountID,
 		FolderID:  folderID,
 	})
+}
+
+func (h *Handler) publishThreadMutation(infos []storage.ThreadMessageMutationInfo) {
+	seen := make(map[string]bool)
+	for _, info := range infos {
+		if info.FolderID == "" || seen[info.FolderID] {
+			continue
+		}
+		seen[info.FolderID] = true
+		h.publishMutation(info.AccountID, info.FolderID)
+	}
+}
+
+func threadUIDsByFolder(infos []storage.ThreadMessageMutationInfo) map[string][]uint32 {
+	groups := make(map[string][]uint32)
+	for _, info := range infos {
+		if info.FolderRemoteID == "" || info.RemoteUID == 0 {
+			continue
+		}
+		groups[info.FolderRemoteID] = append(groups[info.FolderRemoteID], info.RemoteUID)
+	}
+	return groups
 }
 
 func (h *Handler) handleToggleRead(w http.ResponseWriter, r *http.Request) {
@@ -1300,6 +1427,188 @@ func (h *Handler) handleToggleStar(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]bool{"is_starred": !currentState})
+}
+
+func (h *Handler) handleToggleThreadRead(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	ctx := r.Context()
+
+	email, err := h.db.GetEmailByID(ctx, idStr)
+	if err != nil || email == nil || email.ThreadID == "" {
+		http.Error(w, "message not found", http.StatusBadRequest)
+		return
+	}
+
+	infos, err := h.db.GetThreadMutationInfos(ctx, email.AccountID, email.ThreadID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(infos) == 0 {
+		http.Error(w, "thread not found", http.StatusBadRequest)
+		return
+	}
+
+	hasUnread, err := h.db.ThreadHasUnread(ctx, email.AccountID, email.ThreadID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	targetRead := hasUnread
+	if err := h.db.SetThreadRead(ctx, email.AccountID, email.ThreadID, targetRead); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	go func() {
+		client, err := h.connectIMAP(context.Background(), email.AccountID)
+		if err != nil {
+			return
+		}
+		defer client.Close()
+
+		op := goimap.StoreFlagsAdd
+		if !targetRead {
+			op = goimap.StoreFlagsDel
+		}
+		for folderRemoteID, uids := range threadUIDsByFolder(infos) {
+			client.StoreFlagsBatch(context.Background(), folderRemoteID, uids, op, []goimap.Flag{goimap.FlagSeen})
+		}
+	}()
+
+	h.publishThreadMutation(infos)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"is_read": targetRead})
+}
+
+func (h *Handler) handleArchiveThread(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	ctx := r.Context()
+
+	_, info, err := h.getMessageInfo(ctx, idStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if info.FolderRole == "archive" || info.FolderRole == "trash" {
+		http.Error(w, "thread cannot be archived from this folder", http.StatusBadRequest)
+		return
+	}
+
+	email, err := h.db.GetEmailByID(ctx, idStr)
+	if err != nil || email == nil || email.ThreadID == "" {
+		http.Error(w, "message not found", http.StatusBadRequest)
+		return
+	}
+
+	archiveFolderID, archiveRemoteID, err := h.db.GetFolderIDByRole(ctx, email.AccountID, "archive")
+	if err != nil || archiveFolderID == "" {
+		http.Error(w, "no archive folder found", http.StatusBadRequest)
+		return
+	}
+	if archiveFolderID == info.FolderID {
+		http.Error(w, "thread is already archived", http.StatusBadRequest)
+		return
+	}
+
+	infos, err := h.db.GetThreadMutationInfosInFolder(ctx, email.AccountID, email.ThreadID, info.FolderID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(infos) == 0 {
+		http.Error(w, "thread not found in current folder", http.StatusBadRequest)
+		return
+	}
+
+	go func() {
+		client, err := h.connectIMAP(context.Background(), email.AccountID)
+		if err != nil {
+			return
+		}
+		defer client.Close()
+		for folderRemoteID, uids := range threadUIDsByFolder(infos) {
+			client.MoveMessages(context.Background(), folderRemoteID, uids, archiveRemoteID)
+		}
+	}()
+
+	for _, threadInfo := range infos {
+		h.db.RemoveMessageFromFolder(ctx, threadInfo.MessageID, threadInfo.FolderID)
+		h.db.AddMessageToFolder(ctx, threadInfo.MessageID, archiveFolderID, 0, threadInfo.IsRead, threadInfo.IsStarred)
+	}
+	h.publishThreadMutation(infos)
+	h.publishMutation(email.AccountID, archiveFolderID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "archived"})
+}
+
+func (h *Handler) handleDeleteThread(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	ctx := r.Context()
+
+	email, err := h.db.GetEmailByID(ctx, idStr)
+	if err != nil || email == nil || email.ThreadID == "" {
+		http.Error(w, "message not found", http.StatusBadRequest)
+		return
+	}
+
+	infos, err := h.db.GetThreadMutationInfos(ctx, email.AccountID, email.ThreadID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(infos) == 0 {
+		http.Error(w, "thread not found", http.StatusBadRequest)
+		return
+	}
+
+	trashFolderID, trashRemoteID, err := h.db.GetFolderIDByRole(ctx, email.AccountID, "trash")
+	if err != nil || trashFolderID == "" {
+		http.Error(w, "no trash folder found", http.StatusBadRequest)
+		return
+	}
+
+	deleteInfos := make([]storage.ThreadMessageMutationInfo, 0)
+	moveInfos := make([]storage.ThreadMessageMutationInfo, 0)
+	for _, info := range infos {
+		if info.FolderRole == "trash" {
+			deleteInfos = append(deleteInfos, info)
+			continue
+		}
+		moveInfos = append(moveInfos, info)
+	}
+
+	go func() {
+		client, err := h.connectIMAP(context.Background(), email.AccountID)
+		if err != nil {
+			return
+		}
+		defer client.Close()
+		for folderRemoteID, uids := range threadUIDsByFolder(deleteInfos) {
+			client.DeleteMessages(context.Background(), folderRemoteID, uids)
+		}
+		for folderRemoteID, uids := range threadUIDsByFolder(moveInfos) {
+			client.MoveMessages(context.Background(), folderRemoteID, uids, trashRemoteID)
+		}
+	}()
+
+	for _, info := range deleteInfos {
+		h.db.MarkMessageDeleted(ctx, info.MessageID)
+	}
+	for _, info := range moveInfos {
+		h.db.RemoveMessageFromFolder(ctx, info.MessageID, info.FolderID)
+		h.db.AddMessageToFolder(ctx, info.MessageID, trashFolderID, 0, info.IsRead, info.IsStarred)
+	}
+	h.publishThreadMutation(infos)
+	h.publishMutation(email.AccountID, trashFolderID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 }
 
 func (h *Handler) handleDeleteMessage(w http.ResponseWriter, r *http.Request) {

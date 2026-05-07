@@ -91,9 +91,7 @@ func Input(props ...Props) templ.Component {
 		}
 		var templ_7745c5c3_Var2 = []any{utils.TwMerge(
 			// Base styles
-			"flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm",
-			// Dark mode background
-			"dark:bg-input/30",
+			"flex h-9 w-full min-w-0 rounded-md border border-input bg-input/30 px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm",
 			// Selection styles
 			"selection:bg-primary selection:text-primary-foreground",
 			// Placeholder

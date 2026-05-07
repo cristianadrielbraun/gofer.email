@@ -3,12 +3,14 @@ package imap
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
+	"gofer.email/internal/mail/message"
 	"gofer.email/internal/storage"
 )
 
@@ -51,6 +53,11 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, ch
 		Flags:        true,
 		InternalDate: true,
 		RFC822Size:   true,
+		BodySection: []*imap.FetchItemBodySection{{
+			Specifier:    imap.PartSpecifierHeader,
+			HeaderFields: []string{"References", "In-Reply-To"},
+			Peek:         true,
+		}},
 	}
 
 	var allMsgs []storage.SyncMessage
@@ -87,10 +94,22 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, ch
 				switch item := item.(type) {
 				case imapclient.FetchItemDataUID:
 					syncMsg.RemoteUID = uint32(item.UID)
+				case imapclient.FetchItemDataBodySection:
+					body, err := io.ReadAll(item.Literal)
+					if err == nil {
+						inReplyTo, references := message.ParseThreadHeaders(body)
+						if inReplyTo != "" {
+							syncMsg.InReplyTo = inReplyTo
+						}
+						syncMsg.References = references
+					}
 				case imapclient.FetchItemDataEnvelope:
 					if item.Envelope != nil {
 						syncMsg.Subject = item.Envelope.Subject
 						syncMsg.MessageID = item.Envelope.MessageID
+						if len(item.Envelope.InReplyTo) > 0 && syncMsg.InReplyTo == "" {
+							syncMsg.InReplyTo = item.Envelope.InReplyTo[0]
+						}
 						if len(item.Envelope.From) > 0 {
 							syncMsg.FromName = item.Envelope.From[0].Name
 							syncMsg.FromEmail = item.Envelope.From[0].Addr()
@@ -134,7 +153,7 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, ch
 			}
 
 			if syncMsg.MessageID == "" {
-				syncMsg.MessageID = fmt.Sprintf("<%d@sync.gofer>", syncMsg.RemoteUID)
+				syncMsg.MessageID = fmt.Sprintf("<%s-%d@sync.gofer>", folderID, syncMsg.RemoteUID)
 			}
 
 			if syncMsg.Subject == "" {
@@ -206,6 +225,11 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 		Flags:        true,
 		InternalDate: true,
 		RFC822Size:   true,
+		BodySection: []*imap.FetchItemBodySection{{
+			Specifier:    imap.PartSpecifierHeader,
+			HeaderFields: []string{"References", "In-Reply-To"},
+			Peek:         true,
+		}},
 	}
 
 	cmd := c.client.Fetch(uidSet, fetchOpts)
@@ -231,10 +255,22 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 			switch item := item.(type) {
 			case imapclient.FetchItemDataUID:
 				syncMsg.RemoteUID = uint32(item.UID)
+			case imapclient.FetchItemDataBodySection:
+				body, err := io.ReadAll(item.Literal)
+				if err == nil {
+					inReplyTo, references := message.ParseThreadHeaders(body)
+					if inReplyTo != "" {
+						syncMsg.InReplyTo = inReplyTo
+					}
+					syncMsg.References = references
+				}
 			case imapclient.FetchItemDataEnvelope:
 				if item.Envelope != nil {
 					syncMsg.Subject = item.Envelope.Subject
 					syncMsg.MessageID = item.Envelope.MessageID
+					if len(item.Envelope.InReplyTo) > 0 && syncMsg.InReplyTo == "" {
+						syncMsg.InReplyTo = item.Envelope.InReplyTo[0]
+					}
 					if len(item.Envelope.From) > 0 {
 						syncMsg.FromName = item.Envelope.From[0].Name
 						syncMsg.FromEmail = item.Envelope.From[0].Addr()
@@ -278,7 +314,7 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 		}
 
 		if syncMsg.MessageID == "" {
-			syncMsg.MessageID = fmt.Sprintf("<%d@sync.gofer>", syncMsg.RemoteUID)
+			syncMsg.MessageID = fmt.Sprintf("<%s-%d@sync.gofer>", folderID, syncMsg.RemoteUID)
 		}
 
 		if syncMsg.Subject == "" {

@@ -22,10 +22,22 @@ type OutgoingMessage struct {
 	HTMLBody   string
 	InReplyTo  string
 	References string
+	MessageID  string
+	Date       time.Time
+}
+
+func NewMessageID() string {
+	return fmt.Sprintf("<%s@gofer>", uuid.New().String())
 }
 
 func BuildMIMEMessage(msg *OutgoingMessage) ([]byte, error) {
 	from := []*mail.Address{{Name: msg.FromName, Address: msg.FromEmail}}
+	if msg.MessageID == "" {
+		msg.MessageID = NewMessageID()
+	}
+	if msg.Date.IsZero() {
+		msg.Date = time.Now().UTC()
+	}
 
 	var buf bytes.Buffer
 
@@ -35,8 +47,8 @@ func BuildMIMEMessage(msg *OutgoingMessage) ([]byte, error) {
 		buf.WriteString(fmt.Sprintf("Cc: %s\r\n", formatAddressList(msg.CC)))
 	}
 	buf.WriteString(fmt.Sprintf("Subject: %s\r\n", mime.QEncoding.Encode("utf-8", msg.Subject)))
-	buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
-	buf.WriteString(fmt.Sprintf("Message-ID: <%s@gofer>\r\n", uuid.New().String()))
+	buf.WriteString(fmt.Sprintf("Date: %s\r\n", msg.Date.Format(time.RFC1123Z)))
+	buf.WriteString(fmt.Sprintf("Message-ID: %s\r\n", msg.MessageID))
 	buf.WriteString("MIME-Version: 1.0\r\n")
 
 	if msg.InReplyTo != "" {

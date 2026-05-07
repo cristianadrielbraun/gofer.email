@@ -136,6 +136,11 @@ document.addEventListener("DOMContentLoaded", function () {
           "font-medium"
         )
         sidebarLinks[i].classList.add("text-sidebar-foreground")
+        var badge = sidebarLinks[i].querySelector("[data-folder-unread]")
+        if (badge) {
+          badge.classList.remove("bg-sidebar-primary/20", "text-sidebar-primary")
+          badge.classList.add("bg-sidebar-accent", "text-sidebar-foreground/80")
+        }
       }
       link.classList.add(
         "bg-sidebar-accent",
@@ -143,6 +148,11 @@ document.addEventListener("DOMContentLoaded", function () {
         "font-medium"
       )
       link.classList.remove("text-sidebar-foreground")
+      var activeBadge = link.querySelector("[data-folder-unread]")
+      if (activeBadge) {
+        activeBadge.classList.remove("bg-sidebar-accent", "text-sidebar-foreground/80")
+        activeBadge.classList.add("bg-sidebar-primary/20", "text-sidebar-primary")
+      }
 
       var mainContent = document.getElementById("main-content")
       var isOnSettings = mainContent && mainContent.querySelector("[data-tui-tabs]")
@@ -334,6 +344,14 @@ function selectComposeAccount(el, fromPane) {
   if (display) display.innerHTML = (name ? name + " &lt;" : "") + email + (name ? "&gt;" : "")
 }
 
+function resetComposeForm(fromPane) {
+  var prefix = fromPane ? "compose-pane-" : "compose-"
+  var form = document.getElementById(prefix + "form")
+  if (!form) return
+  var fields = form.querySelectorAll('input[name="to"], input[name="cc"], input[name="bcc"], input[name="subject"], input[name="in_reply_to"], input[name="references"], textarea[name="body"]')
+  for (var i = 0; i < fields.length; i++) fields[i].value = ""
+}
+
 function sendCompose(fromPane) {
   var formId = fromPane ? "compose-pane-form" : "compose-form"
   var form = document.getElementById(formId)
@@ -375,6 +393,7 @@ function handleReply(mode) {
   if (!bar) return
 
   var messageId = bar.dataset.messageId
+  var references = bar.dataset.references || ""
   var subject = bar.dataset.subject || ""
   var fromEmail = bar.dataset.fromEmail || ""
   var fromName = bar.dataset.fromName || ""
@@ -390,6 +409,7 @@ function handleReply(mode) {
   var prefix = inPane ? "compose-pane-" : "compose-"
   var accountIdField = document.getElementById(prefix + "account-id")
   var inReplyToField = document.getElementById(prefix + "in-reply-to")
+  var referencesField = document.getElementById(prefix + "references")
   var bodyField = form.querySelector('textarea[name="body"]')
 
   if (accountId && accountIdField) {
@@ -402,7 +422,11 @@ function handleReply(mode) {
       subjectField.value = subject.match(/^Re:/i) ? subject : "Re: " + subject
     }
     if (inReplyToField && messageId) {
-      inReplyToField.value = "<" + messageId + ">"
+      inReplyToField.value = messageId.charAt(0) === "<" ? messageId : "<" + messageId + ">"
+    }
+    if (referencesField && messageId) {
+      var parentMessageId = messageId.charAt(0) === "<" ? messageId : "<" + messageId + ">"
+      referencesField.value = references ? references + " " + parentMessageId : parentMessageId
     }
     if (bodyField) {
       bodyField.value = ""
@@ -414,6 +438,7 @@ function handleReply(mode) {
       subjectField.value = subject.match(/^Fwd:/i) ? subject : "Fwd: " + subject
     }
     if (inReplyToField) inReplyToField.value = ""
+    if (referencesField) referencesField.value = ""
   }
 
   if (inPane) return
@@ -428,8 +453,36 @@ function handleReply(mode) {
   }, 100)
 }
 
+function openNewCompose() {
+  resetComposeForm(false)
+  if (window.tui && window.tui.dialog) {
+    window.tui.dialog.open("compose-dialog")
+  }
+}
+
 function toggleRead(emailId) {
   fetch("/api/messages/" + emailId + "/read", { method: "POST" })
+    .then(function (r) { return r.json() })
+    .then(function (data) {
+      var btn = document.querySelector('[data-read-email="' + emailId + '"]')
+      if (btn) {
+        var svg = btn.querySelector('svg')
+        if (svg) {
+          if (data.is_read) {
+            svg.innerHTML = '<path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/>\n  <rect x="2" y="4" width="20" height="16" rx="2"/>'
+          } else {
+            svg.innerHTML = '<path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z"/>\n  <path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10"/>'
+          }
+        }
+      }
+      invalidateMailListItem(emailId)
+      refreshSidebarUnread()
+    })
+    .catch(function () {})
+}
+
+function toggleThreadRead(emailId) {
+  fetch("/api/messages/" + emailId + "/thread/read", { method: "POST" })
     .then(function (r) { return r.json() })
     .then(function (data) {
       var btn = document.querySelector('[data-read-email="' + emailId + '"]')
@@ -487,6 +540,42 @@ function deleteMessage(emailId) {
     .catch(function () {})
 }
 
+function archiveThread(emailId) {
+  fetch("/api/messages/" + emailId + "/thread/archive", { method: "POST" })
+    .then(function () {
+      var mailView = document.getElementById("mail-view")
+      if (mailView) mailView.innerHTML = ""
+      var container = document.getElementById("mail-list-scroll")
+      if (container && container._virtualMailList) {
+        var vml = container._virtualMailList
+        if (vml.selectedEmailId === emailId) vml.selectedEmailId = null
+        vml.reset()
+        vml.hydrateFromDOM()
+        vml.switchFolder(vml.folderID)
+      }
+      refreshSidebarUnread()
+    })
+    .catch(function () {})
+}
+
+function deleteThread(emailId) {
+  fetch("/api/messages/" + emailId + "/thread", { method: "DELETE" })
+    .then(function () {
+      var mailView = document.getElementById("mail-view")
+      if (mailView) mailView.innerHTML = ""
+      var container = document.getElementById("mail-list-scroll")
+      if (container && container._virtualMailList) {
+        var vml = container._virtualMailList
+        if (vml.selectedEmailId === emailId) vml.selectedEmailId = null
+        vml.reset()
+        vml.hydrateFromDOM()
+        vml.switchFolder(vml.folderID)
+      }
+      refreshSidebarUnread()
+    })
+    .catch(function () {})
+}
+
 function moveMessage(emailId, folderId) {
   fetch("/api/messages/" + emailId + "/move", {
     method: "POST",
@@ -509,13 +598,22 @@ function invalidateMailListItem(emailId) {
 
 window.addEventListener("message", function (e) {
   if (e.data && e.data.type === "emailBodyResize") {
-    var iframe = document.getElementById("email-body-frame")
+    var iframe = e.data.emailId ? document.querySelector('[data-email-body-frame][data-email-id="' + e.data.emailId + '"]') : document.getElementById("email-body-frame")
     if (iframe) iframe.style.height = e.data.height + "px"
   }
 })
 
-function applyEmailBodyTheme() {
-  var iframe = document.getElementById("email-body-frame")
+function applyEmailBodyTheme(targetFrame) {
+  if (!targetFrame) {
+    var frames = document.querySelectorAll("[data-email-body-frame]")
+    if (!frames.length) {
+      var single = document.getElementById("email-body-frame")
+      if (single) frames = [single]
+    }
+    for (var i = 0; i < frames.length; i++) applyEmailBodyTheme(frames[i])
+    return
+  }
+  var iframe = targetFrame
   if (!iframe || !iframe.dataset.emailId) return
   var baseTheme = getEmailBodyBaseTheme()
   var theme = iframe.dataset.forceScheme === "opposite" ? oppositeEmailBodyTheme(baseTheme) : baseTheme
@@ -567,12 +665,17 @@ function readEmailBodyPalette(theme) {
 }
 
 function toggleEmailBodyScheme() {
-  var iframe = document.getElementById("email-body-frame")
-  if (!iframe || !iframe.dataset.emailId) return
-  if (iframe.dataset.forceScheme === "opposite") {
-    delete iframe.dataset.forceScheme
-  } else {
-    iframe.dataset.forceScheme = "opposite"
+  var frames = document.querySelectorAll("[data-email-body-frame]")
+  if (!frames.length) {
+    var single = document.getElementById("email-body-frame")
+    if (single) frames = [single]
+  }
+  for (var i = 0; i < frames.length; i++) {
+    if (frames[i].dataset.forceScheme === "opposite") {
+      delete frames[i].dataset.forceScheme
+    } else {
+      frames[i].dataset.forceScheme = "opposite"
+    }
   }
   applyEmailBodyTheme()
 }
@@ -586,7 +689,8 @@ function updateEmailBodySchemeButton(iframe, baseTheme, theme) {
   btn.classList.toggle("text-ink/40", !forced)
   var label = forced ? "Showing " + theme + " email body. Click to use " + baseTheme + "." : "Force " + oppositeEmailBodyTheme(baseTheme) + " email body"
   btn.setAttribute("aria-label", label)
-  btn.setAttribute("title", label)
+  var tooltipEl = btn.closest("[data-tui-popover-root]")?.querySelector("[data-email-scheme-tooltip]")
+  if (tooltipEl) tooltipEl.textContent = label
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -594,8 +698,15 @@ document.addEventListener("DOMContentLoaded", function () {
 })
 
 new MutationObserver(function () {
-  var iframe = document.getElementById("email-body-frame")
-  if (iframe && iframe.dataset.emailId && !iframe.src) {
+  var frames = document.querySelectorAll("[data-email-body-frame]")
+  for (var i = 0; i < frames.length; i++) {
+    var iframe = frames[i]
+    if (iframe && iframe.dataset.emailId && !iframe.src) {
+      applyEmailBodyTheme(iframe)
+    }
+  }
+  var legacy = document.getElementById("email-body-frame")
+  if (legacy && legacy.dataset.emailId && !legacy.src) {
     applyEmailBodyTheme()
   }
 }).observe(document.body, { childList: true, subtree: true })

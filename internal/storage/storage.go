@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -49,6 +50,11 @@ func New(dbPath string) (*DB, error) {
 		read.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := db.EnsureThreading(context.Background()); err != nil {
+		write.Close()
+		read.Close()
+		return nil, fmt.Errorf("ensure threading: %w", err)
+	}
 
 	return db, nil
 }
@@ -86,7 +92,9 @@ func (db *DB) migrate() error {
 		currentVersion = 0
 	}
 
-	if currentVersion >= 6 {
+	const targetSchemaVersion = 10
+
+	if currentVersion >= targetSchemaVersion {
 		log.Printf("schema at version %d, no migration needed", currentVersion)
 		return nil
 	}
@@ -95,7 +103,11 @@ func (db *DB) migrate() error {
 		if _, err := tx.Exec(string(schema)); err != nil {
 			return fmt.Errorf("apply schema: %w", err)
 		}
-		log.Println("schema initialized at version 6")
+		log.Printf("schema initialized at version %d", targetSchemaVersion)
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration: %w", err)
+		}
+		return nil
 	}
 
 	if currentVersion >= 1 && currentVersion <= 1 {
@@ -122,9 +134,33 @@ func (db *DB) migrate() error {
 		}
 	}
 
-	if currentVersion <= 5 {
+	if currentVersion >= 1 && currentVersion <= 5 {
 		if err := migrateV5ToV6(tx); err != nil {
 			return fmt.Errorf("migrate v5 to v6: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 6 {
+		if err := migrateV6ToV7(tx); err != nil {
+			return fmt.Errorf("migrate v6 to v7: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 7 {
+		if err := migrateV7ToV8(tx); err != nil {
+			return fmt.Errorf("migrate v7 to v8: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 8 {
+		if err := migrateV8ToV9(tx); err != nil {
+			return fmt.Errorf("migrate v8 to v9: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 9 {
+		if err := migrateV9ToV10(tx); err != nil {
+			return fmt.Errorf("migrate v9 to v10: %w", err)
 		}
 	}
 
@@ -224,6 +260,104 @@ func migrateV5ToV6(tx *sql.Tx) error {
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`INSERT OR REPLACE INTO schema_version (version) VALUES (6)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV6ToV7(tx *sql.Tx) error {
+	migrations := []string{
+		`ALTER TABLE messages ADD COLUMN in_reply_to TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN "references" TEXT NOT NULL DEFAULT ''`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (7)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV7ToV8(tx *sql.Tx) error {
+	migrations := []string{
+		`CREATE TABLE IF NOT EXISTS threads (
+			id TEXT PRIMARY KEY,
+			account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+			subject TEXT NOT NULL DEFAULT '',
+			normalized_subject TEXT NOT NULL DEFAULT '',
+			root_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+			last_message_at DATETIME,
+			message_count INTEGER NOT NULL DEFAULT 0,
+			unread_count INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`ALTER TABLE messages ADD COLUMN message_id_normalized TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN normalized_subject TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN thread_parent_id INTEGER REFERENCES messages(id) ON DELETE SET NULL`,
+		`ALTER TABLE messages ADD COLUMN provider_thread_id TEXT`,
+		`CREATE TABLE IF NOT EXISTS message_references (
+			message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+			referenced_message_id TEXT NOT NULL,
+			ordinal INTEGER NOT NULL,
+			PRIMARY KEY (message_id, ordinal)
+		)`,
+		`CREATE TABLE IF NOT EXISTS unresolved_references (
+			account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+			referenced_message_id TEXT NOT NULL,
+			child_message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+			ordinal INTEGER NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (account_id, referenced_message_id, child_message_id, ordinal)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_threads_account_last ON threads(account_id, last_message_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_threads_subject ON threads(account_id, normalized_subject, last_message_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_msgid_norm ON messages(account_id, message_id_normalized)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_thread_date ON messages(account_id, thread_id, date_received)`,
+		`CREATE INDEX IF NOT EXISTS idx_message_references_ref ON message_references(referenced_message_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_unresolved_references_ref ON unresolved_references(account_id, referenced_message_id)`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (8)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV8ToV9(tx *sql.Tx) error {
+	migrations := []string{
+		`DELETE FROM message_references`,
+		`DELETE FROM unresolved_references`,
+		`DELETE FROM threads`,
+		`UPDATE messages SET thread_id = NULL, thread_parent_id = NULL, message_id_normalized = '', normalized_subject = ''`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (9)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV9ToV10(tx *sql.Tx) error {
+	migrations := []string{
+		`DELETE FROM message_references`,
+		`DELETE FROM unresolved_references`,
+		`DELETE FROM threads`,
+		`UPDATE messages SET thread_id = NULL, thread_parent_id = NULL, message_id_normalized = '', normalized_subject = ''`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (10)`,
 	}
 
 	for _, m := range migrations {

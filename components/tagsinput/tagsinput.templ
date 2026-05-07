@@ -39,9 +39,7 @@ templ TagsInput(props ...Props) {
 		class={
 			utils.TwMerge(
 				// Base styles
-				"flex flex-col gap-2 p-2 rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow] outline-none",
-				// Dark mode background
-				"dark:bg-input/30",
+				"flex flex-col gap-2 p-2 rounded-md border border-input bg-input/30 shadow-xs transition-[color,box-shadow] outline-none",
 				// Focus styles
 				"focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]",
 				// Disabled styles

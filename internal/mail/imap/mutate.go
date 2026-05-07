@@ -8,9 +8,16 @@ import (
 )
 
 func (c *Client) StoreFlags(ctx context.Context, folderRemoteName string, uid uint32, op imap.StoreFlagsOp, flags []imap.Flag) error {
+	return c.StoreFlagsBatch(ctx, folderRemoteName, []uint32{uid}, op, flags)
+}
+
+func (c *Client) StoreFlagsBatch(ctx context.Context, folderRemoteName string, uids []uint32, op imap.StoreFlagsOp, flags []imap.Flag) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if len(uids) == 0 {
+		return nil
+	}
 	if c.closed {
 		return fmt.Errorf("client is closed")
 	}
@@ -22,7 +29,9 @@ func (c *Client) StoreFlags(ctx context.Context, folderRemoteName string, uid ui
 	defer c.client.Unselect()
 
 	var uidSet imap.UIDSet
-	uidSet.AddNum(imap.UID(uid))
+	for _, uid := range uids {
+		uidSet.AddNum(imap.UID(uid))
+	}
 
 	storeCmd := c.client.Store(uidSet, &imap.StoreFlags{
 		Op:     op,
@@ -34,9 +43,16 @@ func (c *Client) StoreFlags(ctx context.Context, folderRemoteName string, uid ui
 }
 
 func (c *Client) MoveMessage(ctx context.Context, folderRemoteName string, uid uint32, destFolderRemoteName string) error {
+	return c.MoveMessages(ctx, folderRemoteName, []uint32{uid}, destFolderRemoteName)
+}
+
+func (c *Client) MoveMessages(ctx context.Context, folderRemoteName string, uids []uint32, destFolderRemoteName string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if len(uids) == 0 {
+		return nil
+	}
 	if c.closed {
 		return fmt.Errorf("client is closed")
 	}
@@ -48,7 +64,9 @@ func (c *Client) MoveMessage(ctx context.Context, folderRemoteName string, uid u
 	defer c.client.Unselect()
 
 	var uidSet imap.UIDSet
-	uidSet.AddNum(imap.UID(uid))
+	for _, uid := range uids {
+		uidSet.AddNum(imap.UID(uid))
+	}
 
 	moveCmd := c.client.Move(uidSet, destFolderRemoteName)
 	_, err = moveCmd.Wait()

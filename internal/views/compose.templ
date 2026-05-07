@@ -78,19 +78,19 @@ templ ComposeDialog(accounts []models.Account) {
 						>Bcc</button>
 					</div>
 				</div>
-				<div class="border-t pt-2">
-					@input.Input(input.Props{
-						Name:        "subject",
-						Placeholder: "Subject",
-						Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 font-semibold placeholder:font-normal",
-					})
-				</div>
-				@ComposeToolbar()
-				<div class="flex-1 min-h-0 overflow-y-auto">
+			<div class="border-t pt-2">
+				@input.Input(input.Props{
+					Name:        "subject",
+					Placeholder: "Subject",
+					Class:       "compose-input h-8 font-semibold placeholder:font-normal",
+				})
+			</div>
+			@ComposeToolbar()
+			<div class="flex-1 min-h-0 overflow-y-auto">
 					@textarea.Textarea(textarea.Props{
 						Name:        "body",
 						Placeholder: "Write your message...",
-						Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none text-sm h-full",
+						Class:       "compose-input resize-none text-sm h-full",
 						AutoResize:  false,
 					})
 				</div>
@@ -290,7 +290,7 @@ templ ComposeField(label string, name string, placeholder string) {
 		@input.Input(input.Props{
 			Name:        name,
 			Placeholder: placeholder,
-			Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 h-7 text-sm",
+			Class:       "compose-input h-7 text-sm",
 		})
 	</div>
 }
@@ -328,39 +328,39 @@ templ ComposePane(accounts []models.Account) {
 						<input type="hidden" name="account_id" id="compose-pane-account-id" value={ composeDefaultAccountID(accounts) }/>
 						<input type="hidden" name="in_reply_to" id="compose-pane-in-reply-to" value=""/>
 						<input type="hidden" name="references" id="compose-pane-references" value=""/>
-						<div class="space-y-1">
-							<div class="flex items-center gap-2">
-								<label class="text-xs text-muted-foreground font-medium w-8 shrink-0">From</label>
-								@dropdown.Dropdown() {
-									@dropdown.Trigger() {
-										<button type="button" id="compose-pane-from-trigger" class="flex items-center gap-1 text-sm text-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent">
-											<span id="compose-pane-from-display">{ composeDefaultName(accounts) } &lt;{ composeDefaultEmail(accounts) }&gt;</span>
-											@icon.ChevronDown(icon.Props{Class: "size-3 text-muted-foreground"})
-										</button>
-									}
-									@dropdown.Content() {
-										for _, acc := range accounts {
-											@dropdown.Item(dropdown.ItemProps{
-												Attributes: templ.Attributes{
-													"data-account-id":    acc.ID,
-													"data-account-email": acc.Email,
-													"data-account-name":  acc.Name,
-													"onclick":            "selectComposeAccount(this, true)",
-												},
-											}) {
-												<span class="text-sm">{ acc.Name } &lt;{ acc.Email }&gt;</span>
-											}
+					<div class="space-y-1">
+						<div class="flex items-center gap-2">
+							<label class="text-xs text-muted-foreground font-medium w-8 shrink-0">From</label>
+							@dropdown.Dropdown() {
+								@dropdown.Trigger() {
+									<button type="button" id="compose-pane-from-trigger" class="flex items-center gap-1 text-sm text-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent">
+										<span id="compose-pane-from-display">{ composeDefaultName(accounts) } &lt;{ composeDefaultEmail(accounts) }&gt;</span>
+										@icon.ChevronDown(icon.Props{Class: "size-3 text-muted-foreground"})
+									</button>
+								}
+								@dropdown.Content() {
+									for _, acc := range accounts {
+										@dropdown.Item(dropdown.ItemProps{
+											Attributes: templ.Attributes{
+												"data-account-id":    acc.ID,
+												"data-account-email": acc.Email,
+												"data-account-name":  acc.Name,
+												"onclick":            "selectComposeAccount(this, true)",
+											},
+										}) {
+											<span class="text-sm">{ acc.Name } &lt;{ acc.Email }&gt;</span>
 										}
 									}
 								}
-							</div>
-							@ComposeField("To", "to", "recipient@example.com")
-							<div id="pane-cc-field" class="hidden">
-								@ComposeField("Cc", "cc", "")
-							</div>
-							<div id="pane-bcc-field" class="hidden">
-								@ComposeField("Bcc", "bcc", "")
-							</div>
+							}
+						</div>
+						@ComposeField("To", "to", "recipient@example.com")
+						<div id="pane-cc-field" class="hidden">
+							@ComposeField("Cc", "cc", "")
+						</div>
+						<div id="pane-bcc-field" class="hidden">
+							@ComposeField("Bcc", "bcc", "")
+						</div>
 							<div id="pane-cc-bcc-buttons" class="flex items-center gap-2 pt-1">
 								<button
 									id="pane-cc-btn"
@@ -376,19 +376,19 @@ templ ComposePane(accounts []models.Account) {
 								>Bcc</button>
 							</div>
 						</div>
-						<div class="border-t pt-2">
-							@input.Input(input.Props{
-								Name:        "subject",
-								Placeholder: "Subject",
-								Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 font-semibold placeholder:font-normal",
-							})
-						</div>
-						@ComposeToolbar()
-						<div class="flex-1 min-h-0">
+					<div class="border-t pt-2">
+						@input.Input(input.Props{
+							Name:        "subject",
+							Placeholder: "Subject",
+							Class:       "compose-input h-8 font-semibold placeholder:font-normal",
+						})
+					</div>
+					@ComposeToolbar()
+					<div class="flex-1 min-h-0">
 							@textarea.Textarea(textarea.Props{
 								Name:        "body",
 								Placeholder: "Write your message...",
-								Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none text-sm h-full min-h-[200px]",
+								Class:       "compose-input resize-none text-sm h-full min-h-[200px]",
 								AutoResize:  false,
 							})
 						</div>

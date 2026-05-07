@@ -58,7 +58,7 @@ class VirtualMailList {
       this.spacerBottom.style.height = "0px"
       this.itemsContainer.innerHTML =
         '<div class="flex flex-col items-center justify-center py-20 px-4 text-center">' +
-          '<div class="size-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4 raised">' +
+          '<div class="empty-icon-box size-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4 raised">' +
             '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-7 text-muted-foreground/40" data-lucide="icon">' +
               '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>' +
               '<path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>' +
@@ -547,11 +547,21 @@ window.addEventListener("popstate", function (e) {
           "font-medium"
         )
         sidebarLinks[i].classList.add("text-sidebar-foreground")
+        var badge = sidebarLinks[i].querySelector("[data-folder-unread]")
+        if (badge) {
+          badge.classList.remove("bg-sidebar-primary/20", "text-sidebar-primary")
+          badge.classList.add("bg-sidebar-accent", "text-sidebar-foreground/80")
+        }
       }
       var activeLink = sidebar.querySelector('a[hx-get="/folder/' + folderID + '"]')
       if (activeLink) {
         activeLink.classList.add("bg-sidebar-accent", "text-sidebar-primary", "font-medium")
         activeLink.classList.remove("text-sidebar-foreground")
+        var activeBadge = activeLink.querySelector("[data-folder-unread]")
+        if (activeBadge) {
+          activeBadge.classList.remove("bg-sidebar-accent", "text-sidebar-foreground/80")
+          activeBadge.classList.add("bg-sidebar-primary/20", "text-sidebar-primary")
+        }
       }
     }
   } else if (e.state.email && e.state.email !== vml.selectedEmailId) {

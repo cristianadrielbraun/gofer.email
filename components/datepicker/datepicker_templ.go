@@ -225,7 +225,7 @@ func DatePicker(props ...Props) templ.Component {
 						var templ_7745c5c3_Var10 string
 						templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(p.Placeholder)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `components/datepicker/datepicker.templ`, Line: 123, Col: 22}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `components/datepicker/datepicker.templ`, Line: 121, Col: 22}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 						if templ_7745c5c3_Err != nil {
@@ -257,9 +257,7 @@ func DatePicker(props ...Props) templ.Component {
 						// Base styles matching input
 						"w-full h-9 px-3 py-1 text-base md:text-sm",
 						"flex items-center justify-between",
-						"rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow] outline-none",
-						// Dark mode background
-						"dark:bg-input/30",
+						"rounded-md border border-input bg-input/30 shadow-xs transition-[color,box-shadow] outline-none",
 						// Selection styles
 						"selection:bg-primary selection:text-primary-foreground",
 						// Focus styles

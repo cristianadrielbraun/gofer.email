@@ -330,7 +330,7 @@ func ComposeDialog(accounts []models.Account) templ.Component {
 				templ_7745c5c3_Err = input.Input(input.Props{
 					Name:        "subject",
 					Placeholder: "Subject",
-					Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 font-semibold placeholder:font-normal",
+					Class:       "compose-input h-8 font-semibold placeholder:font-normal",
 				}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -350,7 +350,7 @@ func ComposeDialog(accounts []models.Account) templ.Component {
 				templ_7745c5c3_Err = textarea.Textarea(textarea.Props{
 					Name:        "body",
 					Placeholder: "Write your message...",
-					Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none text-sm h-full",
+					Class:       "compose-input resize-none text-sm h-full",
 					AutoResize:  false,
 				}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -1450,7 +1450,7 @@ func ComposeField(label string, name string, placeholder string) templ.Component
 		templ_7745c5c3_Err = input.Input(input.Props{
 			Name:        name,
 			Placeholder: placeholder,
-			Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 h-7 text-sm",
+			Class:       "compose-input h-7 text-sm",
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -1564,7 +1564,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 				var templ_7745c5c3_Var59 string
 				templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultName(accounts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 337, Col: 78}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 337, Col: 77}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 				if templ_7745c5c3_Err != nil {
@@ -1577,7 +1577,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 				var templ_7745c5c3_Var60 string
 				templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultEmail(accounts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 337, Col: 116}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 337, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 				if templ_7745c5c3_Err != nil {
@@ -1637,7 +1637,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 						var templ_7745c5c3_Var63 string
 						templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(acc.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 351, Col: 44}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 351, Col: 43}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 						if templ_7745c5c3_Err != nil {
@@ -1650,7 +1650,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 						var templ_7745c5c3_Var64 string
 						templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(acc.Email)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 351, Col: 62}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 351, Col: 61}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 						if templ_7745c5c3_Err != nil {
@@ -1717,7 +1717,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 		templ_7745c5c3_Err = input.Input(input.Props{
 			Name:        "subject",
 			Placeholder: "Subject",
-			Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 font-semibold placeholder:font-normal",
+			Class:       "compose-input h-8 font-semibold placeholder:font-normal",
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -1737,7 +1737,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 		templ_7745c5c3_Err = textarea.Textarea(textarea.Props{
 			Name:        "body",
 			Placeholder: "Write your message...",
-			Class:       "border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none text-sm h-full min-h-[200px]",
+			Class:       "compose-input resize-none text-sm h-full min-h-[200px]",
 			AutoResize:  false,
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {

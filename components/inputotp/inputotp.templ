@@ -128,9 +128,7 @@ templ Slot(props ...SlotProps) {
 			class={
 				utils.TwMerge(
 					// Base styles - keeping the specific OTP dimensions
-					"w-10 h-12 text-center rounded-md border border-input bg-transparent text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm",
-					// Dark mode background
-					"dark:bg-input/30",
+					"w-10 h-12 text-center rounded-md border border-input bg-input/30 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm",
 					// Selection styles
 					"selection:bg-primary selection:text-primary-foreground",
 					// Placeholder

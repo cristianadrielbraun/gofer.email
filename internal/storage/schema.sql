@@ -59,7 +59,13 @@ CREATE TABLE IF NOT EXISTS messages (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     remote_message_id TEXT,
     internet_message_id TEXT,
+    message_id_normalized TEXT NOT NULL DEFAULT '',
     thread_id TEXT,
+    thread_parent_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    provider_thread_id TEXT,
+    in_reply_to TEXT NOT NULL DEFAULT '',
+    "references" TEXT NOT NULL DEFAULT '',
+    normalized_subject TEXT NOT NULL DEFAULT '',
     subject TEXT NOT NULL DEFAULT '',
     from_name TEXT NOT NULL DEFAULT '',
     from_email TEXT NOT NULL DEFAULT '',
@@ -74,6 +80,38 @@ CREATE TABLE IF NOT EXISTS messages (
     has_attachments INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Conversation threads
+CREATE TABLE IF NOT EXISTS threads (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    subject TEXT NOT NULL DEFAULT '',
+    normalized_subject TEXT NOT NULL DEFAULT '',
+    root_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    last_message_at DATETIME,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    unread_count INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Ordered RFC References chain for each message
+CREATE TABLE IF NOT EXISTS message_references (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    referenced_message_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL,
+    PRIMARY KEY (message_id, ordinal)
+);
+
+-- References whose parent message has not arrived yet
+CREATE TABLE IF NOT EXISTS unresolved_references (
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    referenced_message_id TEXT NOT NULL,
+    child_message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (account_id, referenced_message_id, child_message_id, ordinal)
 );
 
 -- Message-to-folder mapping (a message can be in multiple folders/labels)
@@ -187,6 +225,24 @@ ON messages(account_id, date_received DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_thread
 ON messages(account_id, thread_id);
 
+CREATE INDEX IF NOT EXISTS idx_messages_thread_date
+ON messages(account_id, thread_id, date_received);
+
+CREATE INDEX IF NOT EXISTS idx_messages_msgid_norm
+ON messages(account_id, message_id_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_threads_account_last
+ON threads(account_id, last_message_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_threads_subject
+ON threads(account_id, normalized_subject, last_message_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_message_references_ref
+ON message_references(referenced_message_id);
+
+CREATE INDEX IF NOT EXISTS idx_unresolved_references_ref
+ON unresolved_references(account_id, referenced_message_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_remote_id
 ON messages(account_id, remote_message_id);
 
@@ -221,7 +277,7 @@ CREATE INDEX IF NOT EXISTS idx_message_search_docs_account
 ON message_search_docs(account_id);
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (6);
+INSERT OR REPLACE INTO schema_version (version) VALUES (10);
 
 -- Application settings
 CREATE TABLE IF NOT EXISTS app_settings (

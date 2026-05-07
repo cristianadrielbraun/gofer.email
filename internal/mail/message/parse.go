@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/emersion/go-message"
+	_ "github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/mail"
 
 	"gofer.email/internal/store"
@@ -16,6 +17,8 @@ import (
 
 type ParsedMessage struct {
 	MessageID   string
+	InReplyTo   string
+	References  string
 	Subject     string
 	FromName    string
 	FromEmail   string
@@ -64,6 +67,7 @@ func ParseMessage(ctx context.Context, r io.Reader, blobStore *store.BlobStore, 
 	msgReader, err := mail.CreateReader(bytes.NewReader(raw))
 	if err != nil {
 		parsed.ParseError = fmt.Errorf("parse message: %w", err)
+		parsed.TextBody = string(raw)
 		parsed.Snippet = truncate(string(raw), 200)
 		return parsed, nil
 	}
@@ -75,6 +79,11 @@ func ParseMessage(ctx context.Context, r io.Reader, blobStore *store.BlobStore, 
 	if parsed.Subject == "" {
 		parsed.Subject = "(no subject)"
 	}
+
+	if ids := ParseMessageIDs(header.Get("In-Reply-To")); len(ids) > 0 {
+		parsed.InReplyTo = ids[0]
+	}
+	parsed.References = header.Get("References")
 
 	if date, err := header.Date(); err == nil {
 		parsed.DateSent = date

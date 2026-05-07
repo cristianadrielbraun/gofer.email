@@ -3,8 +3,10 @@ package views
 import (
 	"gofer.email/internal/models"
 
+	"gofer.email/components/copybutton"
 	"gofer.email/components/dialog"
 	"gofer.email/components/dropdown"
+	"gofer.email/components/popover"
 	"gofer.email/components/tabs"
 	"gofer.email/components/tooltip"
 )
@@ -24,6 +26,8 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			@dropdown.Script()
 			@tabs.Script()
 			@tooltip.Script()
+			@popover.Script()
+			@copybutton.Script()
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings={ uiSettingsJSON(uiSettings) }>
 			<div class="flex h-screen overflow-hidden">
@@ -99,6 +103,8 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 			@dropdown.Script()
 			@tabs.Script()
 			@tooltip.Script()
+			@popover.Script()
+			@copybutton.Script()
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings={ uiSettingsJSON(uiSettings) }>
 			<div class="flex h-screen overflow-hidden">
@@ -169,7 +175,7 @@ templ FolderPartial(emails []models.Email, activeFolder string, selectedEmail *m
 	@MailList(emails, activeFolder, selectedEmail, totalCount, "384px")
 	<div id="mail-view" class="hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk" hx-swap-oob="true">
 		if selectedEmail != nil {
-			@MailViewContent(selectedEmail)
+			@MailViewContent(selectedEmail, nil)
 		} else {
 			@MailViewEmpty()
 		}

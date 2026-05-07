@@ -5,8 +5,10 @@ import (
 	"gofer.email/internal/models"
 
 	"gofer.email/components/button"
+	"gofer.email/components/copybutton"
 	"gofer.email/components/dropdown"
 	"gofer.email/components/icon"
+	"gofer.email/components/popover"
 	"gofer.email/components/tooltip"
 
 	"github.com/dustin/go-humanize"
@@ -19,31 +21,143 @@ func contactDisplay(c models.Contact) string {
 	return c.Email
 }
 
+func threadAwareAction(singleFn, threadFn string, email *models.Email) string {
+	if email.ThreadCount > 1 {
+		return fmt.Sprintf("%s('%s')", threadFn, email.ID)
+	}
+	return fmt.Sprintf("%s('%s')", singleFn, email.ID)
+}
+
+func threadAwareLabel(single, thread string, email *models.Email) string {
+	if email.ThreadCount > 1 {
+		return thread
+	}
+	return single
+}
+
 templ MailView(email *models.Email) {
 	<div id="mail-view" class="hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk">
 		if email != nil {
-			@MailViewContent(email)
+			@MailViewContent(email, nil)
 		} else {
 			@MailViewEmpty()
 		}
 	</div>
 }
 
-templ MailViewContent(email *models.Email) {
+templ MailViewContent(email *models.Email, thread []models.ThreadItem) {
 	<div class="flex flex-col h-full p-2">
 		<div class="surface-paper rounded-md flex flex-col h-full overflow-hidden">
 			@MailViewHeader(email)
 			<div class="h-px bg-gradient-to-r from-transparent via-amber-900/10 to-transparent"></div>
 			<div class="flex-1 overflow-y-auto">
 				<div class="mx-auto px-8 py-6">
-					@MailViewSender(email)
-					<div class="h-px bg-gradient-to-r from-transparent via-ink/10 to-transparent my-6"></div>
-					@MailViewBody(email)
+					if thread != nil && len(thread) > 1 {
+						@MailViewThreadConversation(email, thread)
+					} else {
+						@MailViewSender(email)
+						<div class="h-px bg-gradient-to-r from-transparent via-ink/10 to-transparent my-6"></div>
+						@MailViewBody(email)
+					}
 				</div>
 			</div>
 			@MailViewReplyBar(email)
 		</div>
 	</div>
+}
+
+templ MailViewThreadConversation(email *models.Email, thread []models.ThreadItem) {
+	<div class="mb-5">
+		<div class="flex items-center gap-2 mb-3">
+			@icon.MessagesSquare(icon.Props{Class: "size-4 text-ink/30"})
+			<span class="text-xs font-medium text-ink/40">{ fmt.Sprintf("%d messages in this thread", len(thread)) }</span>
+		</div>
+		<h1 class="text-xl font-bold tracking-tight text-ink" style="font-family: var(--font-serif)">{ email.Subject }</h1>
+	</div>
+	<div class="space-y-4">
+		for _, item := range thread {
+			<details open?={ item.ID == email.ID } class={ "rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden group", templ.KV("border-amber-900/15 bg-amber-50/20", item.ID == email.ID), templ.KV("border-ink/8 bg-transparent", item.ID != email.ID) }>
+				<summary class="flex items-start gap-3 px-4 py-3 bg-ink/[0.015] cursor-pointer list-none marker:hidden hover:bg-ink/[0.025] transition-colors">
+					<div class={ "size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0", templ.KV("bg-gradient-to-b from-amber-700/70 to-amber-900/70 text-amber-100", item.ID == email.ID), templ.KV("bg-ink/[0.06] text-ink/40", item.ID != email.ID) }>
+						{ item.From.Initials }
+					</div>
+					<div class="flex-1 min-w-0">
+						<div class="flex items-center gap-2 flex-wrap">
+							<span class="font-semibold text-sm text-ink truncate">{ item.From.Name }</span>
+							<span class="text-xs text-ink/35">&lt;{ item.From.Email }&gt;</span>
+							if item.FolderName != "" {
+								<span class="text-[10px] font-medium text-ink/40 bg-ink/[0.04] px-1.5 py-0.5 rounded shrink-0">{ item.FolderName }</span>
+							}
+							for _, label := range item.Labels {
+								<span class={ "text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0", label.Color }>{ label.Name }</span>
+							}
+							if item.ID == email.ID {
+								<span class="text-[10px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">Current</span>
+							}
+						</div>
+						<div class="text-xs text-ink/35 mt-0.5 truncate">{ item.DateFull }</div>
+						if item.ID != email.ID {
+							<p class="text-xs text-ink/35 mt-1 truncate group-open:hidden">{ item.Preview }</p>
+						}
+					</div>
+					@icon.ChevronsDown(icon.Props{Class: "size-4 text-ink/25 mt-1 transition-transform group-open:rotate-180"})
+				</summary>
+				<div class="px-4 py-3">
+					if item.ID == email.ID {
+						@MailViewAttachments(email)
+					}
+					@MailViewBodyByID(item.ID)
+				</div>
+			</details>
+		}
+	</div>
+}
+
+templ MailViewThread(email *models.Email, thread []models.ThreadItem) {
+	if thread != nil && len(thread) > 1 {
+		<div class="mb-6">
+			<div class="flex items-center gap-2 mb-3">
+				@icon.MessagesSquare(icon.Props{Class: "size-4 text-ink/30"})
+				<span class="text-xs font-medium text-ink/40">{ fmt.Sprintf("%d messages in this thread", len(thread)) }</span>
+			</div>
+			<div class="space-y-1">
+				for _, item := range thread {
+					if item.ID == email.ID {
+						<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-ink/[0.03] border border-ink/8">
+							<div class="size-7 rounded-full bg-gradient-to-b from-amber-700/70 to-amber-900/70 flex items-center justify-center text-[10px] font-bold text-amber-100 shrink-0">
+								{ item.From.Initials }
+							</div>
+							<div class="flex-1 min-w-0">
+								<div class="flex items-center gap-2">
+									<span class="text-sm font-semibold text-ink truncate">{ item.From.Name }</span>
+									<span class="text-[11px] text-ink/30">{ item.Date }</span>
+								</div>
+								<p class="text-xs text-ink/40 truncate">{ item.Preview }</p>
+							</div>
+							<span class="text-[10px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">Current</span>
+						</div>
+					} else {
+						<a href={ templ.URL("/email/" + item.ID) }
+							hx-get={ templ.URL("/email/" + item.ID) }
+							hx-target="#mail-view"
+							hx-swap="innerHTML"
+							class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-ink/[0.03] transition-colors cursor-pointer group">
+							<div class="size-7 rounded-full bg-ink/[0.06] flex items-center justify-center text-[10px] font-bold text-ink/40 shrink-0 group-hover:bg-ink/10">
+								{ item.From.Initials }
+							</div>
+							<div class="flex-1 min-w-0">
+								<div class="flex items-center gap-2">
+									<span class="text-sm text-ink/70 truncate">{ item.From.Name }</span>
+									<span class="text-[11px] text-ink/25">{ item.Date }</span>
+								</div>
+								<p class="text-xs text-ink/30 truncate">{ item.Preview }</p>
+							</div>
+						</a>
+					}
+				}
+			</div>
+		</div>
+	}
 }
 
 templ MailViewHeader(email *models.Email) {
@@ -52,9 +166,10 @@ templ MailViewHeader(email *models.Email) {
 			@tooltip.Tooltip() {
 				@tooltip.Trigger() {
 					@button.Button(button.Props{
-						Variant: button.VariantGhost,
-						Size:    button.SizeIcon,
-						Class:   "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+						Variant:    button.VariantGhost,
+						Size:       button.SizeIcon,
+						Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+						Attributes: templ.Attributes{"onclick": fmt.Sprintf("archiveThread('%s')", email.ID)},
 					}) {
 						@icon.Archive(icon.Props{Class: "size-4"})
 					}
@@ -63,7 +178,7 @@ templ MailViewHeader(email *models.Email) {
 					Position:  tooltip.PositionBottom,
 					ShowArrow: true,
 				}) {
-					Archive
+					{ threadAwareLabel("Archive", "Archive thread", email) }
 				}
 			}
 			@tooltip.Tooltip() {
@@ -72,7 +187,7 @@ templ MailViewHeader(email *models.Email) {
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
 						Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
-						Attributes: templ.Attributes{"onclick": fmt.Sprintf("deleteMessage('%s')", email.ID)},
+						Attributes: templ.Attributes{"onclick": threadAwareAction("deleteMessage", "deleteThread", email)},
 					}) {
 						@icon.Trash2(icon.Props{Class: "size-4"})
 					}
@@ -81,7 +196,7 @@ templ MailViewHeader(email *models.Email) {
 					Position:  tooltip.PositionBottom,
 					ShowArrow: true,
 				}) {
-					Delete
+					{ threadAwareLabel("Delete", "Delete thread", email) }
 				}
 			}
 			@tooltip.Tooltip() {
@@ -112,7 +227,7 @@ templ MailViewHeader(email *models.Email) {
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
 						Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
-						Attributes: templ.Attributes{"onclick": fmt.Sprintf("toggleRead('%s')", email.ID), "data-read-email": email.ID},
+						Attributes: templ.Attributes{"onclick": threadAwareAction("toggleRead", "toggleThreadRead", email), "data-read-email": email.ID},
 					}) {
 						if email.IsRead {
 							@icon.Mail(icon.Props{Class: "size-4"})
@@ -126,9 +241,9 @@ templ MailViewHeader(email *models.Email) {
 					ShowArrow: true,
 				}) {
 					if email.IsRead {
-						Mark as unread
+						{ threadAwareLabel("Mark as unread", "Mark thread as unread", email) }
 					} else {
-						Mark as read
+						{ threadAwareLabel("Mark as read", "Mark thread as read", email) }
 					}
 				}
 			}
@@ -147,7 +262,7 @@ templ MailViewHeader(email *models.Email) {
 					Position:  tooltip.PositionBottom,
 					ShowArrow: true,
 				}) {
-					Force color scheme
+					<span data-email-scheme-tooltip>Force color scheme</span>
 				}
 			}
 		</div>
@@ -240,11 +355,82 @@ templ MailViewSender(email *models.Email) {
 				}
 				if len(email.CC) > 0 {
 					, cc { contactDisplay(email.CC[0]) }
+					if len(email.CC) > 1 {
+						{ fmt.Sprintf(" and %d more", len(email.CC)-1) }
+					}
 				}
 			</div>
 		</div>
+		@popover.Root() {
+			@popover.Trigger() {
+				<button type="button" class="shrink-0 size-7 rounded flex items-center justify-center text-ink/30 hover:text-ink/60 hover:bg-ink/5 transition-colors mt-0.5">
+					@icon.ChevronsUpDown(icon.Props{Class: "size-3.5"})
+				</button>
+			}
+			@popover.Content(popover.ContentProps{
+				Placement: popover.PlacementBottomEnd,
+				Offset:    8,
+				Class:     "w-80 p-0",
+			}) {
+				<div class="p-4 space-y-3">
+					<div class="flex items-start gap-3">
+						<div class="size-10 rounded-full bg-gradient-to-b from-amber-700/70 to-amber-900/70 flex items-center justify-center text-xs font-bold text-amber-100 shrink-0 shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
+							{ email.From.Initials }
+						</div>
+						<div class="flex-1 min-w-0">
+							<div class="flex items-center gap-2">
+								<span class="font-semibold text-sm text-ink truncate">{ email.From.Name }</span>
+								@copybutton.CopyButton(copybutton.Props{
+									TargetID: "detail-from-email",
+									Class:    "h-5 w-5",
+								})
+							</div>
+							<p id="detail-from-email" class="text-xs text-ink/50 truncate">{ email.From.Email }</p>
+						</div>
+					</div>
+					if len(email.To) > 0 {
+						<div>
+							<span class="text-[11px] font-medium text-ink/30 uppercase tracking-wider">To</span>
+							<div class="mt-1 space-y-0.5">
+								for _, c := range email.To {
+									<div class="flex items-center gap-2">
+										<span class="text-sm text-ink truncate">{ contactDisplay(c) }</span>
+										<span class="text-xs text-ink/35 truncate">&lt;{ c.Email }&gt;</span>
+									</div>
+								}
+							</div>
+						</div>
+					}
+					if len(email.CC) > 0 {
+						<div>
+							<span class="text-[11px] font-medium text-ink/30 uppercase tracking-wider">Cc</span>
+							<div class="mt-1 space-y-0.5">
+								for _, c := range email.CC {
+									<div class="flex items-center gap-2">
+										<span class="text-sm text-ink truncate">{ contactDisplay(c) }</span>
+										<span class="text-xs text-ink/35 truncate">&lt;{ c.Email }&gt;</span>
+									</div>
+								}
+							</div>
+						</div>
+					}
+					if email.DateFull != "" {
+						<div class="pt-2 border-t border-ink/6">
+							<div class="flex items-center gap-2 text-xs text-ink/45">
+								@icon.Clock(icon.Props{Class: "size-3.5 shrink-0"})
+								<span>{ email.DateFull }</span>
+							</div>
+						</div>
+					}
+				</div>
+			}
+		}
 	</div>
 	<h1 class="text-xl font-bold mt-5 tracking-tight text-ink" style="font-family: var(--font-serif)">{ email.Subject }</h1>
+	@MailViewAttachments(email)
+}
+
+templ MailViewAttachments(email *models.Email) {
 	if len(email.Attachments) > 0 {
 		<div class="mt-5 space-y-2">
 			for _, att := range email.Attachments {
@@ -277,15 +463,20 @@ templ MailViewSender(email *models.Email) {
 }
 
 templ MailViewBody(email *models.Email) {
-	<iframe id="email-body-frame"
+	@MailViewBodyByID(email.ID)
+}
+
+templ MailViewBodyByID(emailID string) {
+	<iframe id={ "email-body-frame-" + emailID }
 		sandbox="allow-scripts"
 		class="w-full border-0 min-h-[100px]"
-		data-email-id={ email.ID }>
+		data-email-body-frame
+		data-email-id={ emailID }>
 	</iframe>
 }
 
 templ MailViewReplyBar(email *models.Email) {
-	<div class="px-6 py-3 border-t border-ink/6" id="reply-bar" data-message-id={ email.InternetMessageID } data-subject={ email.Subject } data-from-email={ email.From.Email } data-from-name={ email.From.Name } data-account-id={ email.AccountID }>
+	<div class="px-6 py-3 border-t border-ink/6" id="reply-bar" data-message-id={ email.InternetMessageID } data-references={ email.References } data-subject={ email.Subject } data-from-email={ email.From.Email } data-from-name={ email.From.Name } data-account-id={ email.AccountID }>
 		<div class="flex items-center gap-2">
 			@button.Button(button.Props{
 				Variant:    button.VariantOutline,

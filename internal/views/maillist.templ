@@ -272,7 +272,7 @@ templ MailListItem(email models.Email, position int, selectedEmail *models.Email
 
 templ MailListEmpty() {
 	<div class="flex flex-col items-center justify-center py-20 px-4 text-center">
-		<div class="size-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4 raised">
+		<div class="empty-icon-box size-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4 raised">
 			@icon.Inbox(icon.Props{Class: "size-7 text-muted-foreground/40"})
 		</div>
 		<h3 class="font-semibold text-sm mb-1">No emails</h3>

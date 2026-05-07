@@ -171,6 +171,22 @@
   background: color-mix(in srgb, var(--color-border) 40%, transparent);
 }
 
+.compose-sep {
+  height: 1px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.compose-input {
+  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  box-shadow: none;
+}
+
+.compose-input:focus-visible {
+  border-color: color-mix(in srgb, var(--ink) 20%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
 /* === MAIL LIST ITEM (VIRTUAL SCROLL) === */
 
 .mail-list-item {
