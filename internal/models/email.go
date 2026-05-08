@@ -31,6 +31,7 @@ type Email struct {
 	Subject           string
 	Preview           string
 	Body              template.HTML
+	TextBody          string
 	Date              string
 	DateFull          string
 	IsRead            bool
@@ -79,6 +80,8 @@ type EmailPage struct {
 type ThreadItem struct {
 	ID            string
 	From          Contact
+	To            []Contact
+	CC            []Contact
 	Subject       string
 	Preview       string
 	Date          string
@@ -88,6 +91,7 @@ type ThreadItem struct {
 	FolderName    string
 	FolderRole    string
 	Labels        []Label
+	Attachments   []Attachment
 }
 
 type ComposeRequest struct {

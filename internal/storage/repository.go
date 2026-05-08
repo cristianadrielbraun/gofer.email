@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +17,19 @@ import (
 	mailmessage "gofer.email/internal/mail/message"
 	"gofer.email/internal/models"
 )
+
+var reHTMLTag = regexp.MustCompile(`<[^>]*>`)
+var reMultiNewline = regexp.MustCompile(`\n{3,}`)
+
+func stripHTMLTags(s string) string {
+	s = strings.ReplaceAll(s, "<br>", "\n")
+	s = strings.ReplaceAll(s, "<br/>", "\n")
+	s = strings.ReplaceAll(s, "<br />", "\n")
+	s = reHTMLTag.ReplaceAllString(s, "")
+	s = html.UnescapeString(s)
+	s = reMultiNewline.ReplaceAllString(s, "\n\n")
+	return strings.TrimSpace(s)
+}
 
 func initials(name string) string {
 	parts := strings.Fields(name)
@@ -838,6 +853,17 @@ func (db *DB) GetThreadMessages(ctx context.Context, accountID, threadID string)
 				items[i].Labels = labels
 			}
 		}
+		for i, item := range items {
+			id, err := strconv.ParseInt(item.ID, 10, 64)
+			if err != nil {
+				continue
+			}
+			items[i].To, _ = db.getRecipients(ctx, id, "to")
+			items[i].CC, _ = db.getRecipients(ctx, id, "cc")
+			if item.HasAttachment {
+				items[i].Attachments, _ = db.GetAttachments(ctx, id)
+			}
+		}
 	}
 
 	return items, nil
@@ -894,21 +920,26 @@ func (db *DB) GetEmailByID(ctx context.Context, id string) (*models.Email, error
 	email.InReplyTo = inReplyTo
 	email.References = references
 
-	if bodyHTMLPath.Valid && bodyHTMLPath.String != "" {
-		data, err := os.ReadFile(bodyHTMLPath.String)
-		if err == nil {
-			email.Body = template.HTML(data)
-		} else {
-			email.Body = template.HTML(fmt.Sprintf("<p>%s</p>", snippet))
-		}
-	} else if bodyTextPath.Valid && bodyTextPath.String != "" {
+	if bodyTextPath.Valid && bodyTextPath.String != "" {
 		data, err := os.ReadFile(bodyTextPath.String)
 		if err == nil {
+			email.TextBody = strings.TrimSpace(string(data))
 			email.Body = template.HTML("<pre style=\"white-space:pre-wrap;word-wrap:break-word;font-family:inherit\">" + template.HTML(template.HTMLEscapeString(string(data))) + "</pre>")
 		} else {
+			email.TextBody = snippet
+			email.Body = template.HTML(fmt.Sprintf("<p>%s</p>", snippet))
+		}
+	} else if bodyHTMLPath.Valid && bodyHTMLPath.String != "" {
+		data, err := os.ReadFile(bodyHTMLPath.String)
+		if err == nil {
+			email.TextBody = stripHTMLTags(string(data))
+			email.Body = template.HTML(data)
+		} else {
+			email.TextBody = snippet
 			email.Body = template.HTML(fmt.Sprintf("<p>%s</p>", snippet))
 		}
 	} else {
+		email.TextBody = snippet
 		email.Body = template.HTML(fmt.Sprintf("<p>%s</p>", snippet))
 	}
 	if dateReceived.Valid {

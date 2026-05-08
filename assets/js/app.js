@@ -398,6 +398,10 @@ function handleReply(mode) {
   var fromEmail = bar.dataset.fromEmail || ""
   var fromName = bar.dataset.fromName || ""
   var accountId = bar.dataset.accountId || ""
+  var date = bar.dataset.date || ""
+  var to = bar.dataset.to || ""
+  var cc = bar.dataset.cc || ""
+  var body = bar.dataset.body || ""
 
   var inPane = !!document.querySelector("[data-compose-pane]")
   var formId = inPane ? "compose-pane-form" : "compose-form"
@@ -405,6 +409,7 @@ function handleReply(mode) {
   if (!form) return
 
   var toField = form.querySelector('input[name="to"]')
+  var ccField = form.querySelector('input[name="cc"]')
   var subjectField = form.querySelector('input[name="subject"]')
   var prefix = inPane ? "compose-pane-" : "compose-"
   var accountIdField = document.getElementById(prefix + "account-id")
@@ -416,8 +421,10 @@ function handleReply(mode) {
     accountIdField.value = accountId
   }
 
+  var fromLine = fromName ? fromName + " <" + fromEmail + ">" : fromEmail
+
   if (mode === "reply" || mode === "reply-all") {
-    if (toField) toField.value = fromName ? fromName + " <" + fromEmail + ">" : fromEmail
+    if (toField) toField.value = fromLine
     if (subjectField) {
       subjectField.value = subject.match(/^Re:/i) ? subject : "Re: " + subject
     }
@@ -429,16 +436,29 @@ function handleReply(mode) {
       referencesField.value = references ? references + " " + parentMessageId : parentMessageId
     }
     if (bodyField) {
-      bodyField.value = ""
+      var quotedBody = body.split("\n").map(function(line) { return "> " + line }).join("\n")
+      var header = date ? "On " + date + ", " + fromLine + " wrote:" : fromLine + " wrote:"
+      bodyField.value = "\n\n" + header + "\n" + quotedBody
       bodyField.focus()
+      bodyField.setSelectionRange(0, 0)
     }
   } else if (mode === "forward") {
     if (toField) toField.value = ""
+    if (ccField) ccField.value = ""
     if (subjectField) {
       subjectField.value = subject.match(/^Fwd:/i) ? subject : "Fwd: " + subject
     }
     if (inReplyToField) inReplyToField.value = ""
     if (referencesField) referencesField.value = ""
+    if (bodyField) {
+      var fwdHeader = "\n\n---------- Forwarded message ----------"
+      if (fromLine) fwdHeader += "\nFrom: " + fromLine
+      if (date) fwdHeader += "\nDate: " + date
+      if (subject) fwdHeader += "\nSubject: " + subject
+      if (to) fwdHeader += "\nTo: " + to
+      if (cc) fwdHeader += "\nCc: " + cc
+      bodyField.value = fwdHeader + "\n\n" + body
+    }
   }
 
   if (inPane) return
@@ -962,3 +982,118 @@ function collapseComposeFullWidth() {
 
   return true
 }
+
+(function () {
+  var DURATION = '0.2s'
+  var EASING = 'cubic-bezier(0.4,0,0.2,1)'
+  var FADE = '0.15s'
+
+  function clearStyles(ct) {
+    ct.style.height = ''
+    ct.style.overflow = ''
+    ct.style.transition = ''
+    ct.style.opacity = ''
+    ct.style.willChange = ''
+  }
+
+  function fadeIframes(ct, show) {
+    var iframes = ct.querySelectorAll('iframe')
+    for (var j = 0; j < iframes.length; j++) {
+      if (show) {
+        iframes[j].style.visibility = ''
+        iframes[j].style.opacity = '0'
+        iframes[j].style.transition = 'opacity ' + FADE + ' ease-out'
+        void iframes[j].offsetHeight
+        iframes[j].style.opacity = '1'
+      } else {
+        iframes[j].style.opacity = '1'
+        iframes[j].style.transition = 'opacity ' + FADE + ' ease-out'
+        void iframes[j].offsetHeight
+        iframes[j].style.opacity = '0'
+      }
+      ;(function (iframe) {
+        function done() {
+          iframe.removeEventListener('transitionend', done)
+          iframe.style.transition = ''
+          iframe.style.opacity = ''
+          if (!show) iframe.style.visibility = 'hidden'
+        }
+        iframe.addEventListener('transitionend', done)
+      })(iframes[j])
+    }
+  }
+
+  function initThreadDetails(root) {
+    var details = root.querySelectorAll('details[data-thread-details]')
+    for (var i = 0; i < details.length; i++) {
+      if (details[i]._threadInit) continue
+      details[i]._threadInit = true
+
+      var summary = details[i].querySelector('summary')
+      if (!summary) continue
+
+      summary.addEventListener('click', function (e) {
+        e.preventDefault()
+        var el = this.parentElement
+        var ct = el.querySelector('.thread-details-content')
+        if (!ct || el._threadAnimating) return
+
+        el._threadAnimating = true
+        ct.style.willChange = 'height, opacity'
+
+        if (el.open) {
+          var h = ct.scrollHeight
+          ct.style.height = h + 'px'
+          ct.style.overflow = 'hidden'
+          ct.style.transition = 'none'
+          void ct.offsetHeight
+
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              fadeIframes(ct, false)
+              ct.style.transition = 'height ' + DURATION + ' ' + EASING + ', opacity ' + DURATION + ' ease-out'
+              ct.style.height = '0px'
+              ct.style.opacity = '0'
+
+              function onEnd(ev) {
+                if (ev.propertyName !== 'height') return
+                ct.removeEventListener('transitionend', onEnd)
+                el.open = false
+                clearStyles(ct)
+                el._threadAnimating = false
+              }
+              ct.addEventListener('transitionend', onEnd)
+            })
+          })
+        } else {
+          el.open = true
+          ct.style.height = '0px'
+          ct.style.overflow = 'hidden'
+          ct.style.opacity = '0'
+          ct.style.transition = 'none'
+          void ct.offsetHeight
+
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              ct.style.transition = 'height ' + DURATION + ' ' + EASING + ', opacity ' + DURATION + ' ease-out'
+              ct.style.height = ct.scrollHeight + 'px'
+              ct.style.opacity = '1'
+
+              function onEnd(ev) {
+                if (ev.propertyName !== 'height') return
+                ct.removeEventListener('transitionend', onEnd)
+                clearStyles(ct)
+                fadeIframes(ct, true)
+                el._threadAnimating = false
+              }
+              ct.addEventListener('transitionend', onEnd)
+            })
+          })
+        }
+      })
+    }
+  }
+
+  initThreadDetails(document.body)
+  new MutationObserver(function () { initThreadDetails(document.body) }).observe(document.body, { childList: true, subtree: true })
+})()
