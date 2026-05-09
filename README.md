@@ -1,4 +1,4 @@
-# gofer.email
+# <img width="73" height="69" alt="logo" src="https://github.com/user-attachments/assets/15a97007-687b-445e-af5b-49b1b9b840f8" /> gofer.email
 
 <img width="2417" height="1499" alt="gofer-email-screenshot" src="https://github.com/user-attachments/assets/709e6ce1-1bf8-4cae-b679-5bd8891385b5" />
 
