@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 -- Accounts
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     provider TEXT NOT NULL DEFAULT 'imap',
     email_address TEXT NOT NULL,
     display_name TEXT NOT NULL DEFAULT '',
@@ -28,6 +29,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
 
 -- Folders
 CREATE TABLE IF NOT EXISTS folders (
@@ -276,12 +279,74 @@ ON message_labels(label_id);
 CREATE INDEX IF NOT EXISTS idx_message_search_docs_account
 ON message_search_docs(account_id);
 
--- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (10);
-
 -- Application settings
 CREATE TABLE IF NOT EXISTS app_settings (
-    key TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
     value TEXT NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS remote_content_senders (
+    sender_email TEXT PRIMARY KEY,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS remote_content_messages (
+    message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE
+);
+
+-- Users (application-level authentication)
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL DEFAULT '',
+    avatar_url TEXT NOT NULL DEFAULT '',
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- OAuth provider accounts (Google, future: GitHub, etc.)
+CREATE TABLE IF NOT EXISTS oauth_accounts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    provider_account_id TEXT NOT NULL,
+    access_token TEXT NOT NULL DEFAULT '',
+    refresh_token TEXT NOT NULL DEFAULT '',
+    token_type TEXT NOT NULL DEFAULT 'Bearer',
+    expires_at DATETIME,
+    scopes TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_provider_account
+    ON oauth_accounts(provider, provider_account_id);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user
+    ON oauth_accounts(user_id);
+
+-- Sessions
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    user_agent TEXT NOT NULL DEFAULT '',
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user
+    ON sessions(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_token
+    ON sessions(token);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_expires
+    ON sessions(expires_at);
+
+-- Schema version marker for fresh installs
+INSERT OR REPLACE INTO schema_version (version) VALUES (12);

@@ -8,33 +8,40 @@ import (
 
 	"gofer.email/internal/config"
 	"gofer.email/internal/mail/imap"
+	"gofer.email/internal/models"
 	"gofer.email/internal/storage"
 	"gofer.email/internal/store"
 )
 
-type SyncOrchestrator struct {
-	db           *storage.DB
-	accountStore *config.AccountStore
-	blobStore    *store.BlobStore
-	events       *EventBus
-	mu           sync.Mutex
-	running      map[string]bool
-	idleWatchers map[string][]*imap.IdleWatcher
-	cancelFuncs  map[string]context.CancelFunc
-	interval     int
-	intervalMu   sync.RWMutex
+type TokenProvider interface {
+	GetOAuthTokenForAccount(ctx context.Context, accountID string) (string, error)
 }
 
-func NewSyncOrchestrator(db *storage.DB, accountStore *config.AccountStore, blobStore *store.BlobStore) *SyncOrchestrator {
+type SyncOrchestrator struct {
+	db            *storage.DB
+	accountStore  *config.AccountStore
+	blobStore     *store.BlobStore
+	tokenProvider TokenProvider
+	events        *EventBus
+	mu            sync.Mutex
+	running       map[string]bool
+	idleWatchers  map[string][]*imap.IdleWatcher
+	cancelFuncs   map[string]context.CancelFunc
+	interval      int
+	intervalMu    sync.RWMutex
+}
+
+func NewSyncOrchestrator(db *storage.DB, accountStore *config.AccountStore, blobStore *store.BlobStore, tokenProvider TokenProvider) *SyncOrchestrator {
 	return &SyncOrchestrator{
-		db:           db,
-		accountStore: accountStore,
-		blobStore:    blobStore,
-		events:       NewEventBus(),
-		running:      make(map[string]bool),
-		idleWatchers: make(map[string][]*imap.IdleWatcher),
-		cancelFuncs:  make(map[string]context.CancelFunc),
-		interval:     5,
+		db:            db,
+		accountStore:  accountStore,
+		blobStore:     blobStore,
+		tokenProvider: tokenProvider,
+		events:        NewEventBus(),
+		running:       make(map[string]bool),
+		idleWatchers:  make(map[string][]*imap.IdleWatcher),
+		cancelFuncs:   make(map[string]context.CancelFunc),
+		interval:      5,
 	}
 }
 
@@ -52,6 +59,22 @@ func (o *SyncOrchestrator) UpdateInterval(minutes int) {
 	o.intervalMu.Unlock()
 }
 
+func (o *SyncOrchestrator) StopAccount(accountID string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if cancel, ok := o.cancelFuncs[accountID]; ok {
+		cancel()
+		delete(o.cancelFuncs, accountID)
+	}
+
+	for _, w := range o.idleWatchers[accountID] {
+		w.Close()
+	}
+	delete(o.idleWatchers, accountID)
+	delete(o.running, accountID)
+}
+
 func (o *SyncOrchestrator) RestartIDLEWatchers(ctx context.Context) {
 	o.mu.Lock()
 	for accountID, watchers := range o.idleWatchers {
@@ -62,7 +85,7 @@ func (o *SyncOrchestrator) RestartIDLEWatchers(ctx context.Context) {
 	}
 	o.mu.Unlock()
 
-	accounts, err := o.db.GetAccountIDs(ctx)
+	accounts, err := o.db.GetAllAccountIDs(ctx)
 	if err != nil {
 		return
 	}
@@ -78,13 +101,13 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 		return
 	}
 
-	password, err := o.accountStore.DecryptPassword(ctx, accountID)
+	password, err := o.resolvePassword(ctx, cfg, accountID)
 	if err != nil {
 		log.Printf("idle %s: password: %v", accountID, err)
 		return
 	}
 
-	idleRoles := o.db.GetIdleFoldersForAccount(ctx, accountID)
+	idleRoles := o.getIdleFoldersForAccount(ctx, accountID)
 	var watchers []*imap.IdleWatcher
 
 	for role := range idleRoles {
@@ -112,15 +135,35 @@ func (o *SyncOrchestrator) getInterval() int {
 	return o.interval
 }
 
+func (o *SyncOrchestrator) resolvePassword(ctx context.Context, cfg *models.AccountConfig, accountID string) (string, error) {
+	if cfg.AuthMethod == "oauth2" && o.tokenProvider != nil {
+		return o.tokenProvider.GetOAuthTokenForAccount(ctx, accountID)
+	}
+	return o.accountStore.DecryptPassword(ctx, accountID)
+}
+
+func (o *SyncOrchestrator) getIdleFoldersForAccount(ctx context.Context, accountID string) map[string]bool {
+	userID, err := o.db.GetAccountUserID(ctx, accountID)
+	if err != nil || userID == "" {
+		return map[string]bool{"inbox": true, "sent": true, "drafts": true}
+	}
+	return o.db.GetIdleFoldersForAccount(ctx, userID, accountID)
+}
+
 func (o *SyncOrchestrator) Start(ctx context.Context) {
-	accounts, err := o.db.GetAccountIDs(ctx)
+	accounts, err := o.db.GetAllAccountIDs(ctx)
 	if err != nil {
 		log.Printf("sync start: get accounts: %v", err)
 		return
 	}
 
-	if interval := o.db.GetSyncInterval(ctx); interval > 0 {
-		o.interval = interval
+	if len(accounts) > 0 {
+		userID, _ := o.db.GetAccountUserID(ctx, accounts[0])
+		if userID != "" {
+			if interval := o.db.GetSyncInterval(ctx, userID); interval > 0 {
+				o.interval = interval
+			}
+		}
 	}
 
 	for _, accountID := range accounts {
@@ -172,7 +215,7 @@ func (o *SyncOrchestrator) periodicSync(ctx context.Context, accountID string) {
 		return
 	}
 
-	password, err := o.accountStore.DecryptPassword(ctx, accountID)
+	password, err := o.resolvePassword(ctx, cfg, accountID)
 	if err != nil {
 		log.Printf("periodic %s: password: %v", accountID, err)
 		return
@@ -365,7 +408,7 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string) er
 		return err
 	}
 
-	password, err := o.accountStore.DecryptPassword(ctx, accountID)
+	password, err := o.resolvePassword(ctx, cfg, accountID)
 	if err != nil {
 		return err
 	}
@@ -460,7 +503,7 @@ func (o *SyncOrchestrator) syncIncremental(ctx context.Context, accountID, folde
 		return
 	}
 
-	password, err := o.accountStore.DecryptPassword(ctx, accountID)
+	password, err := o.resolvePassword(ctx, cfg, accountID)
 	if err != nil {
 		log.Printf("incremental %s/%s: password: %v", accountID, remoteName, err)
 		return

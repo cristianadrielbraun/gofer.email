@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gofer.email/internal/auth"
 	"gofer.email/internal/config"
 	mail "gofer.email/internal/mail"
 	"gofer.email/internal/mail/imap"
@@ -15,8 +16,11 @@ import (
 	"gofer.email/internal/store"
 	"gofer.email/internal/views"
 	"html/template"
+	"io"
+	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -29,14 +33,42 @@ type Handler struct {
 	accountStore *config.AccountStore
 	syncer       *mail.SyncOrchestrator
 	blobStore    *store.BlobStore
+	auth         *auth.Manager
 }
 
-func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrchestrator, blobStore *store.BlobStore) *Handler {
-	return &Handler{db: db, accountStore: accountStore, syncer: syncer, blobStore: blobStore}
+func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrchestrator, blobStore *store.BlobStore, authManager *auth.Manager) *Handler {
+	return &Handler{db: db, accountStore: accountStore, syncer: syncer, blobStore: blobStore, auth: authManager}
+}
+
+func (h *Handler) userID(ctx context.Context) string {
+	u := auth.GetCurrentUser(ctx)
+	if u != nil {
+		return u.ID
+	}
+	return "default"
+}
+
+func (h *Handler) resolvePassword(ctx context.Context, cfg *models.AccountConfig, accountID string) (string, error) {
+	if cfg.AuthMethod == "oauth2" && h.auth != nil {
+		token, err := h.auth.GetOAuthTokenForAccount(ctx, accountID)
+		if err != nil {
+			return "", err
+		}
+		return token, nil
+	}
+	return h.accountStore.DecryptPassword(ctx, accountID)
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	setupAssetsRoutes(mux)
+
+	mux.HandleFunc("GET /login", h.handleLogin)
+	mux.HandleFunc("GET /auth/google", h.handleGoogleRedirect)
+	mux.HandleFunc("GET /auth/google/callback", h.handleGoogleCallback)
+	mux.HandleFunc("GET /auth/google/account/callback", h.handleGoogleAccountCallback)
+	mux.HandleFunc("POST /auth/logout", h.handleLogout)
+	mux.HandleFunc("POST /api/accounts/oauth2/authorize", h.handleAccountOAuthAuthorize)
+
 	mux.HandleFunc("GET /", h.handleIndex)
 	mux.HandleFunc("GET /email/{id}", h.handleEmailPartial)
 	mux.HandleFunc("GET /email/{id}/body", h.handleEmailBody)
@@ -44,6 +76,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /folder/{id}/full", h.handleFolderFull)
 	mux.HandleFunc("GET /folder/{id}/{email}", h.handleFolderWithEmail)
 	mux.HandleFunc("GET /mail/folder/{id}/items", h.handleMailItems)
+	mux.HandleFunc("GET /mail/thread/{threadId}/subitems", h.handleThreadSubItems)
 	mux.HandleFunc("GET /search", h.handleSearch)
 	mux.HandleFunc("POST /api/accounts", h.handleCreateAccount)
 	mux.HandleFunc("GET /api/accounts/{id}/edit", h.handleGetEditAccount)
@@ -56,6 +89,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/settings/ui", h.handleGetUISettings)
 	mux.HandleFunc("PATCH /api/settings/ui", h.handleSaveUISettings)
 	mux.HandleFunc("GET /api/attachments/{id}/download", h.handleAttachmentDownload)
+	mux.HandleFunc("GET /api/inline-content/{messageID}/{contentID}", h.handleInlineContent)
 	mux.HandleFunc("GET /api/events", h.handleSSE)
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 	mux.HandleFunc("GET /compose/pane", h.handleComposePane)
@@ -68,6 +102,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/messages/{id}", h.handleDeleteMessage)
 	mux.HandleFunc("POST /api/messages/{id}/move", h.handleMoveMessage)
 	mux.HandleFunc("POST /api/messages/{id}/refetch", h.handleRefetchBody)
+	mux.HandleFunc("POST /api/remote-content/{id}/allow", h.handleAllowRemoteContent)
+	mux.HandleFunc("GET /api/remote-assets/{messageID}/{filename}", h.handleRemoteAsset)
 }
 
 func setupAssetsRoutes(mux *http.ServeMux) {
@@ -99,7 +135,7 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	emailID := r.URL.Query().Get("email")
 	ctx := r.Context()
 
-	accounts, _ := h.db.GetAccounts(ctx)
+	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
 	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
 
 	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
@@ -116,7 +152,12 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
 	}
 
-	views.Layout(accounts, folderID, emails, selectedEmail, totalCount, h.db.GetUISettings(ctx)).Render(ctx, w)
+	var selectedThread []models.ThreadItem
+	if selectedEmail != nil && selectedEmail.ThreadID != "" {
+		selectedThread, _ = h.db.GetThreadMessages(ctx, selectedEmail.AccountID, selectedEmail.ThreadID)
+	}
+
+	views.Layout(accounts, folderID, emails, selectedEmail, totalCount, h.db.GetUISettings(ctx, h.userID(ctx)), selectedThread).Render(ctx, w)
 }
 
 func (h *Handler) handleFolderWithEmail(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +168,7 @@ func (h *Handler) handleFolderWithEmail(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ctx := r.Context()
-	accounts, _ := h.db.GetAccounts(ctx)
+	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
 	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
 
 	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
@@ -144,7 +185,12 @@ func (h *Handler) handleFolderWithEmail(w http.ResponseWriter, r *http.Request) 
 		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
 	}
 
-	views.Layout(accounts, folderID, emails, selectedEmail, totalCount, h.db.GetUISettings(ctx)).Render(ctx, w)
+	var selectedThread []models.ThreadItem
+	if selectedEmail != nil && selectedEmail.ThreadID != "" {
+		selectedThread, _ = h.db.GetThreadMessages(ctx, selectedEmail.AccountID, selectedEmail.ThreadID)
+	}
+
+	views.Layout(accounts, folderID, emails, selectedEmail, totalCount, h.db.GetUISettings(ctx, h.userID(ctx)), selectedThread).Render(ctx, w)
 }
 
 func (h *Handler) handleEmailPartial(w http.ResponseWriter, r *http.Request) {
@@ -173,12 +219,19 @@ func (h *Handler) handleEmailPartial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	thread, _ := h.db.GetThreadMessages(ctx, email.AccountID, email.ThreadID)
+	var thread []models.ThreadItem
+	if r.URL.Query().Get("single") != "1" {
+		thread, _ = h.db.GetThreadMessages(ctx, email.AccountID, email.ThreadID)
+	}
 	views.MailViewContent(email, thread).Render(ctx, w)
 }
 
 func emailResizeScript(emailID string) []byte {
-	return []byte(fmt.Sprintf(`<script>(function(){var id=%q;function r(){parent.postMessage({type:'emailBodyResize',emailId:id,height:document.documentElement.scrollHeight},'*')}r();document.querySelectorAll('img').forEach(function(i){i.onload=r});if(typeof MutationObserver!=='undefined'){new MutationObserver(r).observe(document.body,{childList:true,subtree:true})}})();</script>`, emailID))
+	return []byte(fmt.Sprintf(`<script>(function(){var id=%q;function r(){var h=document.body.scrollHeight;parent.postMessage({type:'emailBodyResize',emailId:id,height:h},'*')}requestAnimationFrame(function(){requestAnimationFrame(r)});document.querySelectorAll('img').forEach(function(i){i.onload=r});if(typeof MutationObserver!=='undefined'){new MutationObserver(function(){setTimeout(r,0)}).observe(document.body,{childList:true,subtree:true})}setTimeout(r,300)})();</script>`, emailID))
+}
+
+func remoteImagesDetectScript(emailID string) []byte {
+	return []byte(fmt.Sprintf(`<script>(function(){var id=%q;if(document.querySelector('[data-remote-src]')){parent.postMessage({type:'remoteContentBlocked',emailId:id},'*')}})();</script>`, emailID))
 }
 
 func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
@@ -210,9 +263,30 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	bg := r.URL.Query().Get("bg")
 	fg := r.URL.Query().Get("fg")
 	link := r.URL.Query().Get("link")
+	loadRemote := r.URL.Query().Get("remote") == "true"
+
+	if !loadRemote && msgID > 0 {
+		if h.db.IsRemoteContentAllowedForMessage(ctx, msgID) {
+			loadRemote = true
+		} else {
+			senderEmail, _ := h.db.GetMessageSenderEmail(ctx, msgID)
+			if senderEmail != "" && h.db.IsRemoteContentAllowedForSender(ctx, senderEmail) {
+				loadRemote = true
+			}
+		}
+	}
+
+	if loadRemote {
+		body = message.RestoreRemoteImages(body)
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link))
+	w.Header().Set("Cache-Control", "no-store")
+	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link)
+	if !loadRemote {
+		doc = append(doc, remoteImagesDetectScript(emailID)...)
+	}
+	w.Write(doc)
 }
 
 func safeEmailCSSColor(value, fallback string) string {
@@ -337,8 +411,8 @@ func buildBodyDocument(body []byte, resizeScript []byte, theme string, bgColor s
 	linkColor = safeEmailCSSColor(linkColor, fallbackLink)
 	baseStyles := "<style>" +
 		":root{color-scheme:" + scheme + ";background:" + bgColor + ";color:" + fgColor + "}" +
-		"html{min-height:100%;background:" + bgColor + " !important;color:" + fgColor + "}" +
-		"body{background:" + bgColor + " !important;color:" + fgColor + "}" +
+		"html{overflow:hidden;background:" + bgColor + " !important;color:" + fgColor + "}" +
+		"body{overflow:hidden;background:" + bgColor + " !important;color:" + fgColor + "}" +
 		"body[bgcolor]{background-color:" + bgColor + " !important}" +
 		"a{color:" + linkColor + "}" +
 		"</style>"
@@ -381,8 +455,8 @@ func buildBodyDocument(body []byte, resizeScript []byte, theme string, bgColor s
 		injection = string(buildLightModeScript(bgColor)) + injection
 	}
 	doc := "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>" +
-		"html{margin:0;min-height:100%;color-scheme:" + scheme + ";background:" + bgColor + ";color:" + fgColor + "}" +
-		"body{margin:0;padding:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5;background:" + bgColor + ";color:" + fgColor + ";word-wrap:break-word}" +
+		"html{margin:0;overflow:hidden;color-scheme:" + scheme + ";background:" + bgColor + ";color:" + fgColor + "}" +
+		"body{margin:0;padding:8px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5;background:" + bgColor + ";color:" + fgColor + ";word-wrap:break-word}" +
 		"img{max-width:100%;height:auto}" +
 		"a{color:" + linkColor + "}" +
 		"</style></head><body>" +
@@ -392,36 +466,27 @@ func buildBodyDocument(body []byte, resizeScript []byte, theme string, bgColor s
 	return []byte(doc)
 }
 
-func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) {
-	info, err := h.db.GetMessageFetchInfo(ctx, msgID)
-	if err != nil || info == nil {
-		return
+func (h *Handler) storeParsedBody(ctx context.Context, parsed *message.ParsedMessage, msgID int64, accountID string) {
+	if len(parsed.Attachments) > 0 {
+		var attRows []storage.AttachmentRow
+		for _, a := range parsed.Attachments {
+			attRows = append(attRows, storage.AttachmentRow{
+				Filename:    a.Filename,
+				ContentType: a.ContentType,
+				SizeBytes:   a.Size,
+				ContentID:   a.ContentID,
+				Inline:      a.Inline,
+				StoragePath: a.BlobPath,
+			})
+		}
+		h.db.InsertAttachments(ctx, msgID, attRows)
 	}
 
-	cfg, err := h.accountStore.GetConfig(ctx, accountID)
-	if err != nil {
-		return
-	}
-
-	password, err := h.accountStore.DecryptPassword(ctx, accountID)
-	if err != nil {
-		return
-	}
-
-	client, err := imap.NewClient(ctx, cfg, password)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
-	bodyData, err := client.FetchBody(ctx, info.FolderRemoteID, info.RemoteUID)
-	if err != nil {
-		return
-	}
-
-	parsed, err := message.ParseMessage(ctx, bytes.NewReader(bodyData), h.blobStore, accountID, msgID)
-	if err != nil {
-		return
+	cidToURL := make(map[string]string)
+	for _, a := range parsed.Attachments {
+		if a.Inline && a.ContentID != "" {
+			cidToURL[a.ContentID] = "/api/inline-content/" + strconv.FormatInt(msgID, 10) + "/" + a.ContentID
+		}
 	}
 
 	var textPath, htmlPath string
@@ -434,6 +499,7 @@ func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) 
 
 	if len(parsed.HTMLBody) > 0 {
 		sanitized := message.SanitizeHTML(parsed.HTMLBody)
+		sanitized = message.RewriteCIDReferences(sanitized, cidToURL)
 		p, err := h.blobStore.StoreBodyHTML(ctx, accountID, msgID, sanitized)
 		if err == nil {
 			htmlPath = p
@@ -449,9 +515,6 @@ func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) 
 		return
 	}
 
-	h.db.UpdateMessageHeaders(ctx, msgID, parsed.Subject, parsed.FromName, parsed.FromEmail, snippet)
-	h.db.UpdateMessageThreadHeaders(ctx, msgID, accountID, parsed.InReplyTo, parsed.References, parsed.Subject)
-
 	var toRecs, ccRecs []storage.Recipient
 	for _, r := range parsed.To {
 		toRecs = append(toRecs, storage.Recipient{Name: r.Name, Email: r.Email})
@@ -461,20 +524,58 @@ func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) 
 	}
 	h.db.UpsertRecipients(ctx, msgID, toRecs, ccRecs)
 
-	if len(parsed.Attachments) > 0 {
-		var attRows []storage.AttachmentRow
-		for _, a := range parsed.Attachments {
-			attRows = append(attRows, storage.AttachmentRow{
-				Filename:    a.Filename,
-				ContentType: a.ContentType,
-				SizeBytes:   a.Size,
-				ContentID:   a.ContentID,
-				Inline:      a.Inline,
-				StoragePath: a.BlobPath,
-			})
+	h.db.UpdateMessageHeaders(ctx, msgID, parsed.Subject, parsed.FromName, parsed.FromEmail, snippet)
+	h.db.UpdateMessageThreadHeaders(ctx, msgID, accountID, parsed.InReplyTo, parsed.References, parsed.Subject)
+}
+
+func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) {
+	var bodyData []byte
+
+	var rawPath string
+	h.db.Read().QueryRowContext(ctx,
+		`SELECT raw_path FROM messages WHERE id = ?`, msgID,
+	).Scan(&rawPath)
+
+	if rawPath != "" {
+		if data, err := os.ReadFile(rawPath); err == nil && len(data) > 0 {
+			bodyData = data
 		}
-		h.db.InsertAttachments(ctx, msgID, attRows)
 	}
+
+	if bodyData == nil {
+		info, err := h.db.GetMessageFetchInfo(ctx, msgID)
+		if err != nil || info == nil {
+			return
+		}
+
+		cfg, err := h.accountStore.GetConfig(ctx, accountID)
+		if err != nil {
+			return
+		}
+
+		password, err := h.resolvePassword(ctx, cfg, accountID)
+		if err != nil {
+			return
+		}
+
+		client, err := imap.NewClient(ctx, cfg, password)
+		if err != nil {
+			return
+		}
+		defer client.Close()
+
+		bodyData, err = client.FetchBody(ctx, info.FolderRemoteID, info.RemoteUID)
+		if err != nil {
+			return
+		}
+	}
+
+	parsed, err := message.ParseMessage(ctx, bytes.NewReader(bodyData), h.blobStore, accountID, msgID)
+	if err != nil {
+		return
+	}
+
+	h.storeParsedBody(ctx, parsed, msgID, accountID)
 }
 
 func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
@@ -497,14 +598,19 @@ func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
 		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
 	}
 
+	var selectedThread []models.ThreadItem
+	if selectedEmail != nil && selectedEmail.ThreadID != "" {
+		selectedThread, _ = h.db.GetThreadMessages(ctx, selectedEmail.AccountID, selectedEmail.ThreadID)
+	}
+
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		views.FolderPartial(emails, folderID, selectedEmail, totalCount).Render(ctx, w)
+		views.FolderPartial(emails, folderID, selectedEmail, totalCount, selectedThread).Render(ctx, w)
 		return
 	}
 
-	accounts, _ := h.db.GetAccounts(ctx)
-	views.Layout(accounts, folderID, emails, selectedEmail, totalCount, h.db.GetUISettings(ctx)).Render(ctx, w)
+	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
+	views.Layout(accounts, folderID, emails, selectedEmail, totalCount, h.db.GetUISettings(ctx, h.userID(ctx)), selectedThread).Render(ctx, w)
 }
 
 func (h *Handler) handleFolderFull(w http.ResponseWriter, r *http.Request) {
@@ -527,8 +633,13 @@ func (h *Handler) handleFolderFull(w http.ResponseWriter, r *http.Request) {
 		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
 	}
 
+	var selectedThread []models.ThreadItem
+	if selectedEmail != nil && selectedEmail.ThreadID != "" {
+		selectedThread, _ = h.db.GetThreadMessages(ctx, selectedEmail.AccountID, selectedEmail.ThreadID)
+	}
+
 	w.Header().Set("Content-Type", "text/html")
-	views.MailContentPartial(emails, folderID, selectedEmail, totalCount).Render(ctx, w)
+	views.MailContentPartial(emails, folderID, selectedEmail, totalCount, selectedThread).Render(ctx, w)
 }
 
 func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
@@ -574,6 +685,33 @@ func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
 	).Render(ctx, w)
 }
 
+func (h *Handler) handleThreadSubItems(w http.ResponseWriter, r *http.Request) {
+	threadID := r.PathValue("threadId")
+	if threadID == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := r.Context()
+
+	var accountID string
+	row := h.db.Read().QueryRowContext(ctx,
+		`SELECT m.account_id FROM messages m WHERE m.thread_id = ? LIMIT 1`, threadID)
+	if err := row.Scan(&accountID); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	items, err := h.db.GetThreadMessages(ctx, accountID, threadID)
+	if err != nil || len(items) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	views.MailListThreadSubItems(items).Render(ctx, w)
+}
+
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
@@ -582,7 +720,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	emails, err := h.db.SearchMessages(r.Context(), q, 50)
+	emails, err := h.db.SearchMessages(r.Context(), h.userID(r.Context()), q, 50)
 	if err != nil {
 		http.Error(w, "search failed", http.StatusInternalServerError)
 		return
@@ -615,13 +753,18 @@ func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		SmtpPassword: r.FormValue("smtp_password"),
 	}
 
-	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" || req.Password == "" {
-		w.Header().Set("Content-Type", "text/html")
+	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
+		w.Header().Set("Content-Type", "application/html")
 		views.AccountFormError("All required fields must be filled in").Render(r.Context(), w)
 		return
 	}
+	if req.AuthMethod != "oauth2" && req.Password == "" {
+		w.Header().Set("Content-Type", "text/html")
+		views.AccountFormError("Password is required for PLAIN auth").Render(r.Context(), w)
+		return
+	}
 
-	account, err := h.accountStore.CreateAccount(r.Context(), &req)
+	account, err := h.accountStore.CreateAccount(r.Context(), h.userID(r.Context()), &req)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		views.AccountFormError(fmt.Sprintf("Failed to create account: %v", err)).Render(r.Context(), w)
@@ -704,6 +847,12 @@ func (h *Handler) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.syncer.StopAccount(accountID)
+
+	if err := h.blobStore.DeleteAccount(accountID); err != nil {
+		log.Printf("warning: failed to clean up blob storage for account %s: %v", accountID, err)
+	}
+
 	if err := h.accountStore.DeleteAccount(r.Context(), accountID); err != nil {
 		http.Error(w, fmt.Sprintf("delete account: %v", err), http.StatusInternalServerError)
 		return
@@ -726,9 +875,9 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	password, err := h.accountStore.DecryptPassword(r.Context(), accountID)
+	password, err := h.resolvePassword(r.Context(), cfg, accountID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("decrypt password: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("get credentials: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -788,9 +937,9 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	accounts, _ := h.db.GetAccounts(ctx)
+	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
 	syncSettings := h.buildSyncSettings(ctx, accounts)
-	uiSettings := h.db.GetUISettings(ctx)
+	uiSettings := h.db.GetUISettings(ctx, h.userID(ctx))
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
@@ -808,9 +957,9 @@ func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	accounts, _ := h.db.GetAccounts(ctx)
+	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
 	syncSettings := h.buildSyncSettings(ctx, accounts)
-	uiSettings := h.db.GetUISettings(ctx)
+	uiSettings := h.db.GetUISettings(ctx, h.userID(ctx))
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
@@ -822,7 +971,7 @@ func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Account) models.SyncSettings {
-	syncInterval := h.db.GetSyncInterval(ctx)
+	syncInterval := h.db.GetSyncInterval(ctx, h.userID(ctx))
 
 	var accountStatuses []models.AccountSyncStatus
 	for _, account := range accounts {
@@ -831,7 +980,7 @@ func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Accou
 			continue
 		}
 
-		idleRoles := h.db.GetIdleFoldersForAccount(ctx, account.ID)
+		idleRoles := h.db.GetIdleFoldersForAccount(ctx, h.userID(ctx), account.ID)
 
 		var status models.AccountSyncStatus
 		status.AccountID = account.ID
@@ -924,7 +1073,7 @@ func (h *Handler) handleSaveSyncSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.db.SetSetting(ctx, "sync_interval_minutes", strconv.Itoa(n)); err != nil {
+	if err := h.db.SetSetting(ctx, h.userID(ctx), "sync_interval_minutes", strconv.Itoa(n)); err != nil {
 		http.Error(w, "save failed", http.StatusInternalServerError)
 		return
 	}
@@ -944,7 +1093,7 @@ func (h *Handler) handleSaveSyncSettings(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	if err := h.db.SetIdleFoldersAll(ctx, perAccount); err != nil {
+	if err := h.db.SetIdleFoldersAll(ctx, h.userID(ctx), perAccount); err != nil {
 		http.Error(w, "save idle folders failed", http.StatusInternalServerError)
 		return
 	}
@@ -957,7 +1106,7 @@ func (h *Handler) handleSaveSyncSettings(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) handleGetUISettings(w http.ResponseWriter, r *http.Request) {
-	settings := h.db.GetUISettings(r.Context())
+	settings := h.db.GetUISettings(r.Context(), h.userID(r.Context()))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(settings)
 }
@@ -969,12 +1118,12 @@ func (h *Handler) handleSaveUISettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	current := h.db.GetUISettings(r.Context())
+	current := h.db.GetUISettings(r.Context(), h.userID(r.Context()))
 	for k, v := range updates {
 		current[k] = v
 	}
 
-	if err := h.db.SetUISettings(r.Context(), current); err != nil {
+	if err := h.db.SetUISettings(r.Context(), h.userID(r.Context()), current); err != nil {
 		http.Error(w, "save failed", http.StatusInternalServerError)
 		return
 	}
@@ -1021,6 +1170,176 @@ func (h *Handler) handleAttachmentDownload(w http.ResponseWriter, r *http.Reques
 	http.ServeContent(w, r, filename, time.Time{}, f)
 }
 
+func (h *Handler) handleInlineContent(w http.ResponseWriter, r *http.Request) {
+	messageID := r.PathValue("messageID")
+	contentID := r.PathValue("contentID")
+	if messageID == "" || contentID == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	msgID, err := strconv.ParseInt(messageID, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := r.Context()
+	var filename, contentType, storagePath string
+	err = h.db.Read().QueryRowContext(ctx,
+		`SELECT filename, content_type, storage_path FROM attachments WHERE message_id = ? AND content_id = ? LIMIT 1`,
+		msgID, contentID,
+	).Scan(&filename, &contentType, &storagePath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	f, err := os.Open(storagePath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=31536000")
+	http.ServeContent(w, r, filename, time.Time{}, f)
+}
+
+func (h *Handler) handleAllowRemoteContent(w http.ResponseWriter, r *http.Request) {
+	emailID := r.PathValue("id")
+	if emailID == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	msgID, err := strconv.ParseInt(emailID, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	if req.Mode == "once" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
+	senderEmail, err := h.db.GetMessageSenderEmail(ctx, msgID)
+	if err != nil {
+		http.Error(w, "message not found", http.StatusNotFound)
+		return
+	}
+
+	info, _ := h.db.GetMessageFetchInfo(ctx, msgID)
+	if info == nil {
+		http.Error(w, "message info not found", http.StatusNotFound)
+		return
+	}
+	accountID := info.AccountID
+
+	body, err := h.db.GetEmailBody(ctx, emailID)
+	if err != nil || body == nil {
+		http.Error(w, "body not found", http.StatusNotFound)
+		return
+	}
+
+	remoteURLs := message.ExtractRemoteURLs(string(body))
+	urlToLocal := make(map[string]string)
+	for _, remoteURL := range remoteURLs {
+		data, err := downloadRemoteResource(remoteURL)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		localPath, err := h.blobStore.StoreRemoteAsset(accountID, msgID, remoteURL, data)
+		if err != nil {
+			continue
+		}
+		urlToLocal[remoteURL] = "/api/remote-assets/" + emailID + "/" + filepath.Base(localPath)
+	}
+
+	rewritten := message.RewriteToLocalAssets(body, urlToLocal)
+	localBodyPath, err := h.blobStore.StoreRemoteBodyHTML(accountID, msgID, rewritten)
+	if err != nil {
+		http.Error(w, "store failed", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.db.UpdateMessageBodyHTMLPath(ctx, msgID, localBodyPath); err != nil {
+		http.Error(w, "update failed", http.StatusInternalServerError)
+		return
+	}
+
+	if req.Mode == "email" {
+		h.db.AllowRemoteContentForMessage(ctx, msgID)
+	} else if req.Mode == "sender" {
+		h.db.AllowRemoteContentForMessage(ctx, msgID)
+		if senderEmail != "" {
+			h.db.AllowRemoteContentForSender(ctx, senderEmail)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func downloadRemoteResource(url string) ([]byte, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+}
+
+func (h *Handler) handleRemoteAsset(w http.ResponseWriter, r *http.Request) {
+	messageID := r.PathValue("messageID")
+	filename := r.PathValue("filename")
+	if messageID == "" || filename == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	msgID, err := strconv.ParseInt(messageID, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := r.Context()
+	info, _ := h.db.GetMessageFetchInfo(ctx, msgID)
+	if info == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	assetPath := filepath.Join(h.blobStore.RemoteAssetsDir(info.AccountID, msgID), filename)
+	f, err := os.Open(assetPath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	http.ServeContent(w, r, filename, time.Time{}, f)
+}
+
 func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -1033,6 +1352,13 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
+	userID := h.userID(r.Context())
+	userAccounts, _ := h.db.GetAccountIDs(r.Context(), userID)
+	accountSet := make(map[string]bool, len(userAccounts))
+	for _, id := range userAccounts {
+		accountSet[id] = true
+	}
+
 	ch := h.syncer.Events().Subscribe()
 	defer h.syncer.Events().Unsubscribe(ch)
 
@@ -1044,6 +1370,9 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-ch:
+			if event.AccountID != "" && !accountSet[event.AccountID] {
+				continue
+			}
 			m := map[string]string{
 				"type":       string(event.Type),
 				"account_id": event.AccountID,
@@ -1063,7 +1392,7 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleFolderUnreadCounts(w http.ResponseWriter, r *http.Request) {
-	counts, err := h.db.GetAllFolderUnreadCounts(r.Context())
+	counts, err := h.db.GetAllFolderUnreadCounts(r.Context(), h.userID(r.Context()))
 	if err != nil {
 		http.Error(w, "failed to get unread counts", http.StatusInternalServerError)
 		return
@@ -1075,7 +1404,7 @@ func (h *Handler) handleFolderUnreadCounts(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) handleComposePane(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	accounts, _ := h.db.GetAccounts(ctx)
+	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
 	views.ComposePane(accounts).Render(ctx, w)
 }
 
@@ -1090,7 +1419,7 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	accountID := r.FormValue("account_id")
 	if accountID == "" {
-		accountID = h.accountStore.GetFirstAccountID(ctx)
+		accountID = h.accountStore.GetFirstAccountID(ctx, h.userID(ctx))
 	}
 	if accountID == "" {
 		w.Header().Set("Content-Type", "application/json")
@@ -1107,11 +1436,11 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	password, err := h.accountStore.DecryptPassword(ctx, accountID)
+	password, err := h.resolvePassword(ctx, cfg, accountID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "failed to decrypt credentials"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to get credentials"})
 		return
 	}
 
@@ -1310,9 +1639,9 @@ func (h *Handler) connectIMAP(ctx context.Context, accountID string) (*imap.Clie
 	if err != nil {
 		return nil, fmt.Errorf("get config: %w", err)
 	}
-	password, err := h.accountStore.DecryptPassword(ctx, accountID)
+	password, err := h.resolvePassword(ctx, cfg, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt password: %w", err)
+		return nil, fmt.Errorf("get credentials: %w", err)
 	}
 	return imap.NewClient(ctx, cfg, password)
 }
@@ -1748,4 +2077,243 @@ func (h *Handler) handleRefetchBody(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "refetched"})
+}
+
+func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.IsEnabled() {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	oauthError := r.URL.Query().Get("error")
+	baseURL := h.auth.Config().BaseURL
+
+	views.LoginPage(baseURL, oauthError).Render(r.Context(), w)
+}
+
+func (h *Handler) handleGoogleRedirect(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.IsEnabled() {
+		http.Error(w, "auth not enabled", http.StatusNotFound)
+		return
+	}
+
+	state := h.auth.GenerateState()
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	url := h.auth.GoogleOAuthURL(state)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+func (h *Handler) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.IsEnabled() {
+		http.Error(w, "auth not enabled", http.StatusNotFound)
+		return
+	}
+
+	stateCookie, err := r.Cookie("oauth_state")
+	if err != nil || stateCookie.Value == "" {
+		http.Redirect(w, r, "/login?error=missing_state", http.StatusSeeOther)
+		return
+	}
+
+	stateParam := r.URL.Query().Get("state")
+	if stateParam != stateCookie.Value {
+		http.Redirect(w, r, "/login?error=invalid_state", http.StatusSeeOther)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:   "oauth_state",
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	})
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		errorDesc := r.URL.Query().Get("error")
+		if errorDesc == "" {
+			errorDesc = "no_code"
+		}
+		http.Redirect(w, r, "/login?error="+errorDesc, http.StatusSeeOther)
+		return
+	}
+
+	user, session, err := h.auth.HandleGoogleCallback(r.Context(), code, r.UserAgent())
+	if err != nil {
+		http.Redirect(w, r, "/login?error=auth_failed", http.StatusSeeOther)
+		return
+	}
+
+	_ = user
+	auth.SetSessionCookie(w, session.Token)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
+	token := auth.GetSessionToken(r)
+	if token != "" {
+		h.auth.DeleteSession(r.Context(), token)
+	}
+	auth.ClearSessionCookie(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAccountOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.HasGoogleOAuth() {
+		http.Error(w, "google oauth not configured", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	formData := map[string]string{
+		"email_address": r.FormValue("email_address"),
+		"display_name":  r.FormValue("display_name"),
+		"imap_host":     r.FormValue("imap_host"),
+		"imap_port":     r.FormValue("imap_port"),
+		"imap_tls_mode": r.FormValue("imap_tls_mode"),
+		"smtp_host":     r.FormValue("smtp_host"),
+		"smtp_port":     r.FormValue("smtp_port"),
+		"smtp_tls_mode": r.FormValue("smtp_tls_mode"),
+		"username":      r.FormValue("username"),
+		"smtp_username": r.FormValue("smtp_username"),
+		"smtp_password": r.FormValue("smtp_password"),
+	}
+
+	jsonData, _ := json.Marshal(formData)
+
+	state := h.auth.GenerateState()
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_account_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_account_form",
+		Value:    string(jsonData),
+		Path:     "/",
+		MaxAge:   600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	url := h.auth.GoogleAccountOAuthURL(state)
+	http.Redirect(w, r, url, http.StatusSeeOther)
+}
+
+func (h *Handler) handleGoogleAccountCallback(w http.ResponseWriter, r *http.Request) {
+	if !h.auth.HasGoogleOAuth() {
+		http.Error(w, "google oauth not configured", http.StatusNotFound)
+		return
+	}
+
+	stateCookie, err := r.Cookie("oauth_account_state")
+	if err != nil || stateCookie.Value == "" {
+		http.Redirect(w, r, "/settings/accounts?error=oauth_missing_state", http.StatusSeeOther)
+		return
+	}
+
+	stateParam := r.URL.Query().Get("state")
+	if stateParam != stateCookie.Value {
+		http.Redirect(w, r, "/settings/accounts?error=oauth_invalid_state", http.StatusSeeOther)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{Name: "oauth_account_state", Value: "", Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: "oauth_account_form", Value: "", Path: "/", MaxAge: -1})
+
+	formCookie, err := r.Cookie("oauth_account_form")
+	if err != nil || formCookie.Value == "" {
+		http.Redirect(w, r, "/settings/accounts?error=oauth_no_form", http.StatusSeeOther)
+		return
+	}
+
+	var formData map[string]string
+	if err := json.Unmarshal([]byte(formCookie.Value), &formData); err != nil {
+		http.Redirect(w, r, "/settings/accounts?error=oauth_bad_form", http.StatusSeeOther)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Redirect(w, r, "/settings/accounts?error=oauth_no_code", http.StatusSeeOther)
+		return
+	}
+
+	token, err := h.auth.ExchangeCode(r.Context(), code)
+	if err != nil {
+		http.Redirect(w, r, "/settings/accounts?error=oauth_exchange_failed", http.StatusSeeOther)
+		return
+	}
+
+	info, err := h.auth.GetGoogleUserInfo(r.Context(), token)
+	if err != nil {
+		http.Redirect(w, r, "/settings/accounts?error=oauth_userinfo_failed", http.StatusSeeOther)
+		return
+	}
+
+	if formData["username"] == "" {
+		formData["username"] = info.Email
+	}
+	if formData["smtp_host"] == "" && formData["imap_host"] == "imap.gmail.com" {
+		formData["smtp_host"] = "smtp.gmail.com"
+		formData["smtp_port"] = "465"
+		formData["smtp_tls_mode"] = "tls"
+	}
+	if formData["imap_host"] == "" {
+		formData["imap_host"] = "imap.gmail.com"
+		formData["imap_port"] = "993"
+		formData["imap_tls_mode"] = "tls"
+	}
+
+	req := &models.CreateAccountRequest{
+		EmailAddress: formData["email_address"],
+		DisplayName:  formData["display_name"],
+		IMAPHost:     formData["imap_host"],
+		IMAPPort:     atoiDefault(formData["imap_port"], 993),
+		IMAPTLSMode:  formData["imap_tls_mode"],
+		SMTPHost:     formData["smtp_host"],
+		SMTPPort:     atoiDefault(formData["smtp_port"], 465),
+		SMTPTLSMode:  formData["smtp_tls_mode"],
+		Username:     formData["username"],
+		Password:     "_oauth2_",
+		AuthMethod:   "oauth2",
+		SmtpUsername: formData["smtp_username"],
+		SmtpPassword: formData["smtp_password"],
+	}
+
+	account, err := h.accountStore.CreateAccount(r.Context(), h.userID(r.Context()), req)
+	if err != nil {
+		http.Redirect(w, r, "/settings/accounts?error=create_failed", http.StatusSeeOther)
+		return
+	}
+
+	var expiresAt *time.Time
+	if !token.Expiry.IsZero() {
+		t := token.Expiry
+		expiresAt = &t
+	}
+
+	err = h.auth.UpsertOAuthAccount(r.Context(), h.userID(r.Context()), "google", info.Sub, token.AccessToken, token.RefreshToken, token.TokenType, expiresAt, "")
+	if err != nil {
+		log.Printf("warning: failed to store oauth tokens for account %s: %v", account.ID, err)
+	}
+
+	h.syncer.SyncAccount(r.Context(), account.ID)
+
+	http.Redirect(w, r, "/settings/accounts", http.StatusSeeOther)
 }

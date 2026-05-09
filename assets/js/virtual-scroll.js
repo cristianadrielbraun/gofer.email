@@ -2,7 +2,9 @@ class VirtualMailList {
   constructor(container, options) {
     this.container = container
     this.folderID = options.folderID || "inbox"
-    this.itemHeight = 88
+    this.itemHeight = 94
+    this.subItemHeight = 48
+    this.expandedThreadGap = 14
     this.overscan = 10
 
     this.cache = new Map()
@@ -24,7 +26,61 @@ class VirtualMailList {
     this.itemsContainer = null
     this.bannerEl = null
 
+    this.expandedThreads = new Map()
+    this.animateNextLayout = false
+
+    this._offsetCache = null
+    this._offsetCacheLen = -1
+
     this.bindEvents()
+  }
+
+  _rebuildOffsets() {
+    if (this._offsetCacheLen === this.totalCount) return
+    this._offsetCache = new Array(this.totalCount + 1)
+    this._offsetCache[0] = 0
+    for (var i = 0; i < this.totalCount; i++) {
+      this._offsetCache[i + 1] = this._offsetCache[i] + this.getHeight(i)
+    }
+    this._offsetCacheLen = this.totalCount
+  }
+
+  totalHeight() {
+    if (this.totalCount === 0) return 0
+    this._rebuildOffsets()
+    return this._offsetCache[this.totalCount]
+  }
+
+  offsetAtPosition(pos) {
+    if (pos <= 0) return 0
+    this._rebuildOffsets()
+    if (pos >= this.totalCount) return this._offsetCache[this.totalCount]
+    return this._offsetCache[pos]
+  }
+
+  positionAtOffset(targetOffset) {
+    if (targetOffset <= 0 || this.totalCount === 0) return 0
+    this._rebuildOffsets()
+    var lo = 0, hi = this.totalCount
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1
+      if (this._offsetCache[mid + 1] <= targetOffset) lo = mid + 1
+      else hi = mid
+    }
+    return Math.min(lo, this.totalCount - 1)
+  }
+
+  getHeight(pos) {
+    var item = this.cache.get(pos)
+    if (!item) return this.itemHeight
+    var expanded = this.expandedThreads.get(item.id)
+    if (expanded) return this.itemHeight + expanded.subCount * this.subItemHeight + this.expandedThreadGap
+    return this.itemHeight
+  }
+
+  invalidateOffsets() {
+    this._offsetCacheLen = -1
+    this._offsetCache = null
   }
 
   setupDOM() {
@@ -70,14 +126,11 @@ class VirtualMailList {
       return
     }
 
-    var first = Math.max(
-      0,
-      Math.floor(scrollTop / this.itemHeight) - this.overscan
-    )
-    var last = Math.min(
-      this.totalCount - 1,
-      Math.ceil((scrollTop + clientHeight) / this.itemHeight) + this.overscan
-    )
+    this._rebuildOffsets()
+
+    var first = this.positionAtOffset(Math.max(0, scrollTop - this.overscan * this.itemHeight))
+    var last = this.positionAtOffset(Math.min(this.totalHeight(), scrollTop + clientHeight + this.overscan * this.itemHeight))
+    last = Math.min(last, this.totalCount - 1)
 
     if (first === this.prevFirst && last === this.prevLast) return
     this.prevFirst = first
@@ -86,17 +139,20 @@ class VirtualMailList {
     this.ensureRangeLoaded(first, last)
     this.prefetchSequential(last)
 
-    this.spacerTop.style.height = first * this.itemHeight + "px"
-    this.spacerBottom.style.height =
-      Math.max(0, this.totalCount - last - 1) * this.itemHeight + "px"
+    this.spacerTop.style.height = this.offsetAtPosition(first) + "px"
+    this.spacerBottom.style.height = Math.max(0, this.totalHeight() - this.offsetAtPosition(last + 1)) + "px"
 
+    var shouldAnimateLayout = this.animateNextLayout
+    this.animateNextLayout = false
+    var previousLayout = shouldAnimateLayout ? this.captureRenderedLayout() : null
+    var reusable = this.collectRenderedRows()
     var fragment = document.createDocumentFragment()
     for (var i = first; i <= last; i++) {
       var item = this.cache.get(i)
       if (item) {
-        var row = document.createElement("div")
-        row.innerHTML = item.html
-        var el = row.firstChild
+        var expanded = this.expandedThreads.get(item.id)
+        var existing = reusable.get(item.id)
+        var el = existing ? existing.row : this.createMailRow(item.html)
         var anchor = el.querySelector("a")
         if (anchor) {
           if (item.id === this.selectedEmailId) {
@@ -107,14 +163,50 @@ class VirtualMailList {
             anchor.classList.add("envelope")
           }
         }
+        if (expanded && expanded.html) {
+          var isNewExpansion = !(existing && existing.slot)
+          var slot = isNewExpansion ? document.createElement("div") : existing.slot
+          var height = this.getHeight(i)
+          slot.className = "mail-list-thread-slot"
+          slot.style.height = height + "px"
+          if (isNewExpansion) slot.setAttribute("data-thread-entering", "")
+          else slot.removeAttribute("data-thread-entering")
+
+          var mainRow = slot.querySelector(".mail-list-thread-main") || document.createElement("div")
+          mainRow.className = "mail-list-thread-main"
+          var subContainer = slot.querySelector(".thread-sub-items")
+          if (!subContainer) {
+            subContainer = document.createElement("div")
+            subContainer.className = "thread-sub-items"
+            subContainer.innerHTML = expanded.html
+          }
+          if (anchor) anchor.style.height = "88px"
+          var toggle = el.querySelector("[data-thread-toggle]")
+          if (toggle) toggle.setAttribute("data-expanded", "")
+          if (el.parentElement !== mainRow) mainRow.appendChild(el)
+          if (mainRow.parentElement !== slot) slot.appendChild(mainRow)
+          if (subContainer.parentElement !== slot) slot.appendChild(subContainer)
+          this.syncSelectionClasses(slot)
+          fragment.appendChild(slot)
+          if (isNewExpansion) {
+            window.setTimeout(function (node) {
+              node.removeAttribute("data-thread-entering")
+            }, 220, slot)
+          }
+          continue
+        }
+        var toggle = el.querySelector("[data-thread-toggle]")
+        if (toggle) toggle.removeAttribute("data-expanded")
+        if (anchor) anchor.style.height = ""
         fragment.appendChild(el)
       } else {
         fragment.appendChild(this.createSkeleton())
       }
     }
 
-    this.itemsContainer.innerHTML = ""
-    this.itemsContainer.appendChild(fragment)
+    this.itemsContainer.replaceChildren(fragment)
+    this.syncSelectionClasses(this.itemsContainer)
+    if (shouldAnimateLayout) this.animateLayoutShift(previousLayout)
 
     if (typeof htmx !== "undefined") {
       htmx.process(this.itemsContainer)
@@ -123,6 +215,78 @@ class VirtualMailList {
     if (this.container.scrollTop !== scrollTop) {
       this.container.scrollTop = scrollTop
     }
+  }
+
+  createMailRow(html) {
+    var row = document.createElement("div")
+    row.innerHTML = html
+    return row.firstChild
+  }
+
+  collectRenderedRows() {
+    var rows = new Map()
+    if (!this.itemsContainer) return rows
+    for (var i = 0; i < this.itemsContainer.children.length; i++) {
+      var node = this.itemsContainer.children[i]
+      var row = node.classList.contains("mail-list-item") ? node : node.querySelector(".mail-list-item")
+      if (!row || !row.dataset.emailId) continue
+      rows.set(row.dataset.emailId, {
+        row: row,
+        slot: node.classList.contains("mail-list-thread-slot") ? node : null,
+      })
+    }
+    return rows
+  }
+
+  captureRenderedLayout() {
+    var layout = new Map()
+    if (!this.itemsContainer) return layout
+    for (var i = 0; i < this.itemsContainer.children.length; i++) {
+      var node = this.itemsContainer.children[i]
+      var row = node.classList.contains("mail-list-item") ? node : node.querySelector(".mail-list-item")
+      if (!row || !row.dataset.emailId) continue
+      layout.set(row.dataset.emailId, node.getBoundingClientRect())
+    }
+    return layout
+  }
+
+  animateLayoutShift(previousLayout) {
+    if (!previousLayout || previousLayout.size === 0) return
+    for (var i = 0; i < this.itemsContainer.children.length; i++) {
+      var node = this.itemsContainer.children[i]
+      var row = node.classList.contains("mail-list-item") ? node : node.querySelector(".mail-list-item")
+      if (!row || !row.dataset.emailId) continue
+      var oldRect = previousLayout.get(row.dataset.emailId)
+      if (!oldRect) continue
+      var newRect = node.getBoundingClientRect()
+      var dy = oldRect.top - newRect.top
+      if (Math.abs(dy) < 1) continue
+      node.style.transition = "none"
+      node.style.transform = "translateY(" + dy + "px)"
+      node.offsetHeight
+      node.style.transition = "transform 180ms ease-out"
+      node.style.transform = "translateY(0)"
+    }
+  }
+
+  syncSelectionClasses(root) {
+    if (!root) return
+    var active = root.querySelectorAll(".envelope-active")
+    for (var i = 0; i < active.length; i++) {
+      active[i].classList.remove("envelope-active")
+      if (active[i].closest(".mail-list-item")) active[i].classList.add("envelope")
+    }
+
+    if (!this.selectedEmailId) return
+    var main = root.querySelector('[data-email-id="' + this.selectedEmailId + '"] > a')
+    if (main) {
+      main.classList.remove("envelope")
+      main.classList.add("envelope-active")
+      return
+    }
+
+    var sub = root.querySelector('[data-sub-email-id="' + this.selectedEmailId + '"] > a')
+    if (sub) sub.classList.add("envelope-active")
   }
 
   createSkeleton() {
@@ -392,15 +556,15 @@ class VirtualMailList {
     this.activeFetches.clear()
     this.prevFirst = null
     this.prevLast = null
+    this.expandedThreads.clear()
+    this.invalidateOffsets()
     this.container.scrollTop = 0
     this.removeBanner()
   }
 
   onEmailSelected(emailId) {
     this.selectedEmailId = emailId
-    this.prevFirst = null
-    this.prevLast = null
-    this.render()
+    this.syncSelectionClasses(this.itemsContainer)
     this.pushUrl()
   }
 
@@ -481,6 +645,68 @@ class VirtualMailList {
       .catch(function () {})
   }
 
+  async toggleThreadExpand(emailId) {
+    var pos = this.indexById.get(emailId)
+    if (pos === undefined) return
+
+    if (this.expandedThreads.has(emailId)) {
+      this.expandedThreads.delete(emailId)
+      this.invalidateOffsets()
+      this.prevFirst = null
+      this.prevLast = null
+      this.animateNextLayout = true
+      this.render()
+      return
+    }
+
+    var item = this.cache.get(pos)
+    if (!item) return
+
+    try {
+      var threadId = this.getThreadDataAttr(emailId)
+      if (!threadId) return
+      var html = await this.fetchHTML("/mail/thread/" + encodeURIComponent(threadId) + "/subitems")
+      var tmp = document.createElement("template")
+      tmp.innerHTML = html
+      var wrapper = tmp.content.firstElementChild
+      if (!wrapper) return
+
+      var subItems = wrapper.querySelectorAll("[data-sub-email-id]")
+      var subHtml = ""
+      var subCount = 0
+      for (var i = 0; i < subItems.length; i++) {
+        if (subItems[i].dataset.subEmailId === emailId) continue
+        subHtml += subItems[i].outerHTML
+        subCount++
+      }
+
+      this.expandedThreads.set(emailId, {
+        subCount: subCount,
+        html: subHtml
+      })
+      this.invalidateOffsets()
+      this.prevFirst = null
+      this.prevLast = null
+      this.animateNextLayout = true
+      this.render()
+    } catch (e) {
+      console.error("Failed to expand thread:", e)
+    }
+  }
+
+  getThreadDataAttr(emailId) {
+    var el = this.container.querySelector('[data-email-id="' + emailId + '"]')
+    if (el) return el.dataset.threadId
+    var pos = this.indexById.get(emailId)
+    if (pos === undefined) return null
+    var item = this.cache.get(pos)
+    if (!item) return null
+    var tmp = document.createElement("div")
+    tmp.innerHTML = item.html
+    var node = tmp.firstElementChild
+    return node ? node.dataset.threadId : null
+  }
+
   async restoreFromUrl() {
     var params = new URLSearchParams(window.location.search)
     var selectedId = params.get("selected")
@@ -504,7 +730,7 @@ class VirtualMailList {
 
     var anchorPos = this.indexById.get(selectedId)
     if (anchorPos !== undefined) {
-      this.container.scrollTop = anchorPos * this.itemHeight
+      this.container.scrollTop = this.offsetAtPosition(anchorPos)
     }
 
     this.render()

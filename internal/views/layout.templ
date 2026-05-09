@@ -11,7 +11,7 @@ import (
 	"gofer.email/components/tooltip"
 )
 
-templ Layout(accounts []models.Account, activeFolder string, emails []models.Email, selectedEmail *models.Email, totalCount int, uiSettings map[string]string) {
+templ Layout(accounts []models.Account, activeFolder string, emails []models.Email, selectedEmail *models.Email, totalCount int, uiSettings map[string]string, selectedThread []models.ThreadItem) {
 	<!DOCTYPE html>
 	<html lang="en" class={ themeClass(uiSettings) } data-theme={ themeStyle(uiSettings) }>
 		<head>
@@ -36,10 +36,12 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 				<div id="main-content" class="flex flex-1 min-w-0">
 					@MailList(emails, activeFolder, selectedEmail, totalCount, uiSettingGet(uiSettings, "mail_list_width", "384px"))
 					@ResizeHandle("maillist")
-					@MailView(selectedEmail)
+					@MailView(selectedEmail, selectedThread)
 				</div>
 			</div>
 			@ComposeDialog(accounts)
+			@ChooseAccountTypeDialog()
+			@GmailAccountDialog()
 			@AddAccountDialog()
 			<div id="edit-account-container"></div>
 			<script src="/assets/js/htmx.min.js"></script>
@@ -115,6 +117,8 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 				</div>
 			</div>
 			@ComposeDialog(accounts)
+			@ChooseAccountTypeDialog()
+			@GmailAccountDialog()
 			@AddAccountDialog()
 			<div id="edit-account-container"></div>
 			<script src="/assets/js/htmx.min.js"></script>
@@ -171,22 +175,22 @@ templ ResizeHandle(panel string) {
 	></div>
 }
 
-templ FolderPartial(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int) {
+templ FolderPartial(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, selectedThread []models.ThreadItem) {
 	@MailList(emails, activeFolder, selectedEmail, totalCount, "384px")
 	<div id="mail-view" class="hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk" hx-swap-oob="true">
 		if selectedEmail != nil {
-			@MailViewContent(selectedEmail, nil)
+			@MailViewContent(selectedEmail, selectedThread)
 		} else {
 			@MailViewEmpty()
 		}
 	</div>
 }
 
-templ MailContentPartial(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int) {
+templ MailContentPartial(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, selectedThread []models.ThreadItem) {
 	<div id="main-content" class="flex flex-1 min-w-0">
 		@MailList(emails, activeFolder, selectedEmail, totalCount, "384px")
 		@ResizeHandle("maillist")
-		@MailView(selectedEmail)
+		@MailView(selectedEmail, selectedThread)
 	</div>
 }
 
@@ -194,6 +198,8 @@ templ SettingsPartial(accounts []models.Account, syncSettings models.SyncSetting
 	<div id="main-content" class="flex flex-1 min-w-0">
 		@SettingsPage(accounts, syncSettings, activeTab, uiSettings)
 	</div>
+	@ChooseAccountTypeDialog()
+	@GmailAccountDialog()
 	@AddAccountDialog()
 	<div id="edit-account-container"></div>
 }

@@ -92,7 +92,7 @@ func (db *DB) migrate() error {
 		currentVersion = 0
 	}
 
-	const targetSchemaVersion = 10
+	const targetSchemaVersion = 12
 
 	if currentVersion >= targetSchemaVersion {
 		log.Printf("schema at version %d, no migration needed", currentVersion)
@@ -161,6 +161,18 @@ func (db *DB) migrate() error {
 	if currentVersion >= 1 && currentVersion <= 9 {
 		if err := migrateV9ToV10(tx); err != nil {
 			return fmt.Errorf("migrate v9 to v10: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 10 {
+		if err := migrateV10ToV11(tx); err != nil {
+			return fmt.Errorf("migrate v10 to v11: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 11 {
+		if err := migrateV11ToV12(tx); err != nil {
+			return fmt.Errorf("migrate v11 to v12: %w", err)
 		}
 	}
 
@@ -358,6 +370,82 @@ func migrateV9ToV10(tx *sql.Tx) error {
 		`DELETE FROM threads`,
 		`UPDATE messages SET thread_id = NULL, thread_parent_id = NULL, message_id_normalized = '', normalized_subject = ''`,
 		`INSERT OR REPLACE INTO schema_version (version) VALUES (10)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV10ToV11(tx *sql.Tx) error {
+	migrations := []string{
+		`CREATE TABLE IF NOT EXISTS remote_content_senders (
+			sender_email TEXT PRIMARY KEY,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS remote_content_messages (
+			message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE
+		)`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (11)`,
+	}
+
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV11ToV12(tx *sql.Tx) error {
+	migrations := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+			id TEXT PRIMARY KEY,
+			email TEXT NOT NULL UNIQUE,
+			name TEXT NOT NULL DEFAULT '',
+			avatar_url TEXT NOT NULL DEFAULT '',
+			is_admin INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS oauth_accounts (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			provider TEXT NOT NULL,
+			provider_account_id TEXT NOT NULL,
+			access_token TEXT NOT NULL DEFAULT '',
+			refresh_token TEXT NOT NULL DEFAULT '',
+			token_type TEXT NOT NULL DEFAULT 'Bearer',
+			expires_at DATETIME,
+			scopes TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_provider_account
+			ON oauth_accounts(provider, provider_account_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user
+			ON oauth_accounts(user_id)`,
+		`CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			token TEXT NOT NULL UNIQUE,
+			user_agent TEXT NOT NULL DEFAULT '',
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`,
+		`ALTER TABLE accounts ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE`,
+		`CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id)`,
+		`ALTER TABLE app_settings ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE`,
+		`CREATE INDEX IF NOT EXISTS idx_app_settings_user ON app_settings(user_id)`,
+		`UPDATE accounts SET user_id = 'default' WHERE user_id IS NULL`,
+		`UPDATE app_settings SET user_id = 'default' WHERE user_id IS NULL`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (12)`,
 	}
 
 	for _, m := range migrations {

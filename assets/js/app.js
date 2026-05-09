@@ -11,8 +11,9 @@ document.addEventListener("DOMContentLoaded", function () {
     document.addEventListener("click", function (e) {
       var starBtn = e.target.closest(".star-btn")
       if (starBtn) {
-        e.preventDefault()
-        e.stopPropagation()
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
         var emailId = starBtn.dataset.emailId
         if (emailId) toggleStar(emailId)
       }
@@ -101,6 +102,17 @@ document.addEventListener("DOMContentLoaded", function () {
     virtualMailList.hydrateFromDOM()
     container._virtualMailList = virtualMailList
 
+    container.addEventListener("click", function (e) {
+      var toggle = e.target.closest("[data-thread-toggle]")
+      if (!toggle) return
+      e.preventDefault()
+      e.stopPropagation()
+      var emailId = toggle.dataset.threadToggle
+      if (virtualMailList && emailId) {
+        virtualMailList.toggleThreadExpand(emailId)
+      }
+    })
+
     var selectedId = virtualMailList.selectedEmailId
     var path = "/folder/" + folderID
     if (selectedId) path += "/" + selectedId
@@ -171,7 +183,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (
         evt.detail.pathInfo &&
         evt.detail.pathInfo.requestPath &&
-        evt.detail.pathInfo.requestPath.match(/^\/email\/[^/]+$/)
+          evt.detail.pathInfo.requestPath.match(/^\/email\/[^/?]+(?:\?.*)?$/)
       ) {
         showMailViewLoading()
       }
@@ -185,7 +197,7 @@ document.addEventListener("DOMContentLoaded", function () {
         evt.detail.pathInfo.requestPath &&
         evt.detail.pathInfo.requestPath.startsWith("/email/")
       ) {
-        var emailId = evt.detail.pathInfo.requestPath.replace("/email/", "")
+        var emailId = evt.detail.pathInfo.requestPath.replace("/email/", "").split("?")[0]
         virtualMailList.onEmailSelected(emailId)
       }
     })
@@ -388,8 +400,9 @@ function sendCompose(fromPane) {
   })
 }
 
-function handleReply(mode) {
-  var bar = document.getElementById("reply-bar")
+function handleReply(el, mode) {
+  var bar = el && el.closest ? el.closest("[data-thread-reply-data]") : null
+  if (!bar) bar = document.getElementById("reply-bar")
   if (!bar) return
 
   var messageId = bar.dataset.messageId
@@ -617,9 +630,14 @@ function invalidateMailListItem(emailId) {
 }
 
 window.addEventListener("message", function (e) {
-  if (e.data && e.data.type === "emailBodyResize") {
+  if (!e.data || !e.data.type) return
+  if (e.data.type === "emailBodyResize") {
     var iframe = e.data.emailId ? document.querySelector('[data-email-body-frame][data-email-id="' + e.data.emailId + '"]') : document.getElementById("email-body-frame")
     if (iframe) iframe.style.height = e.data.height + "px"
+  }
+  if (e.data.type === "remoteContentBlocked" && e.data.emailId) {
+    var banner = document.querySelector('[data-remote-content-banner="' + e.data.emailId + '"]')
+    if (banner) banner.classList.remove("hidden")
   }
 })
 
@@ -647,8 +665,44 @@ function applyEmailBodyTheme(targetFrame) {
   if (bg) params.set("bg", bg)
   if (fg) params.set("fg", fg)
   if (link) params.set("link", link)
+  if (iframe.dataset.remoteLoaded === "true") params.set("remote", "true")
   iframe.src = "/email/" + iframe.dataset.emailId + "/body?" + params.toString()
   updateEmailBodySchemeButton(iframe, baseTheme, theme)
+}
+
+function loadRemoteContent(emailId) {
+  var iframe = document.querySelector('[data-email-body-frame][data-email-id="' + emailId + '"]')
+  if (!iframe) return
+  var src = iframe.src
+  if (!src) return
+  var url = new URL(src, window.location.origin)
+  url.searchParams.set("remote", "true")
+  iframe.src = url.toString()
+  var banner = document.querySelector('[data-remote-content-banner="' + emailId + '"]')
+  if (banner) banner.remove()
+  iframe.dataset.remoteLoaded = "true"
+}
+
+function allowRemoteContent(emailId, mode) {
+  var iframe = document.querySelector('[data-email-body-frame][data-email-id="' + emailId + '"]')
+  var banner = document.querySelector('[data-remote-content-banner="' + emailId + '"]')
+
+  fetch("/api/remote-content/" + emailId + "/allow", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: mode }),
+  })
+    .then(function (r) { return r.json() })
+    .then(function () {
+      if (banner) banner.remove()
+      if (iframe) iframe.dataset.remoteLoaded = "true"
+      if (iframe && iframe.src) {
+        var url = new URL(iframe.src, window.location.origin)
+        url.searchParams.set("remote", "true")
+        iframe.src = url.toString()
+      }
+    })
+    .catch(function () {})
 }
 
 function getEmailBodyBaseTheme() {
@@ -700,17 +754,33 @@ function toggleEmailBodyScheme() {
   applyEmailBodyTheme()
 }
 
+function toggleEmailBodySchemeById(emailId) {
+  var frame = document.querySelector('[data-email-body-frame][data-email-id="' + emailId + '"]')
+  if (!frame) return
+  if (frame.dataset.forceScheme === "opposite") {
+    delete frame.dataset.forceScheme
+  } else {
+    frame.dataset.forceScheme = "opposite"
+  }
+  applyEmailBodyTheme(frame)
+}
+
 function updateEmailBodySchemeButton(iframe, baseTheme, theme) {
-  var btn = document.querySelector("[data-force-email-scheme]")
-  if (!btn || !iframe) return
+  if (!iframe) return
+  var emailId = iframe.dataset.emailId
+  var btn = emailId ? document.querySelector('[data-force-email-scheme="' + emailId + '"]') : document.querySelector("[data-force-email-scheme]")
+  if (!btn) return
   var forced = iframe.dataset.forceScheme === "opposite"
   btn.classList.toggle("bg-ink/5", forced)
   btn.classList.toggle("text-ink/70", forced)
   btn.classList.toggle("text-ink/40", !forced)
   var label = forced ? "Showing " + theme + " email body. Click to use " + baseTheme + "." : "Force " + oppositeEmailBodyTheme(baseTheme) + " email body"
   btn.setAttribute("aria-label", label)
-  var tooltipEl = btn.closest("[data-tui-popover-root]")?.querySelector("[data-email-scheme-tooltip]")
-  if (tooltipEl) tooltipEl.textContent = label
+  var tooltipEl = btn.closest("[data-tui-popover-root]")
+  if (tooltipEl) {
+    var tipText = tooltipEl.querySelector("[data-email-scheme-tooltip]")
+    if (tipText) tipText.textContent = label
+  }
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -747,6 +817,22 @@ function refetchBody(emailId) {
     if (el) {
       e.preventDefault()
       refetchBody(el.dataset.refetchEmail)
+    }
+  })
+
+  document.addEventListener("click", function (e) {
+    var el = e.target.closest("[data-load-remote]")
+    if (el) {
+      e.preventDefault()
+      loadRemoteContent(el.dataset.loadRemote)
+    }
+  })
+
+  document.addEventListener("click", function (e) {
+    var el = e.target.closest("[data-allow-remote]")
+    if (el) {
+      e.preventDefault()
+      allowRemoteContent(el.dataset.allowRemote, el.dataset.allowMode)
     }
   })
 
@@ -1023,72 +1109,118 @@ function collapseComposeFullWidth() {
     }
   }
 
+  function collapseDetails(el) {
+    var ct = el.querySelector('.thread-details-content')
+    if (!ct || el._threadAnimating) return
+    el._threadAnimating = true
+    ct.style.willChange = 'height, opacity'
+
+    var h = ct.scrollHeight
+    ct.style.height = h + 'px'
+    ct.style.overflow = 'hidden'
+    ct.style.transition = 'none'
+    void ct.offsetHeight
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        fadeIframes(ct, false)
+        ct.style.transition = 'height ' + DURATION + ' ' + EASING + ', opacity ' + DURATION + ' ease-out'
+        ct.style.height = '0px'
+        ct.style.opacity = '0'
+
+        function onEnd(ev) {
+          if (ev.propertyName !== 'height') return
+          ct.removeEventListener('transitionend', onEnd)
+          el.open = false
+          clearStyles(ct)
+          el._threadAnimating = false
+        }
+        ct.addEventListener('transitionend', onEnd)
+      })
+    })
+  }
+
+  function expandDetails(el) {
+    var ct = el.querySelector('.thread-details-content')
+    if (!ct || el._threadAnimating) return
+    el._threadAnimating = true
+    ct.style.willChange = 'height, opacity'
+
+    el.open = true
+    ct.style.height = '0px'
+    ct.style.overflow = 'hidden'
+    ct.style.opacity = '0'
+    ct.style.transition = 'none'
+    void ct.offsetHeight
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        ct.style.transition = 'height ' + DURATION + ' ' + EASING + ', opacity ' + DURATION + ' ease-out'
+        ct.style.height = ct.scrollHeight + 'px'
+        ct.style.opacity = '1'
+
+        function onEnd(ev) {
+          if (ev.propertyName !== 'height') return
+          ct.removeEventListener('transitionend', onEnd)
+          clearStyles(ct)
+          fadeIframes(ct, true)
+          el._threadAnimating = false
+        }
+        ct.addEventListener('transitionend', onEnd)
+      })
+    })
+  }
+
+  function getSiblings(el) {
+    var parent = el.parentElement
+    if (!parent) return []
+    var siblings = []
+    var details = parent.querySelectorAll('details[data-thread-details]')
+    for (var i = 0; i < details.length; i++) {
+      if (details[i] !== el) siblings.push(details[i])
+    }
+    return siblings
+  }
+
   function initThreadDetails(root) {
     var details = root.querySelectorAll('details[data-thread-details]')
     for (var i = 0; i < details.length; i++) {
       if (details[i]._threadInit) continue
       details[i]._threadInit = true
 
-      var summary = details[i].querySelector('summary')
-      if (!summary) continue
+      details[i].addEventListener('click', function (e) {
+        var el = this
+        var target = e.target
 
-      summary.addEventListener('click', function (e) {
+        if (target.closest('[data-thread-show-exclusive]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          expandDetails(el)
+          var siblings = getSiblings(el)
+          for (var j = 0; j < siblings.length; j++) {
+            if (siblings[j].open) collapseDetails(siblings[j])
+          }
+          return
+        }
+
+        if (target.closest('[data-thread-hide-others]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          var siblings = getSiblings(el)
+          for (var j = 0; j < siblings.length; j++) {
+            if (siblings[j].open) collapseDetails(siblings[j])
+          }
+          return
+        }
+
+        var summary = target.closest('summary')
+        if (!summary || summary.parentElement !== el) return
+
         e.preventDefault()
-        var el = this.parentElement
-        var ct = el.querySelector('.thread-details-content')
-        if (!ct || el._threadAnimating) return
-
-        el._threadAnimating = true
-        ct.style.willChange = 'height, opacity'
-
         if (el.open) {
-          var h = ct.scrollHeight
-          ct.style.height = h + 'px'
-          ct.style.overflow = 'hidden'
-          ct.style.transition = 'none'
-          void ct.offsetHeight
-
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              fadeIframes(ct, false)
-              ct.style.transition = 'height ' + DURATION + ' ' + EASING + ', opacity ' + DURATION + ' ease-out'
-              ct.style.height = '0px'
-              ct.style.opacity = '0'
-
-              function onEnd(ev) {
-                if (ev.propertyName !== 'height') return
-                ct.removeEventListener('transitionend', onEnd)
-                el.open = false
-                clearStyles(ct)
-                el._threadAnimating = false
-              }
-              ct.addEventListener('transitionend', onEnd)
-            })
-          })
+          collapseDetails(el)
         } else {
-          el.open = true
-          ct.style.height = '0px'
-          ct.style.overflow = 'hidden'
-          ct.style.opacity = '0'
-          ct.style.transition = 'none'
-          void ct.offsetHeight
-
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              ct.style.transition = 'height ' + DURATION + ' ' + EASING + ', opacity ' + DURATION + ' ease-out'
-              ct.style.height = ct.scrollHeight + 'px'
-              ct.style.opacity = '1'
-
-              function onEnd(ev) {
-                if (ev.propertyName !== 'height') return
-                ct.removeEventListener('transitionend', onEnd)
-                clearStyles(ct)
-                fadeIframes(ct, true)
-                el._threadAnimating = false
-              }
-              ct.addEventListener('transitionend', onEnd)
-            })
-          })
+          expandDetails(el)
         }
       })
     }

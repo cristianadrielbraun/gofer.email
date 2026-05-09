@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type BlobStore struct {
@@ -99,6 +101,64 @@ func (s *BlobStore) ReadAttachment(path string) (io.ReadCloser, error) {
 
 func (s *BlobStore) DeleteMessage(accountID string, localID int64) error {
 	return os.RemoveAll(s.msgDir(accountID, localID))
+}
+
+func (s *BlobStore) RemoteAssetsDir(accountID string, localID int64) string {
+	return filepath.Join(s.msgDir(accountID, localID), "remote_assets")
+}
+
+func (s *BlobStore) StoreRemoteAsset(accountID string, localID int64, url string, data []byte) (string, error) {
+	dir := s.RemoteAssetsDir(accountID, localID)
+	if err := s.ensureDir(dir); err != nil {
+		return "", fmt.Errorf("create remote assets dir: %w", err)
+	}
+	h := sha256.Sum256([]byte(url))
+	filename := fmt.Sprintf("%x", h[:8])
+	ext := assetExtension(url, data)
+	if ext != "" {
+		filename += ext
+	}
+	p := filepath.Join(dir, filename)
+	return p, os.WriteFile(p, data, 0644)
+}
+
+func (s *BlobStore) StoreRemoteBodyHTML(accountID string, localID int64, data []byte) (string, error) {
+	dir := s.msgDir(accountID, localID)
+	if err := s.ensureDir(dir); err != nil {
+		return "", fmt.Errorf("create message dir: %w", err)
+	}
+	p := filepath.Join(dir, "body_remote.html")
+	return p, os.WriteFile(p, data, 0644)
+}
+
+func (s *BlobStore) ReadRemoteBodyHTML(path string) (io.ReadCloser, error) {
+	return os.Open(path)
+}
+
+func assetExtension(url string, data []byte) string {
+	lower := strings.ToLower(url)
+	for _, ext := range []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp"} {
+		if strings.Contains(lower, ext) {
+			return ext
+		}
+	}
+	if len(data) > 4 {
+		switch {
+		case data[0] == 0x89 && data[1] == 0x50:
+			return ".png"
+		case data[0] == 0xFF && data[1] == 0xD8:
+			return ".jpg"
+		case data[0] == 0x47 && data[1] == 0x49:
+			return ".gif"
+		case data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46:
+			return ".webp"
+		}
+	}
+	return ""
+}
+
+func (s *BlobStore) DeleteAccount(accountID string) error {
+	return os.RemoveAll(filepath.Join(s.basePath, accountID))
 }
 
 func sanitizeFilename(name string) string {

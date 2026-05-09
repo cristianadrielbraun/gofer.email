@@ -78,20 +78,25 @@ type EmailPage struct {
 }
 
 type ThreadItem struct {
-	ID            string
-	From          Contact
-	To            []Contact
-	CC            []Contact
-	Subject       string
-	Preview       string
-	Date          string
-	DateFull      string
-	IsRead        bool
-	HasAttachment bool
-	FolderName    string
-	FolderRole    string
-	Labels        []Label
-	Attachments   []Attachment
+	ID                string
+	AccountID         string
+	From              Contact
+	To                []Contact
+	CC                []Contact
+	Subject           string
+	Preview           string
+	TextBody          string
+	Date              string
+	DateFull          string
+	IsRead            bool
+	IsStarred         bool
+	HasAttachment     bool
+	FolderName        string
+	FolderRole        string
+	Labels            []Label
+	Attachments       []Attachment
+	InternetMessageID string
+	References        string
 }
 
 type ComposeRequest struct {

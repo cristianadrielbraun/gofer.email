@@ -195,9 +195,9 @@
 /* === MAIL LIST ITEM (VIRTUAL SCROLL) === */
 
 .mail-list-item {
-  height: 88px;
-  min-height: 88px;
-  max-height: 88px;
+  height: 94px;
+  min-height: 94px;
+  max-height: 94px;
   padding: 3px 0;
 }
 
@@ -206,10 +206,70 @@
   overflow: hidden;
 }
 
+.mail-list-thread-slot {
+  overflow: hidden;
+  padding-bottom: 0.625rem;
+  box-sizing: border-box;
+}
+
+.mail-list-thread-main {
+  height: 94px;
+  min-height: 94px;
+  max-height: 94px;
+  overflow: hidden;
+}
+
+.thread-sub-items {
+  margin: 0.25rem 0.875rem 0.25rem;
+  padding-left: 1rem;
+  padding-bottom: 0.375rem;
+  border-left: 2px solid color-mix(in srgb, var(--color-foreground) 12%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--color-foreground) 12%, transparent);
+  border-bottom-left-radius: var(--radius);
+  overflow: hidden;
+}
+
+.mail-list-thread-slot[data-thread-entering] .thread-sub-items {
+  animation: threadSlideDown 0.2s ease-out;
+}
+
+@keyframes threadSlideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
+}
+
+.thread-sub-item a {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.thread-sub-item a:hover {
+  background: color-mix(in srgb, var(--color-foreground) 5%, transparent);
+}
+
+[data-thread-toggle] .thread-toggle-chevron {
+  transition: transform 0.2s ease;
+}
+
+[data-thread-toggle][data-expanded] .thread-toggle-chevron {
+  transform: rotate(90deg);
+}
+
 .mail-list-skeleton {
-  height: 88px;
-  min-height: 88px;
-  max-height: 88px;
+  height: 94px;
+  min-height: 94px;
+  max-height: 94px;
   overflow: hidden;
   display: flex;
   align-items: flex-start;

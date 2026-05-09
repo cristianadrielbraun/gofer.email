@@ -117,7 +117,7 @@ func (s *AccountStore) GetEditData(ctx context.Context, accountID string) (*mode
 	return &data, nil
 }
 
-func (s *AccountStore) CreateAccount(ctx context.Context, req *models.CreateAccountRequest) (*models.Account, error) {
+func (s *AccountStore) CreateAccount(ctx context.Context, userID string, req *models.CreateAccountRequest) (*models.Account, error) {
 	encrypted, err := s.encrypt(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt password: %w", err)
@@ -152,13 +152,13 @@ func (s *AccountStore) CreateAccount(ctx context.Context, req *models.CreateAcco
 	color := generateColor(id)
 
 	_, err = s.db.Write().ExecContext(ctx,
-		`INSERT INTO accounts (id, email_address, display_name, color, initials,
+		`INSERT INTO accounts (id, user_id, email_address, display_name, color, initials,
 		  imap_host, imap_port, imap_tls_mode,
 		  smtp_host, smtp_port, smtp_tls_mode,
 		  username, encrypted_password, auth_method,
 		  smtp_username, encrypted_smtp_password)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, req.EmailAddress, req.DisplayName, color, initials,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, userID, req.EmailAddress, req.DisplayName, color, initials,
 		req.IMAPHost, req.IMAPPort, req.IMAPTLSMode,
 		req.SMTPHost, req.SMTPPort, req.SMTPTLSMode,
 		req.Username, encrypted, req.AuthMethod,
@@ -272,10 +272,10 @@ func (s *AccountStore) GetAccountByID(ctx context.Context, accountID string) (*m
 	return &a, nil
 }
 
-func (s *AccountStore) GetFirstAccountID(ctx context.Context) string {
+func (s *AccountStore) GetFirstAccountID(ctx context.Context, userID string) string {
 	var id string
 	err := s.db.Read().QueryRowContext(ctx,
-		`SELECT id FROM accounts ORDER BY id LIMIT 1`).Scan(&id)
+		`SELECT id FROM accounts WHERE user_id = ? ORDER BY id LIMIT 1`, userID).Scan(&id)
 	if err != nil {
 		return ""
 	}

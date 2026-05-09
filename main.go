@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"gofer.email/internal/auth"
 	"gofer.email/internal/config"
 	"gofer.email/internal/handler"
 	"gofer.email/internal/mail"
@@ -14,9 +15,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load()
+
 	dbPath := os.Getenv("GOFER_DB_PATH")
 	if dbPath == "" {
 		dbPath = "data/gofer.db"
@@ -39,20 +44,39 @@ func main() {
 
 	blobStore := store.NewBlobStore(filepath.Join(dataDir, "accounts"))
 
-	syncer := mail.NewSyncOrchestrator(db, accountStore, blobStore)
+	authConfig := auth.LoadConfig()
+	authManager := auth.NewManager(authConfig, db)
+
+	if err := authManager.EnsureDefaultUser(); err != nil {
+		log.Fatalf("failed to ensure default user: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if authManager.IsEnabled() {
+		authManager.StartSessionCleanup(ctx)
+	}
+
+	syncer := mail.NewSyncOrchestrator(db, accountStore, blobStore, authManager)
 	go syncer.Start(ctx)
 
 	mux := http.NewServeMux()
-	h := handler.New(db, accountStore, syncer, blobStore)
+	h := handler.New(db, accountStore, syncer, blobStore, authManager)
 	h.RegisterRoutes(mux)
+
+	var handler http.Handler = mux
+	handler = authManager.Middleware(handler)
 
 	addr := ":8090"
 	fmt.Printf("gofer.email running on http://localhost%s\n", addr)
 	fmt.Printf("database: %s\n", db.Path())
-	log.Fatal(http.ListenAndServe(addr, mux))
+	if authConfig.Enabled {
+		fmt.Printf("auth: enabled (Google OAuth2)\n")
+	} else {
+		fmt.Printf("auth: disabled (local mode)\n")
+	}
+	log.Fatal(http.ListenAndServe(addr, handler))
 }
 
 func loadOrGenerateSecretKey(path string) []byte {

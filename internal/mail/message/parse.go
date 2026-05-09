@@ -125,15 +125,38 @@ func ParseMessage(ctx context.Context, r io.Reader, blobStore *store.BlobStore, 
 				continue
 			}
 
-			switch ct {
-			case "text/plain":
+			switch {
+			case ct == "text/plain":
 				parsed.TextBody = string(content)
-			case "text/html":
+			case ct == "text/html":
 				parsed.HTMLBody = content
+			case strings.HasPrefix(ct, "text/"):
+				parsed.TextBody = string(content)
 			default:
-				if strings.HasPrefix(ct, "text/") {
-					parsed.TextBody = string(content)
+				cid := h.Get("Content-Id")
+				cid = strings.Trim(cid, "<>")
+				if cid == "" {
+					continue
 				}
+				attID++
+				filename := cid
+				if fn := h.Get("Content-Disposition"); fn != "" {
+					if idx := strings.Index(fn, "filename="); idx != -1 {
+						filename = strings.Trim(fn[idx+9:], ` "';`)
+					}
+				}
+				bp, storeErr := blobStore.StoreAttachment(ctx, accountID, localID, attID, filename, bytes.NewReader(content))
+				if storeErr != nil {
+					continue
+				}
+				parsed.Attachments = append(parsed.Attachments, AttachmentMeta{
+					Filename:    filename,
+					ContentType: ct,
+					ContentID:   cid,
+					Inline:      true,
+					BlobPath:    bp,
+					Size:        int64(len(content)),
+				})
 			}
 
 		case *mail.AttachmentHeader:
