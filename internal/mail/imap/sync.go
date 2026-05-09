@@ -207,6 +207,7 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 	defer c.client.Unselect()
 
 	result := &SyncResult{
+		HighestUID:  highestUID,
 		UIDValidity: uint32(selectData.UIDValidity),
 		NumMessages: selectData.NumMessages,
 	}

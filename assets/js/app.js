@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var syncRefreshTimer = null
   var processingStatusHandler = null
   var syncStatesByFolder = Object.create(null)
+  var prefetchedBodies = Object.create(null)
 
   initVirtualScroll()
   setupFolderClickInterception()
@@ -17,6 +18,7 @@ document.addEventListener("DOMContentLoaded", function () {
   setupSSE()
   setupMailListActions()
   setupProcessingStatus()
+  setupBodyPrefetch()
 
   function setupMailListActions() {
     document.addEventListener("click", function (e) {
@@ -44,6 +46,23 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!match || !evt.detail.xhr || evt.detail.xhr.status !== 202) return
       markAccountDeleting(match[1])
     })
+  }
+
+  function setupBodyPrefetch() {
+    function prefetchFromEvent(e) {
+      if (window.GoferSettings && GoferSettings.get("prefetch_on_hover") === "false") return
+      var row = e.target && e.target.closest && e.target.closest(".mail-list-item[data-email-id]")
+      if (!row) return
+      var emailId = row.dataset.emailId
+      if (!emailId || prefetchedBodies[emailId]) return
+      prefetchedBodies[emailId] = true
+      fetch("/api/messages/" + encodeURIComponent(emailId) + "/prefetch-body", { method: "POST" }).catch(function () {
+        delete prefetchedBodies[emailId]
+      })
+    }
+
+    document.addEventListener("mouseover", prefetchFromEvent, { passive: true })
+    document.addEventListener("focusin", prefetchFromEvent)
   }
 
   function markAccountDeleting(accountId) {
@@ -491,7 +510,7 @@ document.addEventListener("DOMContentLoaded", function () {
         evt.detail.pathInfo.requestPath &&
           evt.detail.pathInfo.requestPath.match(/^\/email\/[^/?]+(?:\?.*)?$/)
       ) {
-        showMailViewLoading()
+        showMailViewLoading(evt.detail.elt)
       }
     })
 
@@ -509,53 +528,82 @@ document.addEventListener("DOMContentLoaded", function () {
     })
   }
 
-  function showMailViewLoading() {
+  function textFrom(root, selector) {
+    var el = root && root.querySelector(selector)
+    return el ? el.textContent.trim() : ""
+  }
+
+  function escapeHTML(value) {
+    return String(value || "").replace(/[&<>'"]/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]
+    })
+  }
+
+  function getMailRowPreview(trigger) {
+    var row = trigger && trigger.closest && trigger.closest(".mail-list-item")
+    if (!row) return null
+    var avatar = row.querySelector(".size-6")
+    return {
+      initials: avatar ? avatar.textContent.trim() : "",
+      sender: textFrom(row, ".text-sm.truncate"),
+      time: textFrom(row, ".tabular-nums"),
+      subject: textFrom(row, "p.text-\\[13px\\]"),
+      preview: textFrom(row, "p.text-xs"),
+    }
+  }
+
+  function showMailViewLoading(trigger) {
     var mailView = document.getElementById("mail-view")
     if (!mailView) return
+    var preview = getMailRowPreview(trigger) || {}
+    var initials = escapeHTML(preview.initials || "")
+    var sender = escapeHTML(preview.sender || "Loading message")
+    var time = escapeHTML(preview.time || "")
+    var subject = escapeHTML(preview.subject || "")
+    var bodyHint = escapeHTML(preview.preview || "Fetching message body...")
     mailView.innerHTML =
       '<div class="flex flex-col h-full p-2">' +
-        '<div class="surface-paper rounded-md flex flex-col h-full overflow-hidden animate-mail-loading">' +
+        '<div class="surface-paper rounded-md flex flex-col h-full overflow-hidden">' +
           '<div class="flex items-center justify-between px-6 py-2.5">' +
             '<div class="flex items-center gap-1">' +
-              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
-              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
-              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
-              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
+              '<div class="size-8 rounded-md flex items-center justify-center text-ink/45 bg-ink/[0.03] border border-ink/6">↩</div>' +
+              '<div class="size-8 rounded-md flex items-center justify-center text-ink/45 bg-ink/[0.03] border border-ink/6">↪</div>' +
+              '<div class="size-8 rounded-md flex items-center justify-center text-ink/45 bg-ink/[0.03] border border-ink/6">⌫</div>' +
+              '<div class="size-8 rounded-md flex items-center justify-center text-ink/45 bg-ink/[0.03] border border-ink/6">⋯</div>' +
             '</div>' +
             '<div class="flex items-center gap-2">' +
-              '<div class="h-5 w-14 rounded bg-ink/5 animate-pulse"></div>' +
-              '<div class="size-8 rounded-md bg-ink/5 animate-pulse"></div>' +
+              '<div class="text-xs text-ink/40">' + time + '</div>' +
+              '<div class="size-8 rounded-md flex items-center justify-center text-ink/45 bg-ink/[0.03] border border-ink/6">◐</div>' +
             '</div>' +
           '</div>' +
           '<div class="h-px bg-gradient-to-r from-transparent via-amber-900/10 to-transparent"></div>' +
           '<div class="flex-1 overflow-y-auto">' +
             '<div class="max-w-3xl mx-auto px-8 py-6">' +
               '<div class="flex items-start gap-4">' +
-                '<div class="size-11 rounded-full bg-ink/8 animate-pulse shrink-0"></div>' +
+                '<div class="size-11 rounded-full bg-gradient-to-b from-amber-700/70 to-amber-900/70 flex items-center justify-center text-sm font-bold text-amber-100 shrink-0 shadow-[0_2px_6px_rgba(0,0,0,0.2)]">' + initials + '</div>' +
                 '<div class="flex-1 space-y-2">' +
                   '<div class="flex items-center gap-2">' +
-                    '<div class="h-4 w-32 rounded bg-ink/6 animate-pulse"></div>' +
-                    '<div class="h-3 w-40 rounded bg-ink/4 animate-pulse"></div>' +
+                    '<div class="font-semibold text-ink">' + sender + '</div>' +
+                    '<div class="text-xs text-ink/40">' + time + '</div>' +
                   '</div>' +
-                  '<div class="h-3 w-24 rounded bg-ink/4 animate-pulse"></div>' +
+                  '<div class="text-xs text-ink/40">Preparing message...</div>' +
                 '</div>' +
               '</div>' +
+              '<h1 class="text-xl font-bold mt-5 tracking-tight text-ink" style="font-family: var(--font-serif)">' + subject + '</h1>' +
               '<div class="h-px bg-gradient-to-r from-transparent via-ink/10 to-transparent my-6"></div>' +
+              '<p class="text-sm text-ink/45 mb-4">' + bodyHint + '</p>' +
               '<div class="space-y-3">' +
                 '<div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div>' +
                 '<div class="h-4 w-5/6 rounded bg-ink/5 animate-pulse"></div>' +
                 '<div class="h-4 w-4/5 rounded bg-ink/5 animate-pulse"></div>' +
-                '<div class="h-4 w-3/5 rounded bg-ink/5 animate-pulse"></div>' +
-                '<div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div>' +
-                '<div class="h-4 w-2/3 rounded bg-ink/5 animate-pulse"></div>' +
               '</div>' +
             '</div>' +
           '</div>' +
           '<div class="px-6 py-3 border-t border-ink/6">' +
             '<div class="flex items-center gap-2">' +
-              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] animate-pulse"></div>' +
-              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] animate-pulse"></div>' +
-              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] animate-pulse"></div>' +
+              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] flex items-center justify-center text-[13px] text-ink/45">Reply</div>' +
+              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] flex items-center justify-center text-[13px] text-ink/45">Reply All</div>' +
+              '<div class="flex-1 h-9 rounded-md border border-ink/8 bg-ink/[0.02] flex items-center justify-center text-[13px] text-ink/45">Forward</div>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -941,7 +989,12 @@ window.addEventListener("message", function (e) {
   if (!e.data || !e.data.type) return
   if (e.data.type === "emailBodyResize") {
     var iframe = e.data.emailId ? document.querySelector('[data-email-body-frame][data-email-id="' + e.data.emailId + '"]') : document.getElementById("email-body-frame")
-    if (iframe) iframe.style.height = e.data.height + "px"
+    if (iframe) {
+      iframe.style.height = e.data.height + "px"
+      iframe.classList.remove("opacity-0")
+      var loader = e.data.emailId ? document.querySelector('[data-email-body-loading="' + e.data.emailId + '"]') : null
+      if (loader) loader.remove()
+    }
   }
   if (e.data.type === "remoteContentBlocked" && e.data.emailId) {
     var banner = document.querySelector('[data-remote-content-banner="' + e.data.emailId + '"]')
@@ -961,6 +1014,9 @@ function applyEmailBodyTheme(targetFrame) {
   }
   var iframe = targetFrame
   if (!iframe || !iframe.dataset.emailId) return
+  iframe.classList.add("opacity-0")
+  var loader = document.querySelector('[data-email-body-loading="' + iframe.dataset.emailId + '"]')
+  if (loader) loader.classList.remove("hidden")
   var baseTheme = getEmailBodyBaseTheme()
   var theme = iframe.dataset.forceScheme === "opposite" ? oppositeEmailBodyTheme(baseTheme) : baseTheme
   var palette = readEmailBodyPalette(theme)

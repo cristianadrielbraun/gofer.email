@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	goimap "github.com/emersion/go-imap/v2"
@@ -35,10 +36,22 @@ type Handler struct {
 	syncer       *mail.SyncOrchestrator
 	blobStore    *store.BlobStore
 	auth         *auth.Manager
+	bodyClientMu sync.Mutex
+	bodyClients  map[string]*imap.Client
+	bodyFetchMu  sync.Mutex
+	bodyFetches  map[int64]chan struct{}
 }
 
 func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrchestrator, blobStore *store.BlobStore, authManager *auth.Manager) *Handler {
-	return &Handler{db: db, accountStore: accountStore, syncer: syncer, blobStore: blobStore, auth: authManager}
+	return &Handler{
+		db:           db,
+		accountStore: accountStore,
+		syncer:       syncer,
+		blobStore:    blobStore,
+		auth:         authManager,
+		bodyClients:  make(map[string]*imap.Client),
+		bodyFetches:  make(map[int64]chan struct{}),
+	}
 }
 
 func (h *Handler) userID(ctx context.Context) string {
@@ -94,6 +107,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events", h.handleSSE)
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 	mux.HandleFunc("GET /api/system/processing", h.handleProcessingStatus)
+	mux.HandleFunc("POST /api/messages/{id}/prefetch-body", h.handlePrefetchBody)
 	mux.HandleFunc("GET /compose/pane", h.handleComposePane)
 	mux.HandleFunc("POST /compose", h.handleCompose)
 	mux.HandleFunc("POST /api/messages/{id}/read", h.handleToggleRead)
@@ -212,16 +226,6 @@ func (h *Handler) handleEmailPartial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msgID, _ := strconv.ParseInt(emailID, 10, 64)
-	if msgID > 0 && !h.db.IsBodyFetched(ctx, msgID) {
-		h.fetchBody(ctx, msgID, email.AccountID)
-		email, _ = h.db.GetEmailByID(ctx, emailID)
-		if email == nil {
-			http.NotFound(w, r)
-			return
-		}
-	}
-
 	w.Header().Set("Content-Type", "text/html")
 	var thread []models.ThreadItem
 	if r.URL.Query().Get("single") != "1" {
@@ -254,7 +258,7 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		h.fetchBody(ctx, msgID, info.AccountID)
+		h.ensureBodyFetched(ctx, msgID, info.AccountID)
 	}
 
 	body, err := h.db.GetEmailBody(ctx, emailID)
@@ -532,6 +536,34 @@ func (h *Handler) storeParsedBody(ctx context.Context, parsed *message.ParsedMes
 	h.db.UpdateMessageThreadHeaders(ctx, msgID, accountID, parsed.InReplyTo, parsed.References, parsed.Subject)
 }
 
+func (h *Handler) ensureBodyFetched(ctx context.Context, msgID int64, accountID string) {
+	if h.db.IsBodyFetched(ctx, msgID) {
+		return
+	}
+
+	h.bodyFetchMu.Lock()
+	if done, ok := h.bodyFetches[msgID]; ok {
+		h.bodyFetchMu.Unlock()
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
+		return
+	}
+	done := make(chan struct{})
+	h.bodyFetches[msgID] = done
+	h.bodyFetchMu.Unlock()
+
+	defer func() {
+		h.bodyFetchMu.Lock()
+		delete(h.bodyFetches, msgID)
+		close(done)
+		h.bodyFetchMu.Unlock()
+	}()
+
+	h.fetchBody(ctx, msgID, accountID)
+}
+
 func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) {
 	var bodyData []byte
 
@@ -552,23 +584,7 @@ func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) 
 			return
 		}
 
-		cfg, err := h.accountStore.GetConfig(ctx, accountID)
-		if err != nil {
-			return
-		}
-
-		password, err := h.resolvePassword(ctx, cfg, accountID)
-		if err != nil {
-			return
-		}
-
-		client, err := imap.NewClient(ctx, cfg, password)
-		if err != nil {
-			return
-		}
-		defer client.Close()
-
-		bodyData, err = client.FetchBody(ctx, info.FolderRemoteID, info.RemoteUID)
+		bodyData, err = h.fetchBodyRemote(ctx, accountID, info.FolderRemoteID, info.RemoteUID)
 		if err != nil {
 			return
 		}
@@ -580,6 +596,65 @@ func (h *Handler) fetchBody(ctx context.Context, msgID int64, accountID string) 
 	}
 
 	h.storeParsedBody(ctx, parsed, msgID, accountID)
+}
+
+func (h *Handler) fetchBodyRemote(ctx context.Context, accountID, folderRemoteID string, remoteUID uint32) ([]byte, error) {
+	bodyData, err := h.fetchBodyRemoteWithCachedClient(ctx, accountID, folderRemoteID, remoteUID)
+	if err == nil {
+		return bodyData, nil
+	}
+	h.closeBodyClient(accountID)
+	return h.fetchBodyRemoteWithCachedClient(ctx, accountID, folderRemoteID, remoteUID)
+}
+
+func (h *Handler) fetchBodyRemoteWithCachedClient(ctx context.Context, accountID, folderRemoteID string, remoteUID uint32) ([]byte, error) {
+	client, err := h.getBodyClient(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	return client.FetchBody(ctx, folderRemoteID, remoteUID)
+}
+
+func (h *Handler) getBodyClient(ctx context.Context, accountID string) (*imap.Client, error) {
+	h.bodyClientMu.Lock()
+	if client := h.bodyClients[accountID]; client != nil {
+		h.bodyClientMu.Unlock()
+		return client, nil
+	}
+	h.bodyClientMu.Unlock()
+
+	cfg, err := h.accountStore.GetConfig(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	password, err := h.resolvePassword(ctx, cfg, accountID)
+	if err != nil {
+		return nil, err
+	}
+	client, err := imap.NewClient(ctx, cfg, password)
+	if err != nil {
+		return nil, err
+	}
+
+	h.bodyClientMu.Lock()
+	if existing := h.bodyClients[accountID]; existing != nil {
+		h.bodyClientMu.Unlock()
+		client.Close()
+		return existing, nil
+	}
+	h.bodyClients[accountID] = client
+	h.bodyClientMu.Unlock()
+	return client, nil
+}
+
+func (h *Handler) closeBodyClient(accountID string) {
+	h.bodyClientMu.Lock()
+	client := h.bodyClients[accountID]
+	delete(h.bodyClients, accountID)
+	h.bodyClientMu.Unlock()
+	if client != nil {
+		client.Close()
+	}
 }
 
 func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
@@ -996,7 +1071,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 	tab := r.PathValue("tab")
-	if tab != "accounts" && tab != "sync" && tab != "appearance" {
+	if tab != "accounts" && tab != "sync" && tab != "appearance" && tab != "advanced" {
 		http.NotFound(w, r)
 		return
 	}
@@ -1421,10 +1496,10 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 			active := state.InProgress || (state.Total > 0 && state.Processed < state.Total)
 			if active || lastProcessingActive != active {
 				m := map[string]any{
-					"type":       string(mail.EventProcessingStatus),
+					"type":        string(mail.EventProcessingStatus),
 					"in_progress": state.InProgress,
-					"processed":  state.Processed,
-					"total":      state.Total,
+					"processed":   state.Processed,
+					"total":       state.Total,
 				}
 				data, _ := json.Marshal(m)
 				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mail.EventProcessingStatus, data)
@@ -2149,11 +2224,28 @@ func (h *Handler) handleRefetchBody(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.fetchBody(ctx, msgID, info.AccountID)
+	h.ensureBodyFetched(ctx, msgID, info.AccountID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "refetched"})
+}
+
+func (h *Handler) handlePrefetchBody(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	ctx := r.Context()
+
+	msgID, info, err := h.getMessageInfo(ctx, idStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !h.db.IsBodyFetched(ctx, msgID) {
+		h.ensureBodyFetched(ctx, msgID, info.AccountID)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {

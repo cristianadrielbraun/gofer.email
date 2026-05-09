@@ -264,11 +264,6 @@ func (o *SyncOrchestrator) fullFolderSync(ctx context.Context, client *imap.Clie
 				return err
 			}
 			o.syncFolderMessages(ctx, client, accountID, folder.ID, folder.RemoteID)
-			o.events.Publish(Event{
-				Type:      EventSyncComplete,
-				AccountID: accountID,
-				FolderID:  folder.ID,
-			})
 			return nil
 		}
 	}
@@ -303,9 +298,10 @@ func (o *SyncOrchestrator) fullFolderSync(ctx context.Context, client *imap.Clie
 	o.db.RefreshFolderUnreadCount(ctx, folder.ID)
 
 	o.events.Publish(Event{
-		Type:      EventSyncComplete,
-		AccountID: accountID,
-		FolderID:  folder.ID,
+		Type:       EventSyncComplete,
+		AccountID:  accountID,
+		FolderID:   folder.ID,
+		FolderRole: folder.Role,
 	})
 
 	return nil
@@ -467,6 +463,15 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string) er
 		}
 	}
 
+	folderInfos, err := o.db.GetFoldersForAccount(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	folderInfoByRemote := make(map[string]storage.FolderSyncInfo, len(folderInfos))
+	for _, folder := range folderInfos {
+		folderInfoByRemote[folder.RemoteID] = folder
+	}
+
 	for _, f := range folders {
 		select {
 		case <-ctx.Done():
@@ -475,7 +480,13 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string) er
 		}
 
 		folderDBID := folderIDFromRemote(accountID, f.Name)
-		o.syncFolderMessages(ctx, client, accountID, folderDBID, f.Name)
+		folderInfo, ok := folderInfoByRemote[f.Name]
+		if !ok {
+			folderInfo = storage.FolderSyncInfo{ID: folderDBID, AccountID: accountID, RemoteID: f.Name, Role: f.Role}
+		}
+		if err := o.fullFolderSync(ctx, client, accountID, folderInfo); err != nil {
+			log.Printf("sync folder %s/%s: %v", accountID, f.Name, err)
+		}
 	}
 
 	return nil

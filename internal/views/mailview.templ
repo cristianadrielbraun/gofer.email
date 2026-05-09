@@ -728,9 +728,15 @@ templ MailViewBodyByID(emailID string) {
 			}
 		</div>
 	</div>
+	<div data-email-body-loading={ emailID } class="space-y-3 py-2" aria-label="Loading email body">
+		<div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div>
+		<div class="h-4 w-11/12 rounded bg-ink/5 animate-pulse"></div>
+		<div class="h-4 w-4/5 rounded bg-ink/5 animate-pulse"></div>
+		<div class="h-4 w-2/3 rounded bg-ink/5 animate-pulse"></div>
+	</div>
 	<iframe id={ "email-body-frame-" + emailID }
 		sandbox="allow-scripts"
-		class="w-full border-0 min-h-[100px] overflow-hidden"
+		class="w-full border-0 min-h-[100px] overflow-hidden opacity-0 transition-opacity duration-150"
 		data-email-body-frame
 		data-email-id={ emailID }>
 	</iframe>

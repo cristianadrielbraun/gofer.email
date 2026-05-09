@@ -69,12 +69,20 @@ func previewFromBodyPaths(textPath, htmlPath string) string {
 func initials(name string) string {
 	parts := strings.Fields(name)
 	if len(parts) >= 2 {
-		return strings.ToUpper(string(parts[0][0]) + string(parts[1][0]))
+		return strings.ToUpper(firstRune(parts[0]) + firstRune(parts[1]))
 	}
-	if len(name) >= 2 {
-		return strings.ToUpper(name[:2])
+	runes := []rune(name)
+	if len(runes) >= 2 {
+		return strings.ToUpper(string(runes[:2]))
 	}
 	return strings.ToUpper(name)
+}
+
+func firstRune(s string) string {
+	for _, r := range s {
+		return string(r)
+	}
+	return ""
 }
 
 func formatRelativeDate(t, now time.Time) string {
@@ -761,7 +769,7 @@ func (db *DB) UpdateFolderSyncState(ctx context.Context, folderID string, highes
 
 func (db *DB) UpdateFolderIncrementalSync(ctx context.Context, folderID string, highestUID uint32, uidValidity uint32, totalCount int) error {
 	_, err := db.Write().ExecContext(ctx,
-		`UPDATE folders SET highest_seen_uid = ?, uid_validity = ?, total_count = ?,
+		`UPDATE folders SET highest_seen_uid = MAX(COALESCE(highest_seen_uid, 0), ?), uid_validity = ?, total_count = ?,
 		 last_incremental_sync_at = CURRENT_TIMESTAMP, sync_error = NULL, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ?`, highestUID, uidValidity, totalCount, folderID)
 	return err
@@ -770,7 +778,11 @@ func (db *DB) UpdateFolderIncrementalSync(ctx context.Context, folderID string, 
 func (db *DB) GetHighestSeenUID(ctx context.Context, folderID string) (uint32, error) {
 	var uid uint32
 	err := db.Read().QueryRowContext(ctx,
-		`SELECT COALESCE(highest_seen_uid, 0) FROM folders WHERE id = ?`, folderID,
+		`SELECT COALESCE(
+			NULLIF(highest_seen_uid, 0),
+			(SELECT MAX(remote_uid) FROM message_folder_state WHERE folder_id = ?),
+			0
+		) FROM folders WHERE id = ?`, folderID, folderID,
 	).Scan(&uid)
 	return uid, err
 }
@@ -1072,16 +1084,16 @@ func (db *DB) GetThreadMessages(ctx context.Context, accountID, threadID string)
 	var items []models.ThreadItem
 	for rows.Next() {
 		var (
-			item             models.ThreadItem
-			fromName         string
-			fromEmail        string
-			dateReceived     sqliteNullTime
-			hasAttach        int
-			isRead           int
-			isStarred        int
-			internetMsgID    sql.NullString
-			refs             sql.NullString
-			bodyTextPath     sql.NullString
+			item          models.ThreadItem
+			fromName      string
+			fromEmail     string
+			dateReceived  sqliteNullTime
+			hasAttach     int
+			isRead        int
+			isStarred     int
+			internetMsgID sql.NullString
+			refs          sql.NullString
+			bodyTextPath  sql.NullString
 		)
 		if err := rows.Scan(&item.ID, &item.AccountID, &item.Subject, &fromName, &fromEmail, &item.Preview,
 			&dateReceived, &hasAttach, &isRead, &isStarred, &item.FolderName, &item.FolderRole,
@@ -2181,8 +2193,9 @@ func (db *DB) SetUISettings(ctx context.Context, userID string, settings map[str
 
 func defaultUISettings() map[string]string {
 	return map[string]string{
-		"theme":       "dark",
-		"theme_style": "classic",
+		"theme":             "dark",
+		"theme_style":       "classic",
+		"prefetch_on_hover": "true",
 	}
 }
 

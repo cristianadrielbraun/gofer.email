@@ -302,12 +302,20 @@ func generateAccountID(email string) string {
 func extractInitials(name string) string {
 	parts := strings.Fields(name)
 	if len(parts) >= 2 {
-		return strings.ToUpper(string(parts[0][0]) + string(parts[1][0]))
+		return strings.ToUpper(firstRune(parts[0]) + firstRune(parts[1]))
 	}
-	if len(name) >= 2 {
-		return strings.ToUpper(name[:2])
+	runes := []rune(name)
+	if len(runes) >= 2 {
+		return strings.ToUpper(string(runes[:2]))
 	}
 	return strings.ToUpper(name)
+}
+
+func firstRune(s string) string {
+	for _, r := range s {
+		return string(r)
+	}
+	return ""
 }
 
 func generateColor(id string) string {
