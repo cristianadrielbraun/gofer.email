@@ -8,12 +8,19 @@ import (
 	"gofer.email/components/button"
 	"gofer.email/components/tooltip"
 	"gofer.email/components/dropdown"
+	"gofer.email/components/checkbox"
+	switchcomp "gofer.email/components/switch"
+	"gofer.email/components/dialog"
+	"gofer.email/components/input"
+	"gofer.email/components/calendar"
+	"gofer.email/components/selectbox"
 )
 
-templ MailList(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, width string, senderDisplayMode string, viewMode string) {
+templ MailList(accounts []models.Account, emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, width string, senderDisplayMode string, viewMode string) {
 	<div id="mail-list" class="w-full lg:flex flex-col border-r border-border bg-card h-full overflow-hidden" style={ "width:" + width } data-mail-list-view={ mailListViewMode(viewMode) }>
 		@MailListHeader(activeFolder, totalCount)
 		@MailListToolbar(mailListViewMode(viewMode))
+		@MailFilterAdvancedDialog(accounts)
 		<hr class="divider-etched"/>
 		@MailListEmails(emails, activeFolder, selectedEmail, totalCount, senderDisplayMode, mailListViewMode(viewMode))
 	</div>
@@ -65,21 +72,62 @@ templ MailListHeader(activeFolder string, totalCount int) {
 
 templ MailListToolbar(viewMode string) {
 	<div class="flex items-center gap-1 px-4 py-1.5">
-		@tooltip.Tooltip() {
-			@tooltip.Trigger() {
+		@dropdown.Dropdown() {
+			@dropdown.Trigger() {
 				@button.Button(button.Props{
-					Variant: button.VariantGhost,
-					Size:    button.SizeIcon,
-					Class:   "h-7 w-7",
+					Variant:    button.VariantGhost,
+					Size:       button.SizeIcon,
+					Class:      "h-7 w-7 relative data-[active=true]:bg-accent data-[active=true]:text-foreground",
+					Attributes: templ.Attributes{"aria-label": "Filter messages", "data-mail-filter-button": ""},
 				}) {
 					@icon.ListFilter(icon.Props{Class: "size-3.5"})
+					<span data-mail-filter-count class="hidden absolute -right-1 -top-1 min-w-4 h-4 rounded-full bg-primary px-1 text-[10px] leading-4 text-primary-foreground font-semibold"></span>
 				}
 			}
-			@tooltip.Content(tooltip.ContentProps{
-				Position:  tooltip.PositionBottom,
-				ShowArrow: true,
-			}) {
-				Filter
+			@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomStart, Class: "w-64 normal-case tracking-normal p-2"}) {
+				<form data-mail-filter-form class="space-y-2">
+					<div class="flex items-center justify-between gap-2 px-2 py-1.5">
+						<div class="text-xs font-semibold text-muted-foreground">Quick filters</div>
+						<button type="button" data-mail-filter-clear class="text-[11px] font-medium text-muted-foreground hover:text-foreground">Clear</button>
+					</div>
+					<div class="grid gap-2 px-2">
+						<div class="space-y-1">
+							<div class="text-[11px] font-medium text-muted-foreground">Status</div>
+							<div class="inline-grid h-7 w-full grid-cols-3 rounded-md border border-border bg-background p-0.5 text-[11px]" data-mail-tristate="status" data-mail-tristate-value="">
+								<button type="button" data-mail-tristate-option="unread" class="rounded px-1.5 text-muted-foreground hover:text-foreground">Unread</button>
+								<button type="button" data-mail-tristate-option="" class="rounded px-1.5 bg-card text-foreground shadow-sm">Any</button>
+								<button type="button" data-mail-tristate-option="read" class="rounded px-1.5 text-muted-foreground hover:text-foreground">Read</button>
+							</div>
+						</div>
+						<div class="space-y-1">
+							<div class="text-[11px] font-medium text-muted-foreground">Attachments</div>
+							<div class="inline-grid h-7 w-full grid-cols-3 rounded-md border border-border bg-background p-0.5 text-[11px]" data-mail-tristate="attachments" data-mail-tristate-value="">
+								<button type="button" data-mail-tristate-option="no" class="rounded px-1.5 text-muted-foreground hover:text-foreground">No</button>
+								<button type="button" data-mail-tristate-option="" class="rounded px-1.5 bg-card text-foreground shadow-sm">Any</button>
+								<button type="button" data-mail-tristate-option="yes" class="rounded px-1.5 text-muted-foreground hover:text-foreground">Yes</button>
+							</div>
+						</div>
+						<div class="grid grid-cols-3 gap-6 pt-0.5 text-center">
+							<div class="flex flex-col items-center gap-1 text-[11px] font-medium text-muted-foreground">
+								<div class="w-full truncate">Starred</div>
+								@switchcomp.Switch(switchcomp.Props{Name: "starred", Value: "1", Class: "h-4 w-8 after:h-3 after:w-3 peer-checked:after:translate-x-4", Attributes: templ.Attributes{"data-mail-filter-input": ""}})
+							</div>
+							<div class="flex flex-col items-center gap-1 text-[11px] font-medium text-muted-foreground">
+								<div class="w-full truncate">Labels</div>
+								@switchcomp.Switch(switchcomp.Props{Name: "has_labels", Value: "1", Class: "h-4 w-8 after:h-3 after:w-3 peer-checked:after:translate-x-4", Attributes: templ.Attributes{"data-mail-filter-input": ""}})
+							</div>
+							<div class="flex flex-col items-center gap-1 text-[11px] font-medium text-muted-foreground">
+								<div class="w-full truncate">Threads</div>
+								@switchcomp.Switch(switchcomp.Props{Name: "threads_only", Value: "1", Class: "h-4 w-8 after:h-3 after:w-3 peer-checked:after:translate-x-4", Attributes: templ.Attributes{"data-mail-filter-input": ""}})
+							</div>
+						</div>
+					</div>
+					<div class="my-1 h-px bg-border/70"></div>
+					<button type="button" data-mail-advanced-filter-open class="flex h-8 w-full items-center justify-between rounded-md px-2 text-sm hover:bg-accent">
+						<span>Advanced filters...</span>
+						@icon.SlidersHorizontal(icon.Props{Class: "size-3.5 text-muted-foreground"})
+					</button>
+				</form>
 			}
 		}
 		<div class="flex-1"></div>
@@ -202,6 +250,157 @@ templ MailListToolbar(viewMode string) {
 			}
 		}
 	</div>
+}
+
+templ MailFilterAdvancedDialog(accounts []models.Account) {
+	@dialog.Dialog(dialog.Props{ID: "mail-advanced-filter-dialog"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-3xl"}) {
+			@dialog.Header() {
+				@dialog.Title() { Advanced filters }
+			}
+			<form data-mail-advanced-filter-form class="space-y-4">
+				<div data-mail-filter-summary class="hidden flex flex-wrap gap-1.5 rounded-lg border border-border bg-muted/30 p-2"></div>
+				<div class="grid gap-4 sm:grid-cols-[9rem_1fr]">
+					<nav class="flex gap-1 overflow-x-auto sm:flex-col sm:overflow-visible" aria-label="Advanced filter categories">
+						@MailFilterCategoryButton("calendar", "Calendar", true)
+						@MailFilterCategoryButton("audience", "Audience", false)
+						@MailFilterCategoryButton("content", "Content", false)
+						@MailFilterCategoryButton("status", "Status", false)
+						@MailFilterCategoryButton("threads", "Threads", false)
+					</nav>
+					<div class="min-h-[19rem] rounded-lg border border-border bg-background/35 p-4">
+						<section data-mail-filter-panel="calendar" class="space-y-4">
+							<h3 class="text-sm font-semibold text-foreground">Calendar</h3>
+							<div class="grid gap-3 sm:grid-cols-2">
+								<div class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									After
+									@MailFilterCalendarField("after_date", "mail-filter-after-calendar", "Any date")
+								</div>
+								<div class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									Before
+									@MailFilterCalendarField("before_date", "mail-filter-before-calendar", "Any date")
+								</div>
+							</div>
+						</section>
+						<section data-mail-filter-panel="audience" class="hidden space-y-4">
+							<h3 class="text-sm font-semibold text-foreground">Audience</h3>
+							<div class="grid gap-3 sm:grid-cols-2">
+								if len(accounts) > 0 {
+									<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+										Account
+										@selectbox.SelectBox() {
+											@selectbox.Trigger(selectbox.TriggerProps{Name: "account_id", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}}) {
+												@selectbox.Value(selectbox.ValueProps{Placeholder: "Any account"})
+											}
+											@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+												for _, account := range accounts {
+													@selectbox.Item(selectbox.ItemProps{Value: account.ID}) { { account.Email } }
+												}
+											}
+										}
+									</label>
+								}
+								<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									From
+									@input.Input(input.Props{Name: "from", Placeholder: "name or email", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								</label>
+								<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									From domain
+									@input.Input(input.Props{Name: "from_domain", Placeholder: "example.com", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								</label>
+								<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									To / Cc
+									@input.Input(input.Props{Name: "to", Placeholder: "name or email", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								</label>
+							</div>
+						</section>
+						<section data-mail-filter-panel="content" class="hidden space-y-4">
+							<h3 class="text-sm font-semibold text-foreground">Content</h3>
+							<div class="grid gap-3 sm:grid-cols-2">
+								<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									Subject contains
+									@input.Input(input.Props{Name: "subject", Placeholder: "invoice, project, receipt...", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								</label>
+								<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									Body contains
+									@input.Input(input.Props{Name: "body", Placeholder: "text in message body", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								</label>
+								<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									Attachment filename
+									@input.Input(input.Props{Name: "attachment", Placeholder: "receipt.pdf", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								</label>
+								<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
+									Label
+									@input.Input(input.Props{Name: "label", Placeholder: "work, invoices...", Class: "h-8", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								</label>
+							</div>
+						</section>
+						<section data-mail-filter-panel="status" class="hidden space-y-4">
+							<h3 class="text-sm font-semibold text-foreground">Status</h3>
+							<div class="grid gap-3 sm:grid-cols-2">
+								<label class="flex items-center gap-2 rounded-md border border-border bg-background/40 px-3 py-2 text-sm">
+									@checkbox.Checkbox(checkbox.Props{Name: "read", Value: "1", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+									<span>Read</span>
+								</label>
+								<label class="flex items-center gap-2 rounded-md border border-border bg-background/40 px-3 py-2 text-sm">
+									@checkbox.Checkbox(checkbox.Props{Name: "no_attachments", Value: "1", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+									<span>No attachments</span>
+								</label>
+								<label class="flex items-center gap-2 rounded-md border border-border bg-background/40 px-3 py-2 text-sm">
+									@checkbox.Checkbox(checkbox.Props{Name: "has_labels", Value: "1", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+									<span>Has labels</span>
+								</label>
+							</div>
+						</section>
+						<section data-mail-filter-panel="threads" class="hidden space-y-4">
+							<h3 class="text-sm font-semibold text-foreground">Threads</h3>
+							<label class="flex items-center gap-2 rounded-md border border-border bg-background/40 px-3 py-2 text-sm">
+								@checkbox.Checkbox(checkbox.Props{Name: "threads_only", Value: "1", Attributes: templ.Attributes{"data-mail-advanced-filter-input": ""}})
+								<span>Threads only</span>
+							</label>
+						</section>
+					</div>
+				</div>
+				<div class="flex items-center justify-between gap-2 border-t border-border pt-4">
+					<button type="button" data-mail-advanced-filter-clear class="text-xs font-medium text-muted-foreground hover:text-foreground">Clear advanced</button>
+					<div class="flex items-center gap-2">
+						@dialog.Close(dialog.CloseProps{For: "mail-advanced-filter-dialog"}) {
+							<button type="button" class="h-8 rounded-md border border-border px-3 text-xs font-medium hover:bg-accent">Cancel</button>
+						}
+						<button type="submit" class="h-8 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Apply</button>
+					</div>
+				</div>
+			</form>
+		}
+	}
+}
+
+templ MailFilterCategoryButton(value string, label string, active bool) {
+	<button
+		type="button"
+		data-mail-filter-panel-button={ value }
+		class={
+			"shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors",
+			templ.KV("bg-accent text-foreground", active),
+			templ.KV("text-muted-foreground hover:bg-accent/60 hover:text-foreground", !active),
+		}
+	>
+		{ label }
+	</button>
+}
+
+templ MailFilterCalendarField(name string, id string, placeholder string) {
+	@dropdown.Dropdown() {
+		@dropdown.Trigger() {
+			<button type="button" class="flex h-8 w-full items-center justify-between rounded-md border border-input bg-input/30 px-3 text-sm font-normal text-foreground shadow-xs hover:bg-accent/50">
+				<span data-mail-date-display={ name } class="truncate text-muted-foreground">{ placeholder }</span>
+				@icon.Calendar(icon.Props{Class: "size-4 text-muted-foreground"})
+			</button>
+		}
+		@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomStart, Class: "w-auto p-3"}) {
+			@calendar.Calendar(calendar.Props{ID: id, Name: name, Class: "[--cell-size:1.9rem]", HideHiddenInput: false})
+		}
+	}
 }
 
 templ MailListEmails(emails []models.Email, folderID string, selectedEmail *models.Email, totalCount int, senderDisplayMode string, viewMode string) {

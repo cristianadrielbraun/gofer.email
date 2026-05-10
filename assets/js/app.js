@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", function () {
   setupFolderClickInterception()
   setupEmailSelectionTracking()
   setupMailListViewToggle()
+  setupMailFilters()
   setupMailTableColumnResize()
   setupSSE()
   setupMailListActions()
@@ -151,6 +152,297 @@ document.addEventListener("DOMContentLoaded", function () {
       var match = path && path.match(/^\/api\/accounts\/([^/]+)$/)
       if (!match || !evt.detail.xhr || evt.detail.xhr.status !== 202) return
       markAccountDeleting(match[1])
+    })
+  }
+
+  function setupMailFilters() {
+    function emptyFilters() {
+      return {
+        unread: false,
+        starred: false,
+        attachments: false,
+        read: false,
+        noAttachments: false,
+        hasLabels: false,
+        threadsOnly: false,
+        from: "",
+        to: "",
+        subject: "",
+        body: "",
+        fromDomain: "",
+        attachment: "",
+        label: "",
+        accountId: "",
+        afterDate: "",
+        beforeDate: "",
+      }
+    }
+
+    function readFilters() {
+      var filters = emptyFilters()
+      var form = document.querySelector("[data-mail-filter-form]")
+      if (form) {
+        var status = form.querySelector('[data-mail-tristate="status"]')
+        var attachments = form.querySelector('[data-mail-tristate="attachments"]')
+        var statusValue = status ? status.getAttribute("data-mail-tristate-value") : ""
+        var attachmentValue = attachments ? attachments.getAttribute("data-mail-tristate-value") : ""
+        filters.unread = statusValue === "unread"
+        filters.read = statusValue === "read"
+        filters.attachments = attachmentValue === "yes"
+        filters.noAttachments = attachmentValue === "no"
+        filters.starred = !!form.querySelector('input[name="starred"]:checked')
+        filters.hasLabels = !!form.querySelector('input[name="has_labels"]:checked')
+        filters.threadsOnly = !!form.querySelector('input[name="threads_only"]:checked')
+      }
+      var advanced = document.querySelector("[data-mail-advanced-filter-form]")
+      if (advanced) {
+        filters.read = filters.read || !!advanced.querySelector('input[name="read"]:checked')
+        filters.noAttachments = filters.noAttachments || !!advanced.querySelector('input[name="no_attachments"]:checked')
+        filters.hasLabels = filters.hasLabels || !!advanced.querySelector('input[name="has_labels"]:checked')
+        filters.threadsOnly = filters.threadsOnly || !!advanced.querySelector('input[name="threads_only"]:checked')
+        filters.from = (advanced.querySelector('input[name="from"]') || {}).value || ""
+        filters.to = (advanced.querySelector('input[name="to"]') || {}).value || ""
+        filters.subject = (advanced.querySelector('input[name="subject"]') || {}).value || ""
+        filters.body = (advanced.querySelector('input[name="body"]') || {}).value || ""
+        filters.fromDomain = (advanced.querySelector('input[name="from_domain"]') || {}).value || ""
+        filters.attachment = (advanced.querySelector('input[name="attachment"]') || {}).value || ""
+        filters.label = (advanced.querySelector('input[name="label"]') || {}).value || ""
+        filters.accountId = (advanced.querySelector('input[name="account_id"]') || {}).value || ""
+        filters.afterDate = (advanced.querySelector('input[name="after_date"]') || {}).value || ""
+        filters.beforeDate = (advanced.querySelector('input[name="before_date"]') || {}).value || ""
+      }
+      return filters
+    }
+
+    function syncFilterButton(filters) {
+      var count = (filters.unread ? 1 : 0) + (filters.starred ? 1 : 0) + (filters.attachments ? 1 : 0) +
+        (filters.read ? 1 : 0) + (filters.noAttachments ? 1 : 0) + (filters.hasLabels ? 1 : 0) +
+        (filters.threadsOnly ? 1 : 0) + (filters.from ? 1 : 0) + (filters.to ? 1 : 0) +
+        (filters.subject ? 1 : 0) + (filters.body ? 1 : 0) + (filters.fromDomain ? 1 : 0) +
+        (filters.attachment ? 1 : 0) + (filters.label ? 1 : 0) + (filters.accountId ? 1 : 0) +
+        (filters.afterDate ? 1 : 0) + (filters.beforeDate ? 1 : 0)
+      var button = document.querySelector("[data-mail-filter-button]")
+      var badge = document.querySelector("[data-mail-filter-count]")
+      if (button) {
+        button.dataset.active = count > 0 ? "true" : "false"
+        button.classList.toggle("text-primary", count > 0)
+        button.classList.toggle("bg-accent", count > 0)
+      }
+      if (badge) {
+        badge.textContent = String(count)
+        badge.classList.toggle("hidden", count === 0)
+      }
+    }
+
+    function advancedFilterDefs() {
+      return [
+        { key: "accountId", name: "account_id", label: "Account" },
+        { key: "afterDate", name: "after_date", label: "After" },
+        { key: "beforeDate", name: "before_date", label: "Before" },
+        { key: "from", name: "from", label: "From" },
+        { key: "fromDomain", name: "from_domain", label: "From domain" },
+        { key: "to", name: "to", label: "To / Cc" },
+        { key: "subject", name: "subject", label: "Subject" },
+        { key: "body", name: "body", label: "Body" },
+        { key: "attachment", name: "attachment", label: "Attachment" },
+        { key: "label", name: "label", label: "Label" },
+        { key: "read", name: "read", label: "Read" },
+        { key: "noAttachments", name: "no_attachments", label: "No attachments" },
+        { key: "hasLabels", name: "has_labels", label: "Has labels" },
+        { key: "threadsOnly", name: "threads_only", label: "Threads only" },
+      ]
+    }
+
+    function displayValueForAdvanced(name, value) {
+      if (name === "account_id") {
+        var item = document.querySelector('[data-tui-selectbox-value="' + value + '"]')
+        return item ? item.textContent.trim() : value
+      }
+      return value
+    }
+
+    function renderAdvancedSummary() {
+      var summary = document.querySelector("[data-mail-filter-summary]")
+      if (!summary) return
+      var filters = readFilters()
+      var defs = advancedFilterDefs()
+      var html = ""
+      for (var i = 0; i < defs.length; i++) {
+        var def = defs[i]
+        var value = filters[def.key]
+        if (!value) continue
+        var text = typeof value === "boolean" ? def.label : (def.label + ": " + displayValueForAdvanced(def.name, value))
+        html += '<button type="button" data-mail-filter-chip-remove="' + def.name + '" class="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1 text-[11px] font-medium text-foreground hover:bg-accent">' + text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + '<span class="text-muted-foreground">x</span></button>'
+      }
+      summary.innerHTML = html || '<span class="px-1 py-0.5 text-xs text-muted-foreground">No advanced filters applied</span>'
+      summary.classList.toggle("hidden", false)
+    }
+
+    function clearInputs(selector) {
+      var form = document.querySelector(selector)
+      if (!form) return
+      var inputs = form.querySelectorAll("input")
+      for (var i = 0; i < inputs.length; i++) {
+        if (inputs[i].type === "checkbox") inputs[i].checked = false
+        else inputs[i].value = ""
+      }
+      var displays = form.querySelectorAll("[data-mail-date-display]")
+      for (var j = 0; j < displays.length; j++) displays[j].textContent = "Any date"
+      var calendars = form.querySelectorAll("[data-tui-calendar-container]")
+      for (var k = 0; k < calendars.length; k++) {
+        calendars[k].removeAttribute("data-tui-calendar-selected-date")
+      }
+      var selectHidden = form.querySelectorAll("[data-tui-selectbox-hidden-input]")
+      for (var s = 0; s < selectHidden.length; s++) {
+        selectHidden[s].value = ""
+        var selectRoot = selectHidden[s].closest(".select-container")
+        if (selectRoot) {
+          var valueEl = selectRoot.querySelector("[data-tui-selectbox-placeholder]")
+          if (valueEl) valueEl.textContent = valueEl.getAttribute("data-tui-selectbox-placeholder") || ""
+          var selectedItems = selectRoot.querySelectorAll("[data-tui-selectbox-selected='true']")
+          for (var si = 0; si < selectedItems.length; si++) selectedItems[si].setAttribute("data-tui-selectbox-selected", "false")
+        }
+      }
+      var tristates = form.querySelectorAll("[data-mail-tristate]")
+      for (var t = 0; t < tristates.length; t++) setTriState(tristates[t], "")
+      renderAdvancedSummary()
+    }
+
+    function clearAdvancedFilter(name) {
+      var form = document.querySelector("[data-mail-advanced-filter-form]")
+      if (!form) return
+      var input = form.querySelector('[name="' + name + '"]')
+      if (input) {
+        if (input.type === "checkbox") input.checked = false
+        else input.value = ""
+      }
+      var dateDisplay = form.querySelector('[data-mail-date-display="' + name + '"]')
+      if (dateDisplay) dateDisplay.textContent = "Any date"
+      if (name === "account_id") {
+        var selectRoot = input && input.closest(".select-container")
+        if (selectRoot) {
+          var valueEl = selectRoot.querySelector("[data-tui-selectbox-placeholder]")
+          if (valueEl) valueEl.textContent = valueEl.getAttribute("data-tui-selectbox-placeholder") || ""
+          var selectedItems = selectRoot.querySelectorAll("[data-tui-selectbox-selected='true']")
+          for (var i = 0; i < selectedItems.length; i++) selectedItems[i].setAttribute("data-tui-selectbox-selected", "false")
+        }
+      }
+      renderAdvancedSummary()
+    }
+
+    function setTriState(control, value) {
+      if (!control) return
+      control.setAttribute("data-mail-tristate-value", value || "")
+      var buttons = control.querySelectorAll("[data-mail-tristate-option]")
+      for (var i = 0; i < buttons.length; i++) {
+        var active = buttons[i].getAttribute("data-mail-tristate-option") === (value || "")
+        buttons[i].classList.toggle("bg-card", active)
+        buttons[i].classList.toggle("text-foreground", active)
+        buttons[i].classList.toggle("shadow-sm", active)
+        buttons[i].classList.toggle("text-muted-foreground", !active)
+      }
+    }
+
+    function applyCurrentFilters() {
+      var filters = readFilters()
+      syncFilterButton(filters)
+      if (virtualMailList) virtualMailList.applyFilters(filters).catch(function () {})
+    }
+
+    document.addEventListener("submit", function (e) {
+      var form = e.target && e.target.closest && e.target.closest("[data-mail-filter-form]")
+      if (!form) return
+      e.preventDefault()
+    })
+
+    document.addEventListener("change", function (e) {
+      var input = e.target && e.target.closest && e.target.closest("[data-mail-filter-input]")
+      if (!input) return
+      applyCurrentFilters()
+    })
+
+    document.addEventListener("click", function (e) {
+      var panelButton = e.target && e.target.closest && e.target.closest("[data-mail-filter-panel-button]")
+      if (panelButton) {
+        e.preventDefault()
+        var panel = panelButton.getAttribute("data-mail-filter-panel-button")
+        document.querySelectorAll("[data-mail-filter-panel-button]").forEach(function (btn) {
+          var active = btn === panelButton
+          btn.classList.toggle("bg-accent", active)
+          btn.classList.toggle("text-foreground", active)
+          btn.classList.toggle("text-muted-foreground", !active)
+        })
+        document.querySelectorAll("[data-mail-filter-panel]").forEach(function (section) {
+          section.classList.toggle("hidden", section.getAttribute("data-mail-filter-panel") !== panel)
+        })
+        return
+      }
+
+      var chipRemove = e.target && e.target.closest && e.target.closest("[data-mail-filter-chip-remove]")
+      if (chipRemove) {
+        e.preventDefault()
+        clearAdvancedFilter(chipRemove.getAttribute("data-mail-filter-chip-remove"))
+        return
+      }
+
+      var tristateOption = e.target && e.target.closest && e.target.closest("[data-mail-tristate-option]")
+      if (tristateOption) {
+        e.preventDefault()
+        var control = tristateOption.closest("[data-mail-tristate]")
+        setTriState(control, tristateOption.getAttribute("data-mail-tristate-option") || "")
+        applyCurrentFilters()
+        return
+      }
+
+      var advancedOpen = e.target && e.target.closest && e.target.closest("[data-mail-advanced-filter-open]")
+      if (advancedOpen) {
+        e.preventDefault()
+        renderAdvancedSummary()
+        if (window.tui && window.tui.dialog) window.tui.dialog.open("mail-advanced-filter-dialog")
+        return
+      }
+
+      var clear = e.target && e.target.closest && e.target.closest("[data-mail-filter-clear]")
+      if (!clear) return
+      e.preventDefault()
+      clearInputs("[data-mail-filter-form]")
+      clearInputs("[data-mail-advanced-filter-form]")
+      applyCurrentFilters()
+    })
+
+    document.addEventListener("submit", function (e) {
+      var form = e.target && e.target.closest && e.target.closest("[data-mail-advanced-filter-form]")
+      if (!form) return
+      e.preventDefault()
+      applyCurrentFilters()
+      if (window.tui && window.tui.dialog) window.tui.dialog.close("mail-advanced-filter-dialog")
+    })
+
+    document.addEventListener("click", function (e) {
+      var clear = e.target && e.target.closest && e.target.closest("[data-mail-advanced-filter-clear]")
+      if (!clear) return
+      e.preventDefault()
+      clearInputs("[data-mail-advanced-filter-form]")
+    })
+
+    document.addEventListener("input", function (e) {
+      if (!e.target || !e.target.closest || !e.target.closest("[data-mail-advanced-filter-form]")) return
+      renderAdvancedSummary()
+    })
+
+    document.addEventListener("change", function (e) {
+      if (!e.target || !e.target.closest || !e.target.closest("[data-mail-advanced-filter-form]")) return
+      renderAdvancedSummary()
+    })
+
+    document.addEventListener("calendar-date-selected", function (e) {
+      var container = e.target && e.target.closest && e.target.closest("[data-tui-calendar-container]")
+      if (!container) return
+      var hidden = container.closest("[data-tui-calendar-wrapper]") && container.closest("[data-tui-calendar-wrapper]").querySelector("[data-tui-calendar-hidden-input]")
+      if (!hidden || !hidden.name) return
+      var display = document.querySelector('[data-mail-date-display="' + hidden.name + '"]')
+      if (display) display.textContent = hidden.value || "Any date"
+      renderAdvancedSummary()
     })
   }
 

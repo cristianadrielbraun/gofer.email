@@ -3,14 +3,14 @@ package models
 import "html/template"
 
 type Account struct {
-	ID       string
-	Name     string
-	Email    string
-	Color    string
-	Initials string
-	IsActive bool
+	ID         string
+	Name       string
+	Email      string
+	Color      string
+	Initials   string
+	IsActive   bool
 	IsDeleting bool
-	Folders  []Folder
+	Folders    []Folder
 }
 
 type Folder struct {
@@ -76,6 +76,26 @@ type EmailPage struct {
 	WindowEnd   int
 	NextCursor  string
 	HasMore     bool
+}
+
+type EmailFilters struct {
+	Unread      bool
+	Starred     bool
+	Attachments bool
+	Read        bool
+	NoAttach    bool
+	HasLabels   bool
+	ThreadsOnly bool
+	From        string
+	To          string
+	Subject     string
+	Body        string
+	FromDomain  string
+	Attachment  string
+	Label       string
+	AccountID   string
+	After       string
+	Before      string
 }
 
 type ThreadItem struct {

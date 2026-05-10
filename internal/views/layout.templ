@@ -6,7 +6,11 @@ import (
 	"gofer.email/components/copybutton"
 	"gofer.email/components/dialog"
 	"gofer.email/components/dropdown"
+	"gofer.email/components/checkbox"
+	"gofer.email/components/calendar"
+	"gofer.email/components/input"
 	"gofer.email/components/popover"
+	"gofer.email/components/selectbox"
 	"gofer.email/components/tabs"
 	"gofer.email/components/tooltip"
 )
@@ -26,6 +30,10 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			<link rel="stylesheet" href="/assets/css/output.css"/>
 			@dialog.Script()
 			@dropdown.Script()
+			@checkbox.Script()
+			@calendar.Script()
+			@input.Script()
+			@selectbox.Script()
 			@tabs.Script()
 			@tooltip.Script()
 			@popover.Script()
@@ -36,7 +44,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 				@Sidebar(accounts, activeFolder, uiSettingGet(uiSettings, "sidebar_width", "256px"))
 				@ResizeHandle("sidebar")
 				<div id="main-content" class="flex flex-1 min-w-0">
-					@MailList(emails, activeFolder, selectedEmail, totalCount, uiSettingGet(uiSettings, "mail_list_width", "384px"), uiSettingGet(uiSettings, "sender_display", "name"), uiSettingGet(uiSettings, "mail_list_view", "cards"))
+					@MailList(accounts, emails, activeFolder, selectedEmail, totalCount, uiSettingGet(uiSettings, "mail_list_width", "384px"), uiSettingGet(uiSettings, "sender_display", "name"), uiSettingGet(uiSettings, "mail_list_view", "cards"))
 					@ResizeHandle("maillist")
 					@MailView(selectedEmail, selectedThread)
 				</div>
@@ -107,6 +115,10 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 			<link rel="stylesheet" href="/assets/css/output.css"/>
 			@dialog.Script()
 			@dropdown.Script()
+			@checkbox.Script()
+			@calendar.Script()
+			@input.Script()
+			@selectbox.Script()
 			@tabs.Script()
 			@tooltip.Script()
 			@popover.Script()
@@ -230,8 +242,8 @@ templ SidebarAccountCollapseStyle() {
 	</script>
 }
 
-templ FolderPartial(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, selectedThread []models.ThreadItem, uiSettings map[string]string) {
-	@MailList(emails, activeFolder, selectedEmail, totalCount, uiSettingGet(uiSettings, "mail_list_width", "384px"), uiSettingGet(uiSettings, "sender_display", "name"), uiSettingGet(uiSettings, "mail_list_view", "cards"))
+templ FolderPartial(accounts []models.Account, emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, selectedThread []models.ThreadItem, uiSettings map[string]string) {
+	@MailList(accounts, emails, activeFolder, selectedEmail, totalCount, uiSettingGet(uiSettings, "mail_list_width", "384px"), uiSettingGet(uiSettings, "sender_display", "name"), uiSettingGet(uiSettings, "mail_list_view", "cards"))
 	<div id="mail-view" class="hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk" hx-swap-oob="true">
 		if selectedEmail != nil {
 			@MailViewContent(selectedEmail, selectedThread)
@@ -241,9 +253,9 @@ templ FolderPartial(emails []models.Email, activeFolder string, selectedEmail *m
 	</div>
 }
 
-templ MailContentPartial(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, selectedThread []models.ThreadItem, uiSettings map[string]string) {
+templ MailContentPartial(accounts []models.Account, emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, selectedThread []models.ThreadItem, uiSettings map[string]string) {
 	<div id="main-content" class="flex flex-1 min-w-0">
-		@MailList(emails, activeFolder, selectedEmail, totalCount, uiSettingGet(uiSettings, "mail_list_width", "384px"), uiSettingGet(uiSettings, "sender_display", "name"), uiSettingGet(uiSettings, "mail_list_view", "cards"))
+		@MailList(accounts, emails, activeFolder, selectedEmail, totalCount, uiSettingGet(uiSettings, "mail_list_width", "384px"), uiSettingGet(uiSettings, "sender_display", "name"), uiSettingGet(uiSettings, "mail_list_view", "cards"))
 		@ResizeHandle("maillist")
 		@MailView(selectedEmail, selectedThread)
 	</div>

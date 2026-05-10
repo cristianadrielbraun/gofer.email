@@ -20,6 +20,7 @@ class VirtualMailList {
     this.activeFetches = new Set()
     this.newEmailCount = 0
     this.syncState = { active: false, current: 0, total: 0 }
+    this.filters = this.emptyFilters()
     this.refreshInFlight = null
     this.refreshQueued = false
     this.windowedMode = false
@@ -136,6 +137,9 @@ class VirtualMailList {
     if (this.effectiveCount === 0) {
       this.spacerTop.style.height = "0px"
       this.spacerBottom.style.height = "0px"
+      this.rowPool = []
+      this.visibleRows.clear()
+      this.rowByIndex.clear()
       var syncing = this.syncState && this.syncState.active
       var subtitle = syncing
         ? (this.syncState.total > 0
@@ -540,6 +544,7 @@ class VirtualMailList {
       if (this.selectedEmailId) {
         url += "&selected=" + encodeURIComponent(this.selectedEmailId)
       }
+      url = this.withFilterParams(url)
       var html = await this.fetchHTML(url)
       this.ingestHTML(html)
       this.addLoadedRange(start, end)
@@ -566,6 +571,7 @@ class VirtualMailList {
         params += "&selected=" + encodeURIComponent(this.selectedEmailId)
       }
       var url = "/mail/folder/" + this.folderID + "/items?" + params + "&view=" + encodeURIComponent(this.viewMode)
+      url = this.withFilterParams(url)
       var html = await this.fetchHTML(url)
       this.ingestHTML(html)
       this.prevFirst = null
@@ -794,6 +800,7 @@ class VirtualMailList {
     }
     var url = "/mail/folder/" + folderID + "/items?" + params
     url += "&view=" + encodeURIComponent(this.viewMode)
+    url = this.withFilterParams(url)
     var html = await this.fetchHTML(url)
 
     this.reset()
@@ -835,7 +842,15 @@ class VirtualMailList {
         params += "&selected=" + encodeURIComponent(self.selectedEmailId)
       }
       var url = "/mail/folder/" + self.folderID + "/items?" + params + "&view=" + encodeURIComponent(self.viewMode)
+      url = self.withFilterParams(url)
       var html = await self.fetchHTML(url)
+      var selected = self.selectedEmailId
+      var syncState = self.syncState
+      if (self.filterCount() > 0) {
+        self.reset()
+        self.selectedEmailId = selected
+        self.syncState = syncState
+      }
       self.ingestHTML(html)
       self.prevFirst = null
       self.prevLast = null
@@ -877,6 +892,10 @@ class VirtualMailList {
     this.prevFirst = null
     this.prevLast = null
     this.expandedThreads.clear()
+    this.rowPool = []
+    this.visibleRows.clear()
+    this.rowByIndex.clear()
+    if (this.itemsContainer) this.itemsContainer.innerHTML = ""
     this.invalidateOffsets()
     this.container.scrollTop = 0
     this.frontierDown = -1
@@ -912,11 +931,94 @@ class VirtualMailList {
     var selected = this.selectedEmailId
     var params = "limit=50&view=" + encodeURIComponent(viewMode)
     if (selected) params += "&selected=" + encodeURIComponent(selected)
-    var html = await this.fetchHTML("/mail/folder/" + this.folderID + "/items?" + params)
+    var html = await this.fetchHTML(this.withFilterParams("/mail/folder/" + this.folderID + "/items?" + params))
     this.setViewMode(viewMode, false)
     this.ingestHTML(html)
     this.selectedEmailId = selected
     this.render()
+  }
+
+  withFilterParams(url) {
+    var sep = url.indexOf("?") === -1 ? "?" : "&"
+    var filters = this.filters || this.emptyFilters()
+    var pairs = [
+      ["unread", filters.unread ? "1" : ""],
+      ["starred", filters.starred ? "1" : ""],
+      ["attachments", filters.attachments ? "1" : ""],
+      ["read", filters.read ? "1" : ""],
+      ["no_attachments", filters.noAttachments ? "1" : ""],
+      ["has_labels", filters.hasLabels ? "1" : ""],
+      ["threads_only", filters.threadsOnly ? "1" : ""],
+      ["from", filters.from || ""],
+      ["to", filters.to || ""],
+      ["subject", filters.subject || ""],
+      ["body", filters.body || ""],
+      ["from_domain", filters.fromDomain || ""],
+      ["attachment", filters.attachment || ""],
+      ["label", filters.label || ""],
+      ["account_id", filters.accountId || ""],
+      ["after_date", filters.afterDate || ""],
+      ["before_date", filters.beforeDate || ""],
+    ]
+    for (var i = 0; i < pairs.length; i++) {
+      if (!pairs[i][1]) continue
+      url += sep + encodeURIComponent(pairs[i][0]) + "=" + encodeURIComponent(pairs[i][1])
+      sep = "&"
+    }
+    return url
+  }
+
+  emptyFilters() {
+    return {
+      unread: false,
+      starred: false,
+      attachments: false,
+      read: false,
+      noAttachments: false,
+      hasLabels: false,
+      threadsOnly: false,
+      from: "",
+      to: "",
+      subject: "",
+      body: "",
+      fromDomain: "",
+      attachment: "",
+      label: "",
+      accountId: "",
+      afterDate: "",
+      beforeDate: "",
+    }
+  }
+
+  filterCount() {
+    var filters = this.filters || this.emptyFilters()
+    return (filters.unread ? 1 : 0) + (filters.starred ? 1 : 0) + (filters.attachments ? 1 : 0) +
+      (filters.read ? 1 : 0) + (filters.noAttachments ? 1 : 0) + (filters.hasLabels ? 1 : 0) +
+      (filters.threadsOnly ? 1 : 0) + (filters.from ? 1 : 0) + (filters.to ? 1 : 0) +
+      (filters.subject ? 1 : 0) + (filters.body ? 1 : 0) + (filters.fromDomain ? 1 : 0) +
+      (filters.attachment ? 1 : 0) + (filters.label ? 1 : 0) + (filters.accountId ? 1 : 0) +
+      (filters.afterDate ? 1 : 0) + (filters.beforeDate ? 1 : 0)
+  }
+
+  async applyFilters(filters) {
+    var next = this.emptyFilters()
+    filters = filters || {}
+    for (var key in next) {
+      if (typeof next[key] === "boolean") next[key] = !!filters[key]
+      else next[key] = (filters[key] || "").trim()
+    }
+    this.filters = next
+    var selected = this.selectedEmailId
+    var params = "limit=50&view=" + encodeURIComponent(this.viewMode)
+    if (selected) params += "&selected=" + encodeURIComponent(selected)
+    var html = await this.fetchHTML(this.withFilterParams("/mail/folder/" + this.folderID + "/items?" + params))
+    var syncState = this.syncState
+    this.reset()
+    this.selectedEmailId = selected
+    this.syncState = syncState
+    this.ingestHTML(html)
+    this.render()
+    this.updateHeader()
   }
 
   onEmailSelected(emailId) {
@@ -1047,6 +1149,7 @@ class VirtualMailList {
     if (this.selectedEmailId) {
       url += "&selected=" + encodeURIComponent(this.selectedEmailId)
     }
+    url = this.withFilterParams(url)
     var self = this
     fetch(url, { headers: { Accept: "text/html" } })
       .then(function (r) { return r.text() })
