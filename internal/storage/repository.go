@@ -2199,10 +2199,11 @@ func (db *DB) SetUISettings(ctx context.Context, userID string, settings map[str
 
 func defaultUISettings() map[string]string {
 	return map[string]string{
-		"theme":             "dark",
-		"theme_style":       "classic",
-		"prefetch_on_hover": "true",
-		"sender_display":    "name",
+		"theme":                "dark",
+		"theme_style":          "classic",
+		"prefetch_on_hover":    "true",
+		"sender_display":       "name",
+		"auto_mark_read_after": "0",
 	}
 }
 
