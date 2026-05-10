@@ -17,6 +17,7 @@ type Folder struct {
 	ID       string
 	Name     string
 	Icon     string
+	Role     string
 	Unread   int
 	IsSystem bool
 	Children []Folder

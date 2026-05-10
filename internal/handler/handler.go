@@ -147,15 +147,15 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if folderID == "" {
 		folderID = "inbox"
 	}
-	folderID = h.resolveFolderID(r.Context(), folderID)
+	folderID = h.resolveFolderID(folderID)
 
 	emailID := r.URL.Query().Get("email")
 	ctx := r.Context()
 
 	accounts, _ := h.db.GetAccountsIncludingDeleting(ctx, h.userID(ctx))
-	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
+	totalCount, _ := h.db.GetFolderEmailCountForUser(ctx, h.userID(ctx), folderID)
 
-	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
+	page, _ := h.db.GetEmailsRangeForUser(ctx, h.userID(ctx), folderID, 0, 50)
 	var emails []models.Email
 	if page != nil {
 		emails = page.Emails
@@ -183,13 +183,13 @@ func (h *Handler) handleFolderWithEmail(w http.ResponseWriter, r *http.Request) 
 	if folderID == "" {
 		folderID = "inbox"
 	}
-	folderID = h.resolveFolderID(r.Context(), folderID)
+	folderID = h.resolveFolderID(folderID)
 
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccountsIncludingDeleting(ctx, h.userID(ctx))
-	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
+	totalCount, _ := h.db.GetFolderEmailCountForUser(ctx, h.userID(ctx), folderID)
 
-	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
+	page, _ := h.db.GetEmailsRangeForUser(ctx, h.userID(ctx), folderID, 0, 50)
 	var emails []models.Email
 	if page != nil {
 		emails = page.Emails
@@ -698,13 +698,13 @@ func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
 	if folderID == "" {
 		folderID = "inbox"
 	}
-	folderID = h.resolveFolderID(r.Context(), folderID)
+	folderID = h.resolveFolderID(folderID)
 
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
-	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
+	totalCount, _ := h.db.GetFolderEmailCountForUser(ctx, h.userID(ctx), folderID)
 
-	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
+	page, _ := h.db.GetEmailsRangeForUser(ctx, h.userID(ctx), folderID, 0, 50)
 	var emails []models.Email
 	if page != nil {
 		emails = page.Emails
@@ -734,13 +734,13 @@ func (h *Handler) handleFolderFull(w http.ResponseWriter, r *http.Request) {
 	if folderID == "" {
 		folderID = "inbox"
 	}
-	folderID = h.resolveFolderID(r.Context(), folderID)
+	folderID = h.resolveFolderID(folderID)
 
 	ctx := r.Context()
 	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
-	totalCount, _ := h.db.GetFolderEmailCount(ctx, folderID)
+	totalCount, _ := h.db.GetFolderEmailCountForUser(ctx, h.userID(ctx), folderID)
 
-	page, _ := h.db.GetEmailsRange(ctx, folderID, 0, 50)
+	page, _ := h.db.GetEmailsRangeForUser(ctx, h.userID(ctx), folderID, 0, 50)
 	var emails []models.Email
 	if page != nil {
 		emails = page.Emails
@@ -765,7 +765,7 @@ func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
 	if folderID == "" {
 		folderID = "inbox"
 	}
-	folderID = h.resolveFolderID(r.Context(), folderID)
+	folderID = h.resolveFolderID(folderID)
 
 	limit := 50
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 200 {
@@ -780,17 +780,17 @@ func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
 	var pageErr error
 
 	if around := r.URL.Query().Get("around"); around != "" && !emailFiltersActive(filters) {
-		page, pageErr = h.db.GetEmailsAroundEmail(ctx, folderID, around, limit)
+		page, pageErr = h.db.GetEmailsAroundEmailForUser(ctx, h.userID(ctx), folderID, around, limit)
 	} else if startStr := r.URL.Query().Get("start"); startStr != "" {
 		start, err := strconv.Atoi(startStr)
 		if err != nil || start < 0 {
 			start = 0
 		}
-		page, pageErr = h.db.GetEmailsRangeFiltered(ctx, folderID, start, limit, filters)
+		page, pageErr = h.db.GetEmailsRangeFilteredForUser(ctx, h.userID(ctx), folderID, start, limit, filters)
 	} else if cursor := r.URL.Query().Get("after"); cursor != "" && !emailFiltersActive(filters) {
-		page, pageErr = h.db.GetEmailsAfterCursor(ctx, folderID, cursor, limit)
+		page, pageErr = h.db.GetEmailsAfterCursorForUser(ctx, h.userID(ctx), folderID, cursor, limit)
 	} else {
-		page, pageErr = h.db.GetEmailsRangeFiltered(ctx, folderID, 0, limit, filters)
+		page, pageErr = h.db.GetEmailsRangeFilteredForUser(ctx, h.userID(ctx), folderID, 0, limit, filters)
 	}
 
 	if pageErr != nil {
@@ -847,20 +847,9 @@ func emailFiltersActive(filters models.EmailFilters) bool {
 	return filters.Unread || filters.Starred || filters.Attachments || filters.Read || filters.NoAttach || filters.HasLabels || filters.ThreadsOnly || filters.From != "" || filters.To != "" || filters.Subject != "" || filters.Body != "" || filters.FromDomain != "" || filters.Attachment != "" || filters.Label != "" || filters.AccountID != "" || filters.Query != "" || filters.After != "" || filters.Before != ""
 }
 
-func (h *Handler) resolveFolderID(ctx context.Context, requested string) string {
+func (h *Handler) resolveFolderID(requested string) string {
 	if requested == "" {
 		requested = "inbox"
-	}
-	if requested == "inbox" || requested == "sent" || requested == "drafts" || requested == "trash" || requested == "archive" || requested == "spam" {
-		accounts, err := h.db.GetAccountIDs(ctx, h.userID(ctx))
-		if err == nil {
-			for _, accountID := range accounts {
-				folderID, _, err := h.db.GetFolderIDByRole(ctx, accountID, requested)
-				if err == nil && folderID != "" {
-					return folderID
-				}
-			}
-		}
 	}
 	return requested
 }

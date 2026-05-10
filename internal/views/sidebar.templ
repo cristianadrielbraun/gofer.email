@@ -74,10 +74,35 @@ templ SidebarHeader(accounts []models.Account) {
 
 templ SidebarFolderTree(accounts []models.Account, activeFolder string) {
 	<nav class="flex-1 overflow-y-auto px-3 pt-2 pb-3">
+		@SidebarUnifiedSection(accounts, activeFolder)
 		for _, account := range accounts {
 			@SidebarAccountSection(account, activeFolder)
 		}
 	</nav>
+}
+
+templ SidebarUnifiedSection(accounts []models.Account, activeFolder string) {
+	<div class="mb-1.5" data-sidebar-account="__unified__" data-sidebar-account-active?={ unifiedHasActiveFolder(activeFolder) }>
+		<button
+			type="button"
+			class="sidebar-account-toggle flex w-full items-center gap-2.5 px-2 py-2 text-sm font-semibold text-sidebar-accent-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+			data-sidebar-account-toggle="__unified__"
+			aria-expanded="true"
+		>
+			<span class="flex size-4 shrink-0 items-center justify-center text-sidebar-primary">
+				@icon.Folders(icon.Props{Class: "size-4"})
+			</span>
+			<span class="flex-1 truncate text-left">Unified folders</span>
+			@icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200"})
+		</button>
+		<div class="sidebar-account-folders" data-sidebar-account-folders="__unified__">
+			<div class="sidebar-account-folders-inner space-y-px mt-0.5">
+				for _, folder := range unifiedFolders(accounts) {
+					@SidebarFolderItem(folder, activeFolder, "")
+				}
+			</div>
+		</div>
+	</div>
 }
 
 templ SidebarAccountSection(account models.Account, activeFolder string) {
@@ -119,7 +144,7 @@ templ SidebarFolderItem(folder models.Folder, activeFolder string, accountID str
 
 templ SidebarFolderLink(folder models.Folder, activeFolder string, accountID string) {
 	<a
-		href={ templ.URL(fmt.Sprintf("/?folder=%s&account=%s", folder.ID, accountID)) }
+		href={ sidebarFolderHref(folder.ID, accountID) }
 		hx-get={ templ.URL(fmt.Sprintf("/folder/%s", folder.ID)) }
 		hx-target="#mail-list"
 		hx-swap="outerHTML settle:0s"

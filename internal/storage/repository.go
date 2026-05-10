@@ -116,6 +116,15 @@ func isStarredFolder(folderID string) bool {
 	return folderID == "starred" || strings.HasPrefix(folderID, "starred-")
 }
 
+func isUnifiedFolderID(folderID string) bool {
+	switch folderID {
+	case "inbox", "starred", "sent", "drafts", "archive", "spam", "trash":
+		return true
+	default:
+		return false
+	}
+}
+
 func normalizeSubject(subject string) string {
 	return mailmessage.BaseSubject(subject)
 }
@@ -900,6 +909,38 @@ func (db *DB) GetAllFolderUnreadCounts(ctx context.Context, userID string) (map[
 		}
 		result[id] = count
 	}
+
+	unifiedRows, err := db.Read().QueryContext(ctx,
+		`SELECT f.role, COUNT(*)
+		 FROM message_folder_state mfs
+		 JOIN folders f ON mfs.folder_id = f.id
+		 JOIN accounts a ON f.account_id = a.id
+		 WHERE a.user_id = ? AND f.role IN ('inbox', 'sent', 'drafts', 'archive', 'spam', 'trash')
+		 AND mfs.is_read = 0 AND mfs.is_deleted = 0
+		 GROUP BY f.role`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer unifiedRows.Close()
+	for unifiedRows.Next() {
+		var role string
+		var count int
+		if err := unifiedRows.Scan(&role, &count); err != nil {
+			return nil, err
+		}
+		result[role] = count
+	}
+
+	var starred int
+	if err := db.Read().QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT m.id)
+		 FROM message_folder_state mfs
+		 JOIN messages m ON mfs.message_id = m.id
+		 JOIN accounts a ON m.account_id = a.id
+		 WHERE a.user_id = ? AND mfs.is_starred = 1 AND mfs.is_deleted = 0`, userID).Scan(&starred); err != nil {
+		return nil, err
+	}
+	result["starred"] = starred
 	return result, nil
 }
 
@@ -990,6 +1031,7 @@ func (db *DB) getFolders(ctx context.Context, accountID string) ([]models.Folder
 		if err := rows.Scan(&fr.folder.ID, &fr.folder.Name, &fr.folder.Icon, &role, &fr.folder.Unread, &fr.parentID); err != nil {
 			return nil, fmt.Errorf("scan folder: %w", err)
 		}
+		fr.folder.Role = role
 		fr.folder.IsSystem = role != "custom"
 		flat = append(flat, fr)
 	}
@@ -1019,6 +1061,46 @@ func buildFolderTree(flat []folderRow) []models.Folder {
 
 func (db *DB) GetFolderEmailCount(ctx context.Context, folderID string) (int, error) {
 	return db.GetFolderEmailCountFiltered(ctx, folderID, models.EmailFilters{})
+}
+
+func (db *DB) GetFolderEmailCountForUser(ctx context.Context, userID, folderID string) (int, error) {
+	return db.GetFolderEmailCountFilteredForUser(ctx, userID, folderID, models.EmailFilters{})
+}
+
+func (db *DB) GetFolderEmailCountFilteredForUser(ctx context.Context, userID, folderID string, filters models.EmailFilters) (int, error) {
+	if !isUnifiedFolderID(folderID) {
+		return db.GetFolderEmailCountFiltered(ctx, folderID, filters)
+	}
+
+	filterSQL := emailFilterSQL(filters)
+	var where string
+	var args []any
+	if folderID == "starred" {
+		where = `JOIN accounts a ON m.account_id = a.id
+			 WHERE a.user_id = ? AND mfs.is_starred = 1 AND mfs.is_deleted = 0`
+		args = []any{userID}
+	} else {
+		where = `JOIN folders f ON mfs.folder_id = f.id
+			 JOIN accounts a ON f.account_id = a.id
+			 WHERE a.user_id = ? AND f.role = ? AND mfs.is_deleted = 0`
+		args = []any{userID, folderID}
+	}
+	args = append(args, filterSQL.args...)
+
+	var count int
+	err := db.Read().QueryRowContext(ctx,
+		`WITH visible AS (
+		 SELECT ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
+		        MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
+		        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
+		        MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments,
+		        COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count
+		 FROM message_folder_state mfs
+		 JOIN messages m ON mfs.message_id = m.id
+		 `+where+filterSQL.cteClause+`
+	)
+	SELECT COUNT(*) FROM visible WHERE rn = 1`+filterSQL.outerClause, args...).Scan(&count)
+	return count, err
 }
 
 func (db *DB) GetFolderEmailCountFiltered(ctx context.Context, folderID string, filters models.EmailFilters) (int, error) {
@@ -1059,6 +1141,44 @@ func (db *DB) GetFolderEmailCountFiltered(ctx context.Context, folderID string, 
 
 func (db *DB) GetEmailsRange(ctx context.Context, folderID string, start, limit int) (*models.EmailPage, error) {
 	return db.GetEmailsRangeFiltered(ctx, folderID, start, limit, models.EmailFilters{})
+}
+
+func (db *DB) GetEmailsRangeForUser(ctx context.Context, userID, folderID string, start, limit int) (*models.EmailPage, error) {
+	return db.GetEmailsRangeFilteredForUser(ctx, userID, folderID, start, limit, models.EmailFilters{})
+}
+
+func (db *DB) GetEmailsRangeFilteredForUser(ctx context.Context, userID, folderID string, start, limit int, filters models.EmailFilters) (*models.EmailPage, error) {
+	if !isUnifiedFolderID(folderID) {
+		return db.GetEmailsRangeFiltered(ctx, folderID, start, limit, filters)
+	}
+
+	totalCount, err := db.GetFolderEmailCountFilteredForUser(ctx, userID, folderID, filters)
+	if err != nil {
+		return nil, err
+	}
+	if start >= totalCount {
+		return &models.EmailPage{TotalCount: totalCount, WindowStart: start, WindowEnd: start}, nil
+	}
+
+	emails, err := db.listEmailsFilteredForUser(ctx, userID, folderID, start, limit, filters)
+	if err != nil {
+		return nil, err
+	}
+	end := start + len(emails)
+	hasMore := end < totalCount
+	nextCursor := ""
+	if len(emails) > 0 && hasMore {
+		nextCursor = emails[len(emails)-1].ID
+	}
+
+	return &models.EmailPage{
+		Emails:      emails,
+		TotalCount:  totalCount,
+		WindowStart: start,
+		WindowEnd:   end - 1,
+		NextCursor:  nextCursor,
+		HasMore:     hasMore,
+	}, nil
 }
 
 func (db *DB) GetEmailsRangeFiltered(ctx context.Context, folderID string, start, limit int, filters models.EmailFilters) (*models.EmailPage, error) {
@@ -1408,6 +1528,17 @@ func (db *DB) GetEmailsAfterCursor(ctx context.Context, folderID, cursor string,
 	return db.GetEmailsRange(ctx, folderID, pos+1, limit)
 }
 
+func (db *DB) GetEmailsAfterCursorForUser(ctx context.Context, userID, folderID, cursor string, limit int) (*models.EmailPage, error) {
+	if !isUnifiedFolderID(folderID) {
+		return db.GetEmailsAfterCursor(ctx, folderID, cursor, limit)
+	}
+	pos, err := db.findEmailPositionForUser(ctx, userID, folderID, cursor)
+	if err != nil {
+		return nil, err
+	}
+	return db.GetEmailsRangeForUser(ctx, userID, folderID, pos+1, limit)
+}
+
 func (db *DB) GetEmailsAroundEmail(ctx context.Context, folderID, emailID string, limit int) (*models.EmailPage, error) {
 	pos, err := db.findEmailPosition(ctx, folderID, emailID)
 	if err != nil {
@@ -1425,8 +1556,72 @@ func (db *DB) GetEmailsAroundEmail(ctx context.Context, folderID, emailID string
 	return db.GetEmailsRange(ctx, folderID, start, limit)
 }
 
+func (db *DB) GetEmailsAroundEmailForUser(ctx context.Context, userID, folderID, emailID string, limit int) (*models.EmailPage, error) {
+	if !isUnifiedFolderID(folderID) {
+		return db.GetEmailsAroundEmail(ctx, folderID, emailID, limit)
+	}
+	pos, err := db.findEmailPositionForUser(ctx, userID, folderID, emailID)
+	if err != nil {
+		return nil, err
+	}
+	if pos < 0 {
+		return db.GetEmailsRangeForUser(ctx, userID, folderID, 0, limit)
+	}
+
+	half := limit / 2
+	start := pos - half
+	if start < 0 {
+		start = 0
+	}
+	return db.GetEmailsRangeForUser(ctx, userID, folderID, start, limit)
+}
+
 func (db *DB) listEmails(ctx context.Context, folderID string, offset, limit int) ([]models.Email, error) {
 	return db.listEmailsFiltered(ctx, folderID, offset, limit, models.EmailFilters{})
+}
+
+func (db *DB) listEmailsFilteredForUser(ctx context.Context, userID, folderID string, offset, limit int, filters models.EmailFilters) ([]models.Email, error) {
+	filterSQL := emailFilterSQL(filters)
+	var where string
+	var args []any
+	if folderID == "starred" {
+		where = `JOIN accounts a ON m.account_id = a.id
+			 WHERE a.user_id = ? AND mfs.is_starred = 1 AND mfs.is_deleted = 0`
+		args = []any{userID}
+	} else {
+		where = `JOIN folders f ON mfs.folder_id = f.id
+			 JOIN accounts a ON f.account_id = a.id
+			 WHERE a.user_id = ? AND f.role = ? AND mfs.is_deleted = 0`
+		args = []any{userID, folderID}
+	}
+
+	query := `WITH visible AS (
+			  SELECT m.id, m.account_id, m.subject, m.from_name, m.from_email,
+			         m.date_received, m.snippet, m.has_attachments, m.body_text_path, m.body_html_path,
+			         mfs.folder_id, mfs.is_read, mfs.is_starred, m.thread_id,
+			         ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
+			         COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count,
+			         MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
+			         MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
+			         MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments
+			  FROM messages m
+			  JOIN message_folder_state mfs ON m.id = mfs.message_id
+			  ` + where + filterSQL.cteClause + `
+			)
+			SELECT id, account_id, subject, from_name, from_email, date_received, snippet, has_attachments, body_text_path, body_html_path,
+			       thread_has_attachments, folder_id, thread_is_read, thread_is_starred, thread_id, thread_count
+			FROM visible WHERE rn = 1` + filterSQL.outerClause + `
+			ORDER BY date_received DESC
+			LIMIT ? OFFSET ?`
+	args = append(args, filterSQL.args...)
+	args = append(args, limit, offset)
+
+	rows, err := db.Read().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list emails: %w", err)
+	}
+	defer rows.Close()
+	return db.scanEmailRows(ctx, rows)
 }
 
 func (db *DB) listEmailsFiltered(ctx context.Context, folderID string, offset, limit int, filters models.EmailFilters) ([]models.Email, error) {
@@ -1481,7 +1676,10 @@ func (db *DB) listEmailsFiltered(ctx context.Context, folderID string, offset, l
 		return nil, fmt.Errorf("list emails: %w", err)
 	}
 	defer rows.Close()
+	return db.scanEmailRows(ctx, rows)
+}
 
+func (db *DB) scanEmailRows(ctx context.Context, rows *sql.Rows) ([]models.Email, error) {
 	type emailRow struct {
 		email models.Email
 		msgID int64
@@ -1585,6 +1783,43 @@ func (db *DB) findEmailPosition(ctx context.Context, folderID, emailID string) (
 			SELECT COUNT(*) FROM visible WHERE latest > (SELECT latest FROM visible WHERE thread_key = (SELECT thread_key FROM selected))`
 		args = []any{msgID, folderID}
 	}
+
+	var pos int
+	if err := db.Read().QueryRowContext(ctx, query, args...).Scan(&pos); err != nil {
+		return -1, err
+	}
+	return pos, nil
+}
+
+func (db *DB) findEmailPositionForUser(ctx context.Context, userID, folderID, emailID string) (int, error) {
+	msgID, err := strconv.ParseInt(emailID, 10, 64)
+	if err != nil {
+		return -1, nil
+	}
+
+	var where string
+	var args []any
+	if folderID == "starred" {
+		where = `JOIN accounts a ON m.account_id = a.id
+			 WHERE a.user_id = ? AND mfs.is_starred = 1 AND mfs.is_deleted = 0`
+		args = []any{msgID, userID}
+	} else {
+		where = `JOIN folders f ON mfs.folder_id = f.id
+			 JOIN accounts a ON f.account_id = a.id
+			 WHERE a.user_id = ? AND f.role = ? AND mfs.is_deleted = 0`
+		args = []any{msgID, userID, folderID}
+	}
+
+	query := `WITH selected AS (
+			 SELECT COALESCE(NULLIF(thread_id, ''), printf('msg:%d', id)) AS thread_key FROM messages WHERE id = ?
+		), visible AS (
+			 SELECT COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) AS thread_key, MAX(m.date_received) AS latest
+			 FROM message_folder_state mfs
+			 JOIN messages m ON mfs.message_id = m.id
+			 ` + where + `
+			 GROUP BY thread_key
+		)
+		SELECT COUNT(*) FROM visible WHERE latest > (SELECT latest FROM visible WHERE thread_key = (SELECT thread_key FROM selected))`
 
 	var pos int
 	if err := db.Read().QueryRowContext(ctx, query, args...).Scan(&pos); err != nil {

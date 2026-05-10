@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"gofer.email/internal/models"
+
+	"github.com/a-h/templ"
 )
 
 func folderDisplayName(folderID string) string {
@@ -74,6 +76,63 @@ func folderHasActiveID(folder models.Folder, activeFolder string) bool {
 		}
 	}
 	return false
+}
+
+func unifiedHasActiveFolder(activeFolder string) bool {
+	switch activeFolder {
+	case "inbox", "starred", "sent", "drafts", "archive", "spam", "trash":
+		return true
+	default:
+		return false
+	}
+}
+
+func unifiedFolders(accounts []models.Account) []models.Folder {
+	roles := []struct {
+		id   string
+		name string
+		icon string
+	}{
+		{"inbox", "Inbox", "inbox"},
+		{"starred", "Starred", "starred"},
+		{"sent", "Sent", "send"},
+		{"drafts", "Drafts", "file"},
+		{"archive", "Archive", "archive"},
+		{"spam", "Spam", "alert-circle"},
+		{"trash", "Trash", "trash"},
+	}
+
+	unreadByRole := make(map[string]int)
+	seenRole := make(map[string]bool)
+	for _, account := range accounts {
+		collectUnifiedFolders(account.Folders, unreadByRole, seenRole)
+	}
+
+	folders := make([]models.Folder, 0, len(roles))
+	for _, role := range roles {
+		if role.id != "starred" && !seenRole[role.id] {
+			continue
+		}
+		folders = append(folders, models.Folder{
+			ID:       role.id,
+			Name:     role.name,
+			Icon:     role.icon,
+			Role:     role.id,
+			Unread:   unreadByRole[role.id],
+			IsSystem: true,
+		})
+	}
+	return folders
+}
+
+func collectUnifiedFolders(folders []models.Folder, unreadByRole map[string]int, seenRole map[string]bool) {
+	for _, folder := range folders {
+		if folder.Role != "" && folder.Role != "custom" {
+			seenRole[folder.Role] = true
+			unreadByRole[folder.Role] += folder.Unread
+		}
+		collectUnifiedFolders(folder.Children, unreadByRole, seenRole)
+	}
 }
 
 func themeClass(settings map[string]string) string {
@@ -157,4 +216,11 @@ func accountColorStyle(color string) string {
 		color = "#8b5cf6"
 	}
 	return "background-color: " + color
+}
+
+func sidebarFolderHref(folderID, accountID string) templ.SafeURL {
+	if accountID == "" {
+		return templ.URL(fmt.Sprintf("/?folder=%s", folderID))
+	}
+	return templ.URL(fmt.Sprintf("/?folder=%s&account=%s", folderID, accountID))
 }
