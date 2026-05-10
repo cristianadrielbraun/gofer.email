@@ -192,6 +192,31 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
+.account-color-marker {
+  border-radius: 9999px;
+}
+
+html[data-theme="minimal"] .account-color-marker {
+  border-radius: 0;
+}
+
+.account-action-btn {
+  background: var(--card);
+}
+
+.account-action-btn:hover {
+  background: var(--secondary);
+}
+
+.account-action-btn-danger:hover {
+  background: color-mix(in srgb, var(--destructive) 10%, var(--card));
+}
+
+.settings-select .select-trigger,
+.settings-select .select-item {
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
 /* === MAIL LIST ITEM (VIRTUAL SCROLL) === */
 
 .mail-list-item {

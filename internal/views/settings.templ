@@ -35,6 +35,9 @@ templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, 
 						@tabs.Trigger(tabs.TriggerProps{Value: "appearance", IsActive: activeTab == "appearance"}) {
 							Appearance
 						}
+						@tabs.Trigger(tabs.TriggerProps{Value: "compose-display", IsActive: activeTab == "compose-display"}) {
+							Compose and display
+						}
 						@tabs.Trigger(tabs.TriggerProps{Value: "advanced", IsActive: activeTab == "advanced"}) {
 							Advanced
 						}
@@ -45,16 +48,60 @@ templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, 
 					@tabs.Content(tabs.ContentProps{Value: "sync", IsActive: activeTab == "sync"}) {
 						@SettingsSyncTab(syncSettings)
 					}
-					@tabs.Content(tabs.ContentProps{Value: "appearance", IsActive: activeTab == "appearance"}) {
-						@SettingsAppearanceTab(uiSettings)
-					}
-					@tabs.Content(tabs.ContentProps{Value: "advanced", IsActive: activeTab == "advanced"}) {
-						@SettingsAdvancedTab(uiSettings)
-					}
+						@tabs.Content(tabs.ContentProps{Value: "appearance", IsActive: activeTab == "appearance"}) {
+							@SettingsAppearanceTab(uiSettings)
+						}
+						@tabs.Content(tabs.ContentProps{Value: "compose-display", IsActive: activeTab == "compose-display"}) {
+							@SettingsComposeDisplayTab(uiSettings)
+						}
+						@tabs.Content(tabs.ContentProps{Value: "advanced", IsActive: activeTab == "advanced"}) {
+							@SettingsAdvancedTab(uiSettings)
+						}
 				}
 			</div>
 		</div>
 	</div>
+}
+
+templ SettingsComposeDisplayTab(uiSettings map[string]string) {
+	<div class="mt-6 space-y-6">
+		<div class="bg-card rounded-lg border p-6 space-y-5">
+			<div>
+				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">List view</h3>
+				<p class="text-xs text-muted-foreground">Control how messages are summarized in the email list.</p>
+			</div>
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div class="min-w-0">
+					<h4 class="text-sm font-medium text-foreground">Sender display</h4>
+					<p class="text-xs text-muted-foreground mt-1">Choose what appears in the From row. Messages without a sender name will still fall back to the email address.</p>
+				</div>
+				<div class="w-full sm:w-44 shrink-0" data-sender-display-picker>
+					@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+						@selectbox.Trigger(selectbox.TriggerProps{Name: "sender_display", Class: "bg-background", DisableClear: true}) {
+							@selectbox.Value(selectbox.ValueProps{Placeholder: "Only name"}) {
+								{ senderDisplaySettingLabel(uiSettingGet(uiSettings, "sender_display", "name")) }
+							}
+						}
+						@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+							@selectbox.Item(selectbox.ItemProps{Value: "name", Selected: uiSettingGet(uiSettings, "sender_display", "name") == "name"}) { Only name }
+							@selectbox.Item(selectbox.ItemProps{Value: "email", Selected: uiSettingGet(uiSettings, "sender_display", "name") == "email"}) { Only email }
+							@selectbox.Item(selectbox.ItemProps{Value: "both", Selected: uiSettingGet(uiSettings, "sender_display", "name") == "both"}) { Name and email }
+						}
+					}
+				</div>
+			</div>
+		</div>
+	</div>
+	<script>
+	(function() {
+		document.addEventListener('change', function(e) {
+			var senderDisplay = e.target.closest('input[name="sender_display"]');
+			if (senderDisplay && typeof GoferSettings !== 'undefined') {
+				GoferSettings.set('sender_display', senderDisplay.value);
+			}
+		});
+	})();
+	</script>
 }
 
 	templ SettingsAppearanceTab(uiSettings map[string]string) {
@@ -252,8 +299,8 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 			<form id="sync-settings-form" action="/api/settings/sync" method="POST" class="space-y-4">
 				<div>
 					<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Check for new messages every</label>
-					@selectbox.SelectBox() {
-						@selectbox.Trigger(selectbox.TriggerProps{Name: "sync_interval_minutes"}) {
+					@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+						@selectbox.Trigger(selectbox.TriggerProps{Name: "sync_interval_minutes", Class: "bg-background"}) {
 							@selectbox.Value(selectbox.ValueProps{Placeholder: "5 minutes"}) {
 								{ strconv.Itoa(settings.SyncIntervalMinutes) } min
 							}
@@ -299,9 +346,7 @@ templ SettingsSyncTab(settings models.SyncSettings) {
 						for _, account := range settings.Accounts {
 							<div>
 								<div class="flex items-center gap-2.5 mb-3">
-									<div class={ "size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white", account.Color }>
-										{ account.Initials }
-									</div>
+									<div class="account-color-marker size-4 shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_1px_3px_rgba(0,0,0,0.18)]" style={ accountColorStyle(account.Color) }></div>
 									<span class="text-sm font-medium">{ account.AccountName }</span>
 									<span class="text-xs text-muted-foreground">{ account.AccountEmail }</span>
 								</div>
@@ -641,9 +686,7 @@ templ SettingsNoAccounts() {
 templ SettingsAccountCard(account models.Account) {
 	<div id={ fmt.Sprintf("account-card-%s", account.ID) }>
 		<div class="flex items-center gap-4 p-4 rounded-lg border bg-background">
-			<div class={ "size-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0", account.Color }>
-				{ account.Initials }
-			</div>
+			<div class="account-color-marker size-5 shrink-0" style={ accountColorStyle(account.Color) }></div>
 			<div class="flex-1 min-w-0">
 				<p class="text-sm font-medium truncate">{ account.Name }</p>
 				<p class="text-xs text-muted-foreground truncate">{ account.Email }</p>
@@ -655,7 +698,7 @@ templ SettingsAccountCard(account models.Account) {
 				</button>
 			} else {
 				<button
-					class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-md border border-border hover:bg-accent"
+					class="account-action-btn inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-md border border-border"
 					hx-get={ fmt.Sprintf("/api/accounts/%s/edit", account.ID) }
 					hx-target="#edit-account-container"
 					hx-swap="innerHTML"
@@ -667,7 +710,7 @@ templ SettingsAccountCard(account models.Account) {
 					id={ fmt.Sprintf("test-btn-%s", account.ID) }
 					data-test-btn
 					data-account-id={ account.ID }
-					class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-all duration-300 px-2.5 py-1.5 rounded-md border border-border hover:bg-accent"
+					class="account-action-btn inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-all duration-300 px-2.5 py-1.5 rounded-md border border-border"
 					hx-post={ fmt.Sprintf("/api/accounts/%s/test", account.ID) }
 					hx-swap="none"
 				>
@@ -679,7 +722,7 @@ templ SettingsAccountCard(account models.Account) {
 				@dialog.Trigger(dialog.TriggerProps{For: fmt.Sprintf("delete-account-%s", account.ID)}) {
 					<button
 						type="button"
-						class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2.5 py-1.5 rounded-md border border-border hover:border-destructive/30 hover:bg-destructive/5"
+						class="account-action-btn account-action-btn-danger inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2.5 py-1.5 rounded-md border border-border hover:border-destructive/30"
 					>
 						@icon.Trash2(icon.Props{Class: "size-3.5"})
 						Delete
@@ -698,9 +741,7 @@ templ SettingsAccountCard(account models.Account) {
 					}
 				}
 				<div class="flex items-center gap-3 p-3 rounded-lg bg-destructive/5 border border-destructive/15">
-					<div class={ "size-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", account.Color }>
-						{ account.Initials }
-					</div>
+					<div class="account-color-marker size-5 shrink-0" style={ accountColorStyle(account.Color) }></div>
 					<div class="flex-1 min-w-0">
 						<p class="text-sm font-medium truncate">{ account.Name }</p>
 						<p class="text-xs text-muted-foreground truncate">{ account.Email }</p>

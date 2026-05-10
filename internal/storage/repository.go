@@ -78,6 +78,14 @@ func initials(name string) string {
 	return strings.ToUpper(name)
 }
 
+func contactFromSender(name, email string) models.Contact {
+	display := strings.TrimSpace(name)
+	if display == "" {
+		display = strings.TrimSpace(email)
+	}
+	return models.Contact{Name: display, Email: email, Initials: initials(display)}
+}
+
 func firstRune(s string) string {
 	for _, r := range s {
 		return string(r)
@@ -585,6 +593,8 @@ func parseSQLiteDateTime(raw string) (time.Time, bool) {
 	layouts := []string{
 		time.RFC3339Nano,
 		time.RFC3339,
+		"2006-01-02 15:04:05.999999999 -0700 -0700",
+		"2006-01-02 15:04:05 -0700 -0700",
 		"2006-01-02 15:04:05.999999999Z07:00",
 		"2006-01-02 15:04:05.999999999",
 		"2006-01-02 15:04:05",
@@ -1100,11 +1110,7 @@ func (db *DB) GetThreadMessages(ctx context.Context, accountID, threadID string)
 			&internetMsgID, &refs, &bodyTextPath); err != nil {
 			continue
 		}
-		item.From = models.Contact{
-			Name:     fromName,
-			Email:    fromEmail,
-			Initials: initials(fromName),
-		}
+		item.From = contactFromSender(fromName, fromEmail)
 		item.IsRead = isRead == 1
 		item.IsStarred = isStarred == 1
 		item.HasAttachment = hasAttach == 1
@@ -1202,7 +1208,7 @@ func (db *DB) GetEmailByID(ctx context.Context, id string) (*models.Email, error
 	email.ID = strconv.FormatInt(msgID, 10)
 	email.AccountID = accountID
 	email.Subject = subject
-	email.From = models.Contact{Name: fromName, Email: fromEmail, Initials: initials(fromName)}
+	email.From = contactFromSender(fromName, fromEmail)
 	email.Preview = snippet
 	email.HasAttachment = hasAttach == 1
 
@@ -1379,7 +1385,7 @@ func (db *DB) listEmails(ctx context.Context, folderID string, offset, limit int
 		r.email.ID = strconv.FormatInt(r.msgID, 10)
 		r.email.AccountID = accountID
 		r.email.Subject = subject
-		r.email.From = models.Contact{Name: fromName, Email: fromEmail, Initials: initials(fromName)}
+		r.email.From = contactFromSender(fromName, fromEmail)
 		r.email.Preview = snippet
 		if r.email.Preview == "" || r.email.Preview == subject {
 			if preview := previewFromBodyPaths(nullStringValue(textPath), nullStringValue(htmlPath)); preview != "" {
@@ -1581,7 +1587,7 @@ func (db *DB) SearchMessages(ctx context.Context, userID string, query string, l
 		r.email.ID = strconv.FormatInt(r.msgID, 10)
 		r.email.AccountID = accountID
 		r.email.Subject = subject
-		r.email.From = models.Contact{Name: fromName, Email: fromEmail, Initials: initials(fromName)}
+		r.email.From = contactFromSender(fromName, fromEmail)
 		r.email.Preview = snippet
 		if r.email.Preview == "" || r.email.Preview == subject {
 			if preview := previewFromBodyPaths(nullStringValue(textPath), nullStringValue(htmlPath)); preview != "" {
@@ -2196,6 +2202,7 @@ func defaultUISettings() map[string]string {
 		"theme":             "dark",
 		"theme_style":       "classic",
 		"prefetch_on_hover": "true",
+		"sender_display":    "name",
 	}
 }
 

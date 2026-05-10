@@ -685,7 +685,7 @@ func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		views.FolderPartial(emails, folderID, selectedEmail, totalCount, selectedThread).Render(ctx, w)
+		views.FolderPartial(emails, folderID, selectedEmail, totalCount, selectedThread, h.db.GetUISettings(ctx, h.userID(ctx))).Render(ctx, w)
 		return
 	}
 
@@ -720,7 +720,7 @@ func (h *Handler) handleFolderFull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	views.MailContentPartial(emails, folderID, selectedEmail, totalCount, selectedThread).Render(ctx, w)
+	views.MailContentPartial(emails, folderID, selectedEmail, totalCount, selectedThread, h.db.GetUISettings(ctx, h.userID(ctx))).Render(ctx, w)
 }
 
 func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
@@ -766,11 +766,13 @@ func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
+	uiSettings := h.db.GetUISettings(ctx, h.userID(ctx))
 	views.MailListItemsFragment(
 		page.Emails, folderID,
 		page.WindowStart, page.WindowEnd, page.TotalCount,
 		page.NextCursor, page.HasMore,
 		selectedEmailId,
+		uiSettings["sender_display"],
 	).Render(ctx, w)
 }
 
@@ -816,14 +818,16 @@ func (h *Handler) handleThreadSubItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	views.MailListThreadSubItems(items).Render(ctx, w)
+	uiSettings := h.db.GetUISettings(ctx, h.userID(ctx))
+	views.MailListThreadSubItems(items, uiSettings["sender_display"]).Render(ctx, w)
 }
 
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
 		w.Header().Set("Content-Type", "text/html")
-		views.MailListEmails(nil, "", nil, 0).Render(r.Context(), w)
+		uiSettings := h.db.GetUISettings(r.Context(), h.userID(r.Context()))
+		views.MailListEmails(nil, "", nil, 0, uiSettings["sender_display"]).Render(r.Context(), w)
 		return
 	}
 
@@ -834,7 +838,8 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	views.MailListEmails(emails, "", nil, len(emails)).Render(r.Context(), w)
+	uiSettings := h.db.GetUISettings(r.Context(), h.userID(r.Context()))
+	views.MailListEmails(emails, "", nil, len(emails), uiSettings["sender_display"]).Render(r.Context(), w)
 }
 
 func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
@@ -1071,7 +1076,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 	tab := r.PathValue("tab")
-	if tab != "accounts" && tab != "sync" && tab != "appearance" && tab != "advanced" {
+	if tab != "accounts" && tab != "sync" && tab != "appearance" && tab != "compose-display" && tab != "advanced" {
 		http.NotFound(w, r)
 		return
 	}

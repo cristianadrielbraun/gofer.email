@@ -219,3 +219,34 @@
   box-shadow: none;
   border: 2px solid var(--border);
 }
+
+[data-theme="minimal"]:not(.dark) .settings-select .select-trigger:hover {
+  background: var(--secondary);
+}
+
+[data-theme="minimal"]:not(.dark) .settings-select .select-content {
+  background: var(--background);
+}
+
+[data-theme="minimal"]:not(.dark) .settings-select .select-item:hover,
+[data-theme="minimal"]:not(.dark) .settings-select .select-item:focus-visible,
+[data-theme="minimal"]:not(.dark) .settings-select .select-item[data-tui-selectbox-selected="true"] {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+[data-theme="minimal"] label:has(input[role="switch"]) > div {
+  border-radius: 0;
+}
+
+[data-theme="minimal"] label:has(input[role="switch"]) > div::after {
+  border-radius: 0;
+  height: 0.9rem;
+  width: 0.9rem;
+  margin-left: 0.010rem;
+  box-shadow: none;
+}
+
+[data-theme="minimal"] label:has(input[role="switch"]:checked) > div::after {
+  translate: 1.0625rem 0;
+}

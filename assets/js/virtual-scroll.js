@@ -40,7 +40,6 @@ class VirtualMailList {
     this.itemsContainer = null
     this.bannerEl = null
     this.loaderEl = null
-    this.debugEl = null
 
     this.rowPool = []
     this.visibleRows = new Map()
@@ -152,7 +151,6 @@ class VirtualMailList {
           '<h3 class="font-semibold text-sm mb-1">' + (syncing ? 'Syncing folder' : 'No emails') + '</h3>' +
           '<p class="text-xs text-muted-foreground">' + subtitle + '</p>' +
         '</div>'
-      this.updateDebugStats()
       return
     }
 
@@ -164,7 +162,6 @@ class VirtualMailList {
 
     if (first === this.prevFirst && last === this.prevLast) {
       this.maybeLoadAtEdges(first, last)
-      this.updateDebugStats()
       return
     }
     this.prevFirst = first
@@ -189,7 +186,6 @@ class VirtualMailList {
     if (this.container.scrollTop !== scrollTop) {
       this.container.scrollTop = scrollTop
     }
-    this.updateDebugStats()
   }
 
   ensureRowPool() {
@@ -393,38 +389,6 @@ class VirtualMailList {
       '<div class="h-2.5 w-1/2 rounded bg-muted animate-pulse"></div>' +
       "</div>"
     return row
-  }
-
-  getLoadedCount() {
-    var count = 0
-    for (var i = 0; i < this.loadedRanges.length; i++) {
-      count += this.loadedRanges[i].end - this.loadedRanges[i].start + 1
-    }
-    return count
-  }
-
-  updateDebugStats() {
-    if (!this.debugEl) {
-      this.debugEl = document.createElement("div")
-      this.debugEl.className = "mail-list-debug-stats"
-      this.debugEl.style.position = "fixed"
-      this.debugEl.style.left = "12px"
-      this.debugEl.style.bottom = "12px"
-      this.debugEl.style.zIndex = "9999"
-      this.debugEl.style.padding = "6px 9px"
-      this.debugEl.style.borderRadius = "8px"
-      this.debugEl.style.border = "1px solid var(--border, hsl(var(--border)))"
-      this.debugEl.style.background = "var(--background, hsl(var(--background)))"
-      this.debugEl.style.color = "var(--foreground, hsl(var(--foreground)))"
-      this.debugEl.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)"
-      this.debugEl.style.font = "11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-      document.body.appendChild(this.debugEl)
-    }
-
-    this.debugEl.textContent =
-      this.rowPool.length + " pooled nodes | " +
-      this.getLoadedCount() + " / " + this.totalCount + " loaded | " +
-      "top: " + Math.round(this.container.scrollTop) + "px"
   }
 
   async ensureRangeLoaded(first, last) {

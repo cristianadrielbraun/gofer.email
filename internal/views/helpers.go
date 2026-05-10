@@ -2,6 +2,7 @@ package views
 
 import (
 	"encoding/json"
+	"fmt"
 	"gofer.email/internal/models"
 )
 
@@ -63,4 +64,45 @@ func themeClass(settings map[string]string) string {
 
 func themeStyle(settings map[string]string) string {
 	return uiSettingGet(settings, "theme_style", "classic")
+}
+
+func senderDisplay(contact models.Contact, mode string) string {
+	switch mode {
+	case "email":
+		if contact.Email != "" {
+			return contact.Email
+		}
+		return contact.Name
+	case "both":
+		if contact.Name == "" || contact.Email == "" || contact.Name == contact.Email {
+			if contact.Name != "" {
+				return contact.Name
+			}
+			return contact.Email
+		}
+		return fmt.Sprintf("%s <%s>", contact.Name, contact.Email)
+	default:
+		if contact.Name != "" {
+			return contact.Name
+		}
+		return contact.Email
+	}
+}
+
+func senderDisplaySettingLabel(mode string) string {
+	switch mode {
+	case "email":
+		return "Only email"
+	case "both":
+		return "Name and email"
+	default:
+		return "Only name"
+	}
+}
+
+func accountColorStyle(color string) string {
+	if color == "" {
+		color = "#8b5cf6"
+	}
+	return "background-color: " + color
 }

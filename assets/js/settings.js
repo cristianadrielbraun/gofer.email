@@ -257,7 +257,7 @@ function setupSettingsHistory() {
   if (!window.location.pathname.startsWith("/settings")) return
   var parts = window.location.pathname.replace(/\/+$/, "").split("/")
   var tab = parts[2] || "accounts"
-  if (tab !== "accounts" && tab !== "sync" && tab !== "appearance" && tab !== "advanced") tab = "accounts"
+  if (tab !== "accounts" && tab !== "sync" && tab !== "appearance" && tab !== "compose-display" && tab !== "advanced") tab = "accounts"
   history.replaceState({ settingsTab: tab }, "", window.location.pathname)
 }
 

@@ -11,12 +11,12 @@ import (
 	"gofer.email/components/dropdown"
 )
 
-templ MailList(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, width string) {
+templ MailList(emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, width string, senderDisplayMode string) {
 	<div id="mail-list" class="w-full lg:flex flex-col border-r border-border bg-card h-full overflow-hidden" style={ "width:" + width }>
 		@MailListHeader(activeFolder, totalCount)
 		@MailListToolbar()
 		<hr class="divider-etched"/>
-		@MailListEmails(emails, activeFolder, selectedEmail, totalCount)
+		@MailListEmails(emails, activeFolder, selectedEmail, totalCount, senderDisplayMode)
 	</div>
 }
 
@@ -173,7 +173,7 @@ templ MailListToolbar() {
 	</div>
 }
 
-templ MailListEmails(emails []models.Email, folderID string, selectedEmail *models.Email, totalCount int) {
+templ MailListEmails(emails []models.Email, folderID string, selectedEmail *models.Email, totalCount int, senderDisplayMode string) {
 	<div
 		id="mail-list-scroll"
 		class="flex-1 overflow-y-auto px-2 py-2"
@@ -181,7 +181,7 @@ templ MailListEmails(emails []models.Email, folderID string, selectedEmail *mode
 		data-folder-id={ folderID }
 	>
 		for i, email := range emails {
-			@MailListItem(email, i, selectedEmail)
+			@MailListItem(email, i, selectedEmail, senderDisplayMode)
 		}
 		if len(emails) == 0 {
 			@MailListEmpty()
@@ -189,7 +189,7 @@ templ MailListEmails(emails []models.Email, folderID string, selectedEmail *mode
 	</div>
 }
 
-templ MailListItem(email models.Email, position int, selectedEmail *models.Email) {
+templ MailListItem(email models.Email, position int, selectedEmail *models.Email, senderDisplayMode string) {
 	<div class="mail-list-item" data-email-id={ email.ID } data-position={ fmt.Sprintf("%d", position) } data-thread-id={ email.ThreadID }>
 		<a
 			href={ templ.URL(fmt.Sprintf("/?email=%s", email.ID)) }
@@ -225,7 +225,7 @@ templ MailListItem(email models.Email, position int, selectedEmail *models.Email
 							"text-sm truncate",
 							templ.KV("font-semibold text-foreground", !email.IsRead),
 							templ.KV("text-foreground/70", email.IsRead),
-						}>{ email.From.Name }</span>
+						}>{ senderDisplay(email.From, senderDisplayMode) }</span>
 					</div>
 					<div class="flex items-center gap-1.5 shrink-0">
 						if email.HasAttachment {
@@ -278,7 +278,7 @@ templ MailListEmpty() {
 	</div>
 }
 
-templ MailListItemsFragment(emails []models.Email, folderID string, windowStart, windowEnd, totalCount int, nextCursor string, hasMore bool, selectedEmailId string) {
+templ MailListItemsFragment(emails []models.Email, folderID string, windowStart, windowEnd, totalCount int, nextCursor string, hasMore bool, selectedEmailId string, senderDisplayMode string) {
 	<div
 		data-total-count={ fmt.Sprintf("%d", totalCount) }
 		data-window-start={ fmt.Sprintf("%d", windowStart) }
@@ -323,7 +323,7 @@ templ MailListItemsFragment(emails []models.Email, folderID string, windowStart,
 									"text-sm truncate",
 									templ.KV("font-semibold text-foreground", !email.IsRead),
 									templ.KV("text-foreground/70", email.IsRead),
-								}>{ email.From.Name }</span>
+								}>{ senderDisplay(email.From, senderDisplayMode) }</span>
 							</div>
 							<div class="flex items-center gap-1.5 shrink-0">
 								if email.HasAttachment {
@@ -368,7 +368,7 @@ templ MailListItemsFragment(emails []models.Email, folderID string, windowStart,
 	</div>
 }
 
-templ MailListThreadSubItems(items []models.ThreadItem) {
+templ MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string) {
 	<div>
 		for _, item := range items {
 			<div class="thread-sub-item" data-sub-email-id={ item.ID }>
@@ -392,7 +392,7 @@ templ MailListThreadSubItems(items []models.ThreadItem) {
 								"text-xs truncate",
 								templ.KV("font-medium text-foreground", !item.IsRead),
 								templ.KV("text-foreground/60", item.IsRead),
-							}>{ item.From.Name }</span>
+							}>{ senderDisplay(item.From, senderDisplayMode) }</span>
 							<div class="flex items-center gap-1.5 shrink-0">
 								if item.HasAttachment {
 									@icon.Paperclip(icon.Props{Class: "size-3 text-muted-foreground"})
