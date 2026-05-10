@@ -217,6 +217,32 @@ html[data-theme="minimal"] .account-color-marker {
   transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 }
 
+.sidebar-account-toggle {
+  border-radius: var(--radius);
+}
+
+.sidebar-account-folders {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows 240ms ease, opacity 180ms ease, margin 240ms ease;
+}
+
+.sidebar-account-folders-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+[data-sidebar-account-collapsed="true"] .sidebar-account-folders {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-top: -0.125rem;
+}
+
+[data-sidebar-account-collapsed="true"] .sidebar-account-chevron {
+  transform: rotate(-90deg);
+}
+
 /* === MAIL LIST ITEM (VIRTUAL SCROLL) === */
 
 .mail-list-item {

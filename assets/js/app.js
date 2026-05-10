@@ -17,8 +17,73 @@ document.addEventListener("DOMContentLoaded", function () {
   setupEmailSelectionTracking()
   setupSSE()
   setupMailListActions()
+  setupSidebarAccountCollapse()
   setupProcessingStatus()
   setupBodyPrefetch()
+
+  function setupSidebarAccountCollapse() {
+    var storageKey = "gofer:sidebar_account_collapsed"
+
+    function readState() {
+      try {
+        return JSON.parse(localStorage.getItem(storageKey) || "{}") || {}
+      } catch (_) {
+        return {}
+      }
+    }
+
+    function writeState(state) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(state))
+      } catch (_) {}
+    }
+
+    function setCollapsed(section, collapsed) {
+      var toggle = section.querySelector("[data-sidebar-account-toggle]")
+      section.setAttribute("data-sidebar-account-collapsed", collapsed ? "true" : "false")
+      if (toggle) toggle.setAttribute("aria-expanded", collapsed ? "false" : "true")
+    }
+
+    function sectionHasActiveFolder(section) {
+      return !!section.querySelector('a[hx-get^="/folder/"].bg-sidebar-accent')
+    }
+
+    function hydrate(root) {
+      var state = readState()
+      var sections = (root || document).querySelectorAll("[data-sidebar-account]")
+      for (var i = 0; i < sections.length; i++) {
+        var section = sections[i]
+        var accountId = section.getAttribute("data-sidebar-account")
+        var collapsed = state[accountId] === true && !sectionHasActiveFolder(section)
+        setCollapsed(section, collapsed)
+      }
+    }
+
+    document.addEventListener("click", function (e) {
+      var toggle = e.target.closest("[data-sidebar-account-toggle]")
+      if (!toggle) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      var section = toggle.closest("[data-sidebar-account]")
+      if (!section) return
+      var accountId = section.getAttribute("data-sidebar-account")
+      var collapsed = section.getAttribute("data-sidebar-account-collapsed") !== "true"
+      var state = readState()
+      state[accountId] = collapsed
+      writeState(state)
+      setCollapsed(section, collapsed)
+    })
+
+    document.body.addEventListener("htmx:afterSettle", function (evt) {
+      if (evt.target && evt.target.querySelector && evt.target.querySelector("[data-sidebar-account]")) {
+        hydrate(evt.target)
+      }
+    })
+
+    hydrate(document)
+  }
 
   function setupMailListActions() {
     document.addEventListener("click", function (e) {

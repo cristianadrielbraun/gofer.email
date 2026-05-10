@@ -73,7 +73,7 @@ templ SidebarHeader(accounts []models.Account) {
 }
 
 templ SidebarFolderTree(accounts []models.Account, activeFolder string) {
-	<nav class="flex-1 overflow-y-auto px-3 pb-3">
+	<nav class="flex-1 overflow-y-auto px-3 pt-2 pb-3">
 		for _, account := range accounts {
 			@SidebarAccountSection(account, activeFolder)
 		}
@@ -81,15 +81,23 @@ templ SidebarFolderTree(accounts []models.Account, activeFolder string) {
 }
 
 templ SidebarAccountSection(account models.Account, activeFolder string) {
-	<div class="mb-3">
-		<div class="flex items-center gap-2.5 px-2 py-2 text-sm font-semibold text-sidebar-accent-foreground">
+	<div class="mb-1.5" data-sidebar-account={ account.ID }>
+		<button
+			type="button"
+			class="sidebar-account-toggle flex w-full items-center gap-2.5 px-2 py-2 text-sm font-semibold text-sidebar-accent-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+			data-sidebar-account-toggle={ account.ID }
+			aria-expanded="true"
+		>
 			<div class="account-color-marker size-2.5 shrink-0" style={ accountColorStyle(account.Color) }></div>
-			<span class="truncate">{ account.Name }</span>
-		</div>
-		<div class="space-y-px mt-0.5">
-			for _, folder := range account.Folders {
-				@SidebarFolderItem(folder, activeFolder, account.ID)
-			}
+			<span class="flex-1 truncate text-left">{ account.Name }</span>
+			@icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200"})
+		</button>
+		<div class="sidebar-account-folders" data-sidebar-account-folders={ account.ID }>
+			<div class="sidebar-account-folders-inner space-y-px mt-0.5">
+				for _, folder := range account.Folders {
+					@SidebarFolderItem(folder, activeFolder, account.ID)
+				}
+			</div>
 		</div>
 	</div>
 }
