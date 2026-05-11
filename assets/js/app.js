@@ -2333,7 +2333,7 @@ function uploadComposeAttachments(files, input) {
         composeUploadFailed(form, err && err.message ? err.message : "Failed to attach file")
       })
   })
-  input.value = ""
+  if (input && "value" in input) input.value = ""
 }
 
 function uploadComposeInlineImages(files, input) {
@@ -2363,8 +2363,209 @@ function uploadComposeInlineImages(files, input) {
         composeUploadFailed(form, err && err.message ? err.message : "Failed to insert image")
       })
   })
-  input.value = ""
+  if (input && "value" in input) input.value = ""
 }
+
+var _composeDropForm = null
+var _composeDropClearTimer = null
+var _composeDropChoice = null
+
+function _composeEventHasFiles(event) {
+  var types = event && event.dataTransfer && event.dataTransfer.types
+  if (!types) return false
+  for (var i = 0; i < types.length; i++) {
+    if (types[i] === "Files") return true
+  }
+  return false
+}
+
+function _composeFilesFromTransfer(dataTransfer) {
+  var files = dataTransfer && dataTransfer.files
+  if (!files || !files.length) return []
+  return Array.prototype.slice.call(files).filter(function (file) { return !!file })
+}
+
+function _composeFileLooksImage(file) {
+  var type = String((file && file.type) || "").toLowerCase()
+  var name = String((file && file.name) || "").toLowerCase()
+  return type.indexOf("image/") === 0 || /\.(png|jpe?g|svg|webp|gif|bmp|ico)$/.test(name)
+}
+
+function _setComposeDropActive(form, active) {
+  if (!form) return
+  form.classList.toggle("compose-drop-active", !!active)
+  var pane = form.id === "compose-pane-form" && form.closest ? form.closest("[data-compose-pane]") : null
+  if (pane) pane.classList.toggle("compose-drop-active", !!active)
+  if (active) _composeDropForm = form
+  else if (_composeDropForm === form) _composeDropForm = null
+}
+
+function _composeDropFormFromEvent(event) {
+  if (!event || !event.target || !event.target.closest) return null
+  var form = event.target.closest("#compose-form, #compose-pane-form")
+  if (form) return form
+  var pane = event.target.closest("[data-compose-pane]")
+  if (pane) return pane.querySelector("#compose-pane-form")
+  var dialog = event.target.closest("#compose-dialog")
+  if (dialog) return dialog.querySelector("#compose-form")
+  return null
+}
+
+function _clearComposeDropActiveSoon(form) {
+  clearTimeout(_composeDropClearTimer)
+  _composeDropClearTimer = setTimeout(function () {
+    _setComposeDropActive(form || _composeDropForm, false)
+  }, 80)
+}
+
+function _saveComposeDropSelection(form, event) {
+  var editor = form && form.querySelector("[data-compose-editor]")
+  if (!editor) return
+  var target = event && event.target && event.target.closest ? event.target.closest("[data-compose-editor]") : null
+  var range = null
+  if (target === editor) {
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(event.clientX, event.clientY)
+    } else if (document.caretPositionFromPoint) {
+      var pos = document.caretPositionFromPoint(event.clientX, event.clientY)
+      if (pos) {
+        range = document.createRange()
+        range.setStart(pos.offsetNode, pos.offset)
+        range.collapse(true)
+      }
+    }
+  }
+  if (range && editor.contains(range.startContainer)) {
+    var selection = window.getSelection && window.getSelection()
+    if (selection) {
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+    editor._composeRange = range.cloneRange()
+    return
+  }
+  _saveComposeSelection(editor)
+  if (!editor._composeRange) {
+    range = document.createRange()
+    range.selectNodeContents(editor)
+    range.collapse(false)
+    editor._composeRange = range
+  }
+}
+
+function _closeComposeDropChoice() {
+  var choice = _composeDropChoice
+  _composeDropChoice = null
+  if (!choice) return
+  if (choice._composeKeyHandler) document.removeEventListener("keydown", choice._composeKeyHandler)
+  choice.remove()
+}
+
+function _composeDropChoiceButton(label, action) {
+  var button = document.createElement("button")
+  button.type = "button"
+  button.textContent = label
+  button.dataset.composeDropAction = action
+  return button
+}
+
+function _showComposeImageDropChoice(form, images) {
+  _closeComposeDropChoice()
+  if (!form || !images || !images.length) return
+  var choice = document.createElement("div")
+  choice.className = "compose-drop-choice-backdrop"
+  choice.setAttribute("role", "presentation")
+
+  var panel = document.createElement("div")
+  panel.className = "compose-drop-choice"
+  panel.setAttribute("role", "dialog")
+  choice.setAttribute("aria-label", "Choose how to add dropped images")
+
+  var label = document.createElement("span")
+  label.textContent = images.length === 1 ? "Add image as" : "Add " + images.length + " images as"
+  panel.appendChild(label)
+  panel.appendChild(_composeDropChoiceButton("Insert inline", "inline"))
+  panel.appendChild(_composeDropChoiceButton("Attach", "attach"))
+  panel.appendChild(_composeDropChoiceButton("Cancel", "cancel"))
+  choice.appendChild(panel)
+
+  panel.addEventListener("mousedown", function (e) {
+    e.preventDefault()
+    e.stopPropagation()
+  })
+  choice.addEventListener("click", function (e) {
+    if (e.target === choice) _closeComposeDropChoice()
+  })
+  choice.addEventListener("click", function (e) {
+    var button = e.target && e.target.closest ? e.target.closest("[data-compose-drop-action]") : null
+    if (!button) return
+    e.preventDefault()
+    var action = button.dataset.composeDropAction
+    _closeComposeDropChoice()
+    if (action === "inline") uploadComposeInlineImages(images, form)
+    else if (action === "attach") uploadComposeAttachments(images, form)
+  })
+  choice._composeKeyHandler = function (e) {
+    if (e.key === "Escape") _closeComposeDropChoice()
+  }
+  document.addEventListener("keydown", choice._composeKeyHandler)
+
+  document.body.appendChild(choice)
+  _composeDropChoice = choice
+}
+
+function _handleComposeDroppedFiles(form, files, event) {
+  if (!form || !files || !files.length) return
+  var images = []
+  var attachments = []
+  for (var i = 0; i < files.length; i++) {
+    if (_composeFileLooksImage(files[i])) images.push(files[i])
+    else attachments.push(files[i])
+  }
+  if (attachments.length) uploadComposeAttachments(attachments, form)
+  if (images.length) _showComposeImageDropChoice(form, images, event)
+}
+
+document.addEventListener("dragenter", function (event) {
+  if (!_composeEventHasFiles(event) || !event.target || !event.target.closest) return
+  var form = _composeDropFormFromEvent(event)
+  if (!form) return
+  event.preventDefault()
+  clearTimeout(_composeDropClearTimer)
+  if (_composeDropForm && _composeDropForm !== form) _setComposeDropActive(_composeDropForm, false)
+  _setComposeDropActive(form, true)
+})
+
+document.addEventListener("dragover", function (event) {
+  if (!_composeEventHasFiles(event) || !event.target || !event.target.closest) return
+  var form = _composeDropFormFromEvent(event)
+  if (!form) return
+  event.preventDefault()
+  clearTimeout(_composeDropClearTimer)
+  _setComposeDropActive(form, true)
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"
+})
+
+document.addEventListener("dragleave", function (event) {
+  if (!_composeEventHasFiles(event)) return
+  _clearComposeDropActiveSoon(_composeDropForm)
+})
+
+document.addEventListener("drop", function (event) {
+  if (!_composeEventHasFiles(event) || !event.target || !event.target.closest) return
+  var form = _composeDropFormFromEvent(event)
+  if (!form) {
+    if (_composeDropForm) event.preventDefault()
+    _setComposeDropActive(_composeDropForm, false)
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  clearTimeout(_composeDropClearTimer)
+  _setComposeDropActive(form, false)
+  _saveComposeDropSelection(form, event)
+  _handleComposeDroppedFiles(form, _composeFilesFromTransfer(event.dataTransfer), event)
+})
 
 function composeInlineContentID(att) {
   var id = att && att.id ? String(att.id) : String(Date.now())
