@@ -123,13 +123,13 @@ func (c *Client) ListFolders(ctx context.Context) ([]FolderInfo, error) {
 		if data == nil {
 			break
 		}
-		if data.Mailbox == "" {
+		if data.Mailbox == "" || !isSelectableMailbox(data.Attrs) {
 			continue
 		}
 		role := detectFolderRole(data.Mailbox, data.Attrs)
 		folders = append(folders, FolderInfo{
 			Name:       data.Mailbox,
-			Delimiter:   data.Delim,
+			Delimiter:  data.Delim,
 			Attributes: data.Attrs,
 			Role:       role,
 		})
@@ -153,20 +153,30 @@ func (c *Client) ListFolders(ctx context.Context) ([]FolderInfo, error) {
 		if data == nil {
 			break
 		}
-		if data.Mailbox == "" || seen[strings.ToUpper(data.Mailbox)] {
+		if data.Mailbox == "" || seen[strings.ToUpper(data.Mailbox)] || !isSelectableMailbox(data.Attrs) {
 			continue
 		}
 		seen[strings.ToUpper(data.Mailbox)] = true
 		role := detectFolderRole(data.Mailbox, data.Attrs)
 		folders = append(folders, FolderInfo{
 			Name:       data.Mailbox,
-			Delimiter:   data.Delim,
+			Delimiter:  data.Delim,
 			Attributes: data.Attrs,
 			Role:       role,
 		})
 	}
 
 	return folders, subCmd.Close()
+}
+
+func isSelectableMailbox(attrs []imap.MailboxAttr) bool {
+	for _, attr := range attrs {
+		switch attr {
+		case imap.MailboxAttrNoSelect, imap.MailboxAttrNonExistent:
+			return false
+		}
+	}
+	return true
 }
 
 func TestConnection(ctx context.Context, cfg *models.AccountConfig, password string) error {
