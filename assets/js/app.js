@@ -890,17 +890,7 @@ document.addEventListener("DOMContentLoaded", function () {
     flushPendingSyncEvents()
     applyActiveFolderSyncState()
     autoloadFirstEmail(container)
-
-    container.addEventListener("click", function (e) {
-      var toggle = e.target.closest("[data-thread-toggle]")
-      if (!toggle) return
-      e.preventDefault()
-      e.stopPropagation()
-      var emailId = toggle.dataset.threadToggle
-      if (virtualMailList && emailId) {
-        virtualMailList.toggleThreadExpand(emailId)
-      }
-    })
+    bindThreadToggle(container)
 
     var selectedId = virtualMailList.selectedEmailId
     var path = "/folder/" + folderID
@@ -918,6 +908,20 @@ document.addEventListener("DOMContentLoaded", function () {
       htmx.ajax("GET", "/folder/" + folderID + "/full", {target: "#main-content", swap: "outerHTML"})
     }
     return true
+  }
+
+  function bindThreadToggle(container) {
+    if (!container || container._threadToggleBound) return
+    container._threadToggleBound = true
+    container.addEventListener("click", function (e) {
+      var toggle = e.target.closest("[data-thread-toggle]")
+      if (!toggle || !container.contains(toggle)) return
+      e.preventDefault()
+      e.stopPropagation()
+      var emailId = toggle.dataset.threadToggle
+      var vml = container._virtualMailList || virtualMailList
+      if (vml && emailId) vml.toggleThreadExpand(emailId)
+    })
   }
 
   function autoloadFirstEmail(container) {
@@ -1392,6 +1396,7 @@ document.addEventListener("DOMContentLoaded", function () {
     flushPendingSyncEvents()
     applyActiveFolderSyncState()
     autoloadFirstEmail(scroll)
+    bindThreadToggle(scroll)
 
     var selectedId = virtualMailList.selectedEmailId
     var path = "/folder/" + folderID

@@ -4,7 +4,7 @@ class VirtualMailList {
     this.folderID = options.folderID || "inbox"
     this.viewMode = options.viewMode || container.dataset.viewMode || "cards"
     this.itemHeight = this.viewMode === "table" ? 44 : 94
-    this.subItemHeight = this.viewMode === "table" ? 38 : 48
+    this.subItemHeight = this.viewMode === "table" ? 32 : 48
     this.expandedThreadGap = 14
     this.overscan = 10
 
@@ -1071,7 +1071,7 @@ class VirtualMailList {
   setViewMode(viewMode, keepRows) {
     this.viewMode = viewMode === "table" ? "table" : "cards"
     this.itemHeight = this.viewMode === "table" ? 44 : 94
-    this.subItemHeight = this.viewMode === "table" ? 38 : 48
+    this.subItemHeight = this.viewMode === "table" ? 32 : 48
     this.container.dataset.viewMode = this.viewMode
     var mailList = document.getElementById("mail-list")
     if (mailList) mailList.dataset.mailListView = this.viewMode
@@ -1354,17 +1354,12 @@ class VirtualMailList {
     var previousLayout = this.captureRenderedLayout()
 
     if (this.expandedThreads.has(emailId)) {
-      var row = this.container.querySelector('[data-email-id="' + emailId + '"]')
-      var slot = row ? row.closest(".mail-list-thread-slot") : null
-      if (slot && !this.prefersReducedMotion()) {
-        slot.setAttribute("data-thread-collapsing", "")
-        await new Promise(function (resolve) { setTimeout(resolve, 170) })
-      }
       this.expandedThreads.delete(emailId)
       this.invalidateOffsets()
       this.prevFirst = null
       this.prevLast = null
       this.render()
+      this.animateLayoutShift(previousLayout)
       return
     }
 
