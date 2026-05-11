@@ -1753,12 +1753,38 @@ function _sanitizeComposeImageStyle(style) {
   return out.join("; ")
 }
 
+function _sanitizeComposeStyle(style) {
+  var safe = []
+  var allowed = {
+    "background": true, "background-color": true, "border": true, "border-bottom": true, "border-collapse": true,
+    "border-left": true, "border-radius": true, "border-right": true, "border-spacing": true, "border-top": true,
+    "color": true, "display": true, "font": true, "font-family": true, "font-size": true, "font-style": true,
+    "font-weight": true, "height": true, "letter-spacing": true, "line-height": true, "margin": true,
+    "margin-bottom": true, "margin-left": true, "margin-right": true, "margin-top": true, "max-height": true,
+    "max-width": true, "min-height": true, "min-width": true, "mso-line-height-rule": true, "opacity": true,
+    "padding": true, "padding-bottom": true, "padding-left": true, "padding-right": true, "padding-top": true,
+    "text-align": true, "text-decoration": true, "text-transform": true, "vertical-align": true, "white-space": true,
+    "width": true, "word-break": true, "word-wrap": true
+  }
+  String(style || "").split(";").forEach(function (part) {
+    var idx = part.indexOf(":")
+    if (idx <= 0) return
+    var prop = part.slice(0, idx).trim().toLowerCase()
+    var value = part.slice(idx + 1).trim()
+    if (!allowed[prop] || !value) return
+    if (/expression\s*\(|javascript:|vbscript:|-moz-binding|behavior\s*:/i.test(value)) return
+    if (/url\s*\(/i.test(value) && !/url\s*\(\s*['"]?https?:/i.test(value)) return
+    safe.push(prop + ": " + value)
+  })
+  return safe.join("; ")
+}
+
 function _sanitizeComposeHTML(html) {
   var template = document.createElement("template")
   template.innerHTML = html || ""
-  var blocked = template.content.querySelectorAll("script, iframe, object, embed, form, meta, link")
+  var blocked = template.content.querySelectorAll("script, style, head, title, iframe, object, embed, form, meta, link")
   for (var i = 0; i < blocked.length; i++) blocked[i].remove()
-  var allowed = { A: true, B: true, BLOCKQUOTE: true, BR: true, CODE: true, DIV: true, EM: true, I: true, IMG: true, LI: true, OL: true, P: true, PRE: true, S: true, SPAN: true, STRIKE: true, STRONG: true, U: true, UL: true }
+  var allowed = { A: true, B: true, BIG: true, BLOCKQUOTE: true, BR: true, CENTER: true, CODE: true, COL: true, COLGROUP: true, DIV: true, EM: true, FONT: true, H1: true, H2: true, H3: true, H4: true, H5: true, H6: true, HR: true, I: true, IMG: true, LI: true, OL: true, P: true, PRE: true, S: true, SMALL: true, SPAN: true, STRIKE: true, STRONG: true, SUB: true, SUP: true, TABLE: true, TBODY: true, TD: true, TFOOT: true, TH: true, THEAD: true, TR: true, U: true, UL: true }
   var walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT)
   var nodes = []
   while (walker.nextNode()) nodes.push(walker.currentNode)
@@ -1779,20 +1805,25 @@ function _sanitizeComposeHTML(html) {
         continue
       }
       if (tag === "IMG") {
-        var imgAllowed = { src: true, alt: true, title: true, width: true, height: true, style: true, "data-compose-inline-image": true, "data-attachment-id": true, "data-existing-attachment-id": true, "data-content-id": true, "data-filename": true, "data-content-type": true, "data-size": true, "data-preview-url": true }
+        var imgAllowed = { src: true, alt: true, title: true, width: true, height: true, style: true, "data-compose-inline-image": true, "data-attachment-id": true, "data-existing-attachment-id": true, "data-content-id": true, "data-filename": true, "data-content-type": true, "data-size": true, "data-preview-url": true, "data-remote-src": true }
         if (!imgAllowed[name]) node.removeAttribute(attr.name)
         if (name === "style") {
-          var safeStyle = _sanitizeComposeImageStyle(attr.value)
+          var safeStyle = node.hasAttribute("data-compose-inline-image") ? _sanitizeComposeImageStyle(attr.value) : _sanitizeComposeStyle(attr.value)
           if (safeStyle) node.setAttribute("style", safeStyle)
           else node.removeAttribute("style")
         }
         continue
       }
       if (name === "style") {
-        node.removeAttribute(attr.name)
+        var safeNodeStyle = _sanitizeComposeStyle(attr.value)
+        if (safeNodeStyle) node.setAttribute("style", safeNodeStyle)
+        else node.removeAttribute("style")
         continue
       }
-      if (tag !== "A" || (name !== "href" && name !== "target" && name !== "rel")) {
+      var globalAllowed = { align: true, bgcolor: true, border: true, cellpadding: true, cellspacing: true, colspan: true, dir: true, height: true, lang: true, role: true, rowspan: true, title: true, valign: true, width: true }
+      if (tag !== "A" && !globalAllowed[name]) {
+        node.removeAttribute(attr.name)
+      } else if (tag === "A" && name !== "href" && name !== "target" && name !== "rel" && !globalAllowed[name]) {
         node.removeAttribute(attr.name)
       }
     }
@@ -1803,10 +1834,16 @@ function _sanitizeComposeHTML(html) {
       if (href && href.charAt(0) !== "#") node.setAttribute("target", "_blank")
     } else if (tag === "IMG") {
       var src = node.getAttribute("src") || ""
-      if (!/^(cid:|\/api\/attachments\/|\/compose\/attachments\/)/i.test(src)) {
+      var remoteSrc = node.getAttribute("data-remote-src") || ""
+      if (!src && /^https?:/i.test(remoteSrc)) {
+        src = remoteSrc
+        node.setAttribute("src", src)
+      }
+      if (!/^(cid:|https?:|\/api\/attachments\/|\/compose\/attachments\/|\/api\/remote-assets\/)/i.test(src)) {
         node.remove()
         continue
       }
+      node.removeAttribute("data-remote-src")
       var width = Number(node.getAttribute("width") || 0)
       if (width) node.setAttribute("width", String(Math.min(1200, Math.max(1, Math.round(width)))))
       var height = Number(node.getAttribute("height") || 0)
@@ -2751,97 +2788,222 @@ function sendCompose(fromPane) {
   })
 }
 
+function composeAddress(name, email) {
+  email = String(email || "").trim()
+  name = String(name || "").trim()
+  if (!email) return ""
+  return name ? name + " <" + email + ">" : email
+}
+
+function composeNormalizeMessageID(messageId) {
+  messageId = String(messageId || "").trim()
+  if (!messageId) return ""
+  return messageId.charAt(0) === "<" ? messageId : "<" + messageId + ">"
+}
+
+function composeSourceURL(bar) {
+  var params = new URLSearchParams()
+  params.set("account_id", bar.dataset.accountId || "")
+  params.set("message_id", bar.dataset.messageId || "")
+  return "/api/compose/source?" + params.toString()
+}
+
+function composeDedupeAddresses(values, excludeEmails) {
+  var seen = {}
+  var out = []
+  excludeEmails = excludeEmails || {}
+  for (var i = 0; i < values.length; i++) {
+    var parts = _splitComposeRecipients(values[i])
+    for (var p = 0; p < parts.length; p++) {
+      var email = _composeRecipientEmail(parts[p])
+      if (!email || seen[email] || excludeEmails[email]) continue
+      seen[email] = true
+      out.push(parts[p])
+    }
+  }
+  return out.join(", ")
+}
+
+function composeAccountEmail(accountId) {
+  var options = document.querySelectorAll("[data-account-id]")
+  for (var i = 0; i < options.length; i++) {
+    if (options[i].dataset.accountId === accountId && options[i].dataset.accountEmail) {
+      return String(options[i].dataset.accountEmail).toLowerCase()
+    }
+  }
+  return ""
+}
+
+function setComposeAccount(form, accountId) {
+  if (!form || !accountId) return
+  var pane = form.id === "compose-pane-form"
+  var prefix = pane ? "compose-pane-" : "compose-"
+  var idField = document.getElementById(prefix + "account-id")
+  if (idField) idField.value = accountId
+  var options = document.querySelectorAll("[data-account-id]")
+  for (var i = 0; i < options.length; i++) {
+    if (options[i].dataset.accountId !== accountId) continue
+    var display = document.getElementById(prefix + "from-display")
+    if (display && options[i].dataset.accountEmail) {
+      var name = options[i].dataset.accountName || ""
+      var email = options[i].dataset.accountEmail
+      display.innerHTML = (name ? name + " &lt;" : "") + email + (name ? "&gt;" : "")
+    }
+    return
+  }
+}
+
+function composeReplyPlain(source) {
+  var fromLine = composeAddress(source.from_name, source.from_email)
+  var header = source.date ? "On " + source.date + ", " + fromLine + " wrote:" : fromLine + " wrote:"
+  var quotedBody = String(source.body || "").split("\n").map(function (line) { return "> " + line }).join("\n")
+  return "\n\n" + header + "\n" + quotedBody
+}
+
+function composeSourceBodyHTML(source) {
+  var html = source.html_body ? _sanitizeComposeHTML(source.html_body) : ""
+  if (html && html.trim()) return html
+  return _composePlainToHTML(source.body || "")
+}
+
+function composeReplyHTML(source) {
+  var fromLine = composeAddress(source.from_name, source.from_email)
+  var header = source.date ? "On " + source.date + ", " + fromLine + " wrote:" : fromLine + " wrote:"
+  return "<p><br></p><p>" + _escapeComposeHTML(header) + "</p><blockquote>" + composeSourceBodyHTML(source) + "</blockquote>"
+}
+
+function composeForwardPlain(source) {
+  var fromLine = composeAddress(source.from_name, source.from_email)
+  var header = "\n\n---------- Forwarded message ----------"
+  if (fromLine) header += "\nFrom: " + fromLine
+  if (source.date) header += "\nDate: " + source.date
+  if (source.subject) header += "\nSubject: " + source.subject
+  if (source.to) header += "\nTo: " + source.to
+  if (source.cc) header += "\nCc: " + source.cc
+  return header + "\n\n" + (source.body || "")
+}
+
+function composeForwardHTML(source) {
+  var lines = ["---------- Forwarded message ----------"]
+  var fromLine = composeAddress(source.from_name, source.from_email)
+  if (fromLine) lines.push("From: " + fromLine)
+  if (source.date) lines.push("Date: " + source.date)
+  if (source.subject) lines.push("Subject: " + source.subject)
+  if (source.to) lines.push("To: " + source.to)
+  if (source.cc) lines.push("Cc: " + source.cc)
+  return "<p><br></p><div>" + lines.map(_escapeComposeHTML).join("<br>") + "</div><br><div>" + composeSourceBodyHTML(source) + "</div>"
+}
+
+function composeReferencesForReply(source) {
+  var parentMessageId = composeNormalizeMessageID(source.message_id)
+  if (!parentMessageId) return ""
+  return source.references ? source.references + " " + parentMessageId : parentMessageId
+}
+
+function composeValuesFromSource(source, mode) {
+  var fromLine = composeAddress(source.from_name, source.from_email)
+  var ownEmail = composeAccountEmail(source.account_id)
+  var exclude = {}
+  if (ownEmail) exclude[ownEmail] = true
+  var vals = {
+    account_id: source.account_id || "",
+    draft_id: "",
+    to: "",
+    cc: "",
+    bcc: "",
+    subject: "",
+    body: "",
+    html_body: "",
+    in_reply_to: "",
+    references: "",
+    attachments: [],
+    inline_images: [],
+    _ccVisible: false,
+    _bccVisible: false,
+    _composeDirty: "true"
+  }
+  if (mode === "reply" || mode === "reply-all") {
+    vals.to = mode === "reply-all" ? composeDedupeAddresses([fromLine, source.to || ""], exclude) : composeDedupeAddresses([fromLine], exclude)
+    vals.cc = mode === "reply-all" ? composeDedupeAddresses([source.cc || ""], exclude) : ""
+    vals.subject = /^Re:/i.test(source.subject || "") ? source.subject : "Re: " + (source.subject || "")
+    vals.body = composeReplyPlain(source)
+    vals.html_body = composeReplyHTML(source)
+    vals.in_reply_to = composeNormalizeMessageID(source.message_id)
+    vals.references = composeReferencesForReply(source)
+    vals._ccVisible = !!vals.cc
+  } else {
+    vals.subject = /^Fwd:/i.test(source.subject || "") ? source.subject : "Fwd: " + (source.subject || "")
+    vals.body = composeForwardPlain(source)
+    vals.html_body = composeForwardHTML(source)
+    vals.attachments = source.attachments || []
+  }
+  return vals
+}
+
+function focusComposePrefill(form, mode) {
+  if (!form) return
+  if (mode === "forward") {
+    var toInput = form.querySelector('[data-recipient-name="to"] [data-compose-recipient-input]')
+    if (toInput) {
+      toInput.focus()
+      return
+    }
+  }
+  var editor = form.querySelector("[data-compose-editor]")
+  if (!editor) return
+  editor.focus()
+  var range = document.createRange()
+  range.setStart(editor, 0)
+  range.collapse(true)
+  var selection = window.getSelection()
+  if (selection) {
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+}
+
+function writeComposePrefill(form, vals, prefix, mode) {
+  _writeComposeFormValues(form, vals, prefix)
+  _showComposeOptionalFields(form, vals)
+  setComposeAccount(form, vals.account_id)
+  focusComposePrefill(form, mode)
+}
+
+function openComposePrefill(vals, mode) {
+  if (!_activeComposeCanBeReplaced()) return
+  var activePane = document.querySelector("[data-compose-pane]")
+  if (activePane) {
+    writeComposePrefill(document.getElementById("compose-pane-form"), vals, "compose-pane-", mode)
+    return
+  }
+  var view = window.GoferSettings ? GoferSettings.get("default_compose_view") : null
+  if ((view === "pane" || view === "full") && document.getElementById("mail-list") && document.getElementById("mail-view")) {
+    fetch("/compose/pane").then(function (r) { return r.text() }).then(function (html) {
+      writeComposePane(html, vals, view === "full", view === "full")
+      writeComposePrefill(document.getElementById("compose-pane-form"), vals, "compose-pane-", mode)
+    }).catch(function () {})
+    return
+  }
+  var form = document.getElementById("compose-form")
+  writeComposePrefill(form, vals, "compose-", mode)
+  if (window.tui && window.tui.dialog) window.tui.dialog.open("compose-dialog")
+}
+
 function handleReply(el, mode) {
   var bar = el && el.closest ? el.closest("[data-thread-reply-data]") : null
   if (!bar) bar = document.getElementById("reply-bar")
   if (!bar) return
-
-  var messageId = bar.dataset.messageId
-  var references = bar.dataset.references || ""
-  var subject = bar.dataset.subject || ""
-  var fromEmail = bar.dataset.fromEmail || ""
-  var fromName = bar.dataset.fromName || ""
-  var accountId = bar.dataset.accountId || ""
-  var date = bar.dataset.date || ""
-  var to = bar.dataset.to || ""
-  var cc = bar.dataset.cc || ""
-  var body = bar.dataset.body || ""
-
-  var inPane = !!document.querySelector("[data-compose-pane]")
-  var formId = inPane ? "compose-pane-form" : "compose-form"
-  var form = document.getElementById(formId)
-  if (!form) return
-
-  var toField = form.querySelector('input[name="to"]')
-  var ccField = form.querySelector('input[name="cc"]')
-  var subjectField = form.querySelector('input[name="subject"]')
-  var prefix = inPane ? "compose-pane-" : "compose-"
-  var accountIdField = document.getElementById(prefix + "account-id")
-  var inReplyToField = document.getElementById(prefix + "in-reply-to")
-  var referencesField = document.getElementById(prefix + "references")
-  var bodyField = form.querySelector('[data-compose-editor]')
-
-  if (accountId && accountIdField) {
-    accountIdField.value = accountId
-  }
-
-  var fromLine = fromName ? fromName + " <" + fromEmail + ">" : fromEmail
-
-  if (mode === "reply" || mode === "reply-all") {
-    if (toField) toField.value = fromLine
-    if (subjectField) {
-      subjectField.value = subject.match(/^Re:/i) ? subject : "Re: " + subject
-    }
-    if (inReplyToField && messageId) {
-      inReplyToField.value = messageId.charAt(0) === "<" ? messageId : "<" + messageId + ">"
-    }
-    if (referencesField && messageId) {
-      var parentMessageId = messageId.charAt(0) === "<" ? messageId : "<" + messageId + ">"
-      referencesField.value = references ? references + " " + parentMessageId : parentMessageId
-    }
-    if (bodyField) {
-      var quotedBody = body.split("\n").map(function(line) { return "> " + line }).join("\n")
-      var header = date ? "On " + date + ", " + fromLine + " wrote:" : fromLine + " wrote:"
-      _setComposeEditorValue(form, "\n\n" + header + "\n" + quotedBody, "")
-      bodyField.focus()
-      var range = document.createRange()
-      range.setStart(bodyField, 0)
-      range.collapse(true)
-      var selection = window.getSelection()
-      selection.removeAllRanges()
-      selection.addRange(range)
-    }
-  } else if (mode === "forward") {
-    if (toField) toField.value = ""
-    if (ccField) ccField.value = ""
-    if (subjectField) {
-      subjectField.value = subject.match(/^Fwd:/i) ? subject : "Fwd: " + subject
-    }
-    if (inReplyToField) inReplyToField.value = ""
-    if (referencesField) referencesField.value = ""
-    if (bodyField) {
-      var fwdHeader = "\n\n---------- Forwarded message ----------"
-      if (fromLine) fwdHeader += "\nFrom: " + fromLine
-      if (date) fwdHeader += "\nDate: " + date
-      if (subject) fwdHeader += "\nSubject: " + subject
-      if (to) fwdHeader += "\nTo: " + to
-      if (cc) fwdHeader += "\nCc: " + cc
-      _setComposeEditorValue(form, fwdHeader + "\n\n" + body, "")
-    }
-  }
-
-  renderComposeRecipientFields(form)
-
-  if (inPane) return
-
-  var dialog = document.querySelector('#compose-dialog dialog[data-tui-dialog-content]')
-  if (dialog && window.tui && window.tui.dialog) {
-    window.tui.dialog.open('compose-dialog')
-  }
-
-  setTimeout(function () {
-    if (mode === "forward" && toField) toField.focus()
-  }, 100)
+  fetch(composeSourceURL(bar))
+    .then(function (r) {
+      if (!r.ok) throw new Error("Failed to load message")
+      return r.json()
+    })
+    .then(function (source) {
+      openComposePrefill(composeValuesFromSource(source, mode), mode)
+    })
+    .catch(function (err) {
+      showSendStatus("failed", err && err.message ? err.message : "Failed to start reply")
+    })
 }
 
 function openNewCompose() {
@@ -3349,6 +3511,8 @@ function _writeComposeFormValues(form, vals, prefix) {
   if (vals._fromDisplay) {
     var display = document.getElementById(prefix + "from-display")
     if (display) display.innerHTML = vals._fromDisplay
+  } else if (vals.account_id) {
+    setComposeAccount(form, vals.account_id)
   }
   _setComposeEditorValue(form, vals.body || "", vals.html_body || "", vals.inline_images || [])
   renderComposeAttachments(form, vals.attachments || [])

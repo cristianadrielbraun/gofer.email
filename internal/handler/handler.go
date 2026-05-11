@@ -112,6 +112,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 	mux.HandleFunc("GET /api/system/processing", h.handleProcessingStatus)
 	mux.HandleFunc("POST /api/messages/{id}/prefetch-body", h.handlePrefetchBody)
+	mux.HandleFunc("GET /api/compose/source", h.handleComposeSource)
 	mux.HandleFunc("GET /compose/pane", h.handleComposePane)
 	mux.HandleFunc("POST /compose", h.handleCompose)
 	mux.HandleFunc("POST /compose/draft", h.handleComposeDraft)
@@ -2072,6 +2073,63 @@ func formValueAt(values []string, idx int, fallback string) string {
 		return values[idx]
 	}
 	return fallback
+}
+
+func (h *Handler) handleComposeSource(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	accountID := q.Get("account_id")
+	messageID := q.Get("message_id")
+	if accountID == "" || messageID == "" {
+		http.Error(w, "missing message", http.StatusBadRequest)
+		return
+	}
+	localID, err := h.db.GetMessageLocalIDByInternetID(r.Context(), accountID, messageID)
+	if err != nil || localID == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	email, err := h.db.GetEmailByID(r.Context(), strconv.FormatInt(localID, 10))
+	if err != nil || email == nil {
+		http.NotFound(w, r)
+		return
+	}
+	type composeSourceAttachment struct {
+		ID          int64  `json:"id"`
+		Filename    string `json:"filename"`
+		ContentType string `json:"content_type"`
+		Size        int64  `json:"size"`
+		Existing    bool   `json:"existing"`
+		PreviewURL  string `json:"preview_url"`
+	}
+	attachments := make([]composeSourceAttachment, 0, len(email.Attachments))
+	for _, att := range email.Attachments {
+		if att.Inline {
+			continue
+		}
+		attachments = append(attachments, composeSourceAttachment{
+			ID:          att.ID,
+			Filename:    att.Filename,
+			ContentType: att.ContentType,
+			Size:        att.SizeBytes,
+			Existing:    true,
+			PreviewURL:  attachmentPreviewURL(att.ID, att.ContentType, att.Filename),
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"account_id":  email.AccountID,
+		"message_id":  email.InternetMessageID,
+		"references":  email.References,
+		"subject":     email.Subject,
+		"from_name":   email.From.Name,
+		"from_email":  email.From.Email,
+		"date":        email.DateFull,
+		"to":          contactsToAddressList(email.To),
+		"cc":          contactsToAddressList(email.CC),
+		"body":        email.TextBody,
+		"html_body":   email.HTMLBody,
+		"attachments": attachments,
+	})
 }
 
 func (h *Handler) handleGetDraft(w http.ResponseWriter, r *http.Request) {
