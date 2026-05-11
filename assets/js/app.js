@@ -1424,6 +1424,7 @@ document.addEventListener("DOMContentLoaded", function () {
 })
 
 var sendStatusTimer = null
+var _sendStatusToast = null
 
 function setMailViewEmpty() {
   var mailView = document.getElementById("mail-view")
@@ -1443,63 +1444,96 @@ function setMailViewEmpty() {
 }
 
 function showSendStatus(status, text) {
-  var wrapper = document.getElementById("send-status-wrapper")
-  var inner = document.getElementById("send-status-inner")
-  var iconEl = document.getElementById("send-status-icon")
-  var textEl = document.getElementById("send-status-text")
-  if (!wrapper || !inner || !iconEl || !textEl) return
-
   if (sendStatusTimer) {
     clearTimeout(sendStatusTimer)
     sendStatusTimer = null
   }
 
-  textEl.textContent = text
-
-  if (status === "sending") {
-    inner.className = "flex items-center gap-2.5 px-3 py-3 rounded-lg text-[13px] font-medium transition-colors duration-500 ease-in-out bg-amber-900/40 text-amber-200 border border-amber-700/40"
-    iconEl.innerHTML = '<svg class="size-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>'
-    wrapper.style.maxHeight = "60px"
-    wrapper.style.opacity = "1"
-  } else if (status === "sent") {
-    inner.className = "flex items-center gap-2.5 px-3 py-3 rounded-lg text-[13px] font-medium transition-colors duration-500 ease-in-out bg-emerald-900/40 text-emerald-200 border border-emerald-700/40"
-    iconEl.innerHTML = '<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
-    wrapper.style.maxHeight = "60px"
-    wrapper.style.opacity = "1"
-    sendStatusTimer = setTimeout(function () {
-      wrapper.style.maxHeight = "0"
-      wrapper.style.opacity = "0"
-    }, 5000)
-  } else if (status === "ambiguous") {
-    inner.className = "flex items-center gap-2.5 px-3 py-3 rounded-lg text-[13px] font-medium transition-colors duration-500 ease-in-out bg-amber-900/40 text-amber-200 border border-amber-700/40"
-    iconEl.innerHTML = '<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-    wrapper.style.maxHeight = "60px"
-    wrapper.style.opacity = "1"
-    sendStatusTimer = setTimeout(function () {
-      wrapper.style.maxHeight = "0"
-      wrapper.style.opacity = "0"
-    }, 8000)
-  } else {
-    inner.className = "flex items-center gap-2.5 px-3 py-3 rounded-lg text-[13px] font-medium transition-colors duration-500 ease-in-out bg-red-900/40 text-red-200 border border-red-700/40"
-    iconEl.innerHTML = '<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
-    wrapper.style.maxHeight = "60px"
-    wrapper.style.opacity = "1"
-    sendStatusTimer = setTimeout(function () {
-      wrapper.style.maxHeight = "0"
-      wrapper.style.opacity = "0"
-    }, 8000)
-  }
+  var config = _composeToastConfig(status)
+  var duration = status === "sending" ? 0 : (status === "sent" ? 5000 : 8000)
+  _sendStatusToast = showGoferToast({
+    id: "compose-status-toast",
+    title: config.title,
+    description: text,
+    status: status,
+    variant: config.variant,
+    icon: config.icon,
+    position: "top-center",
+    duration: duration,
+    dismissible: status !== "sending"
+  })
 }
 
 function hideSendStatus() {
-  var wrapper = document.getElementById("send-status-wrapper")
-  if (!wrapper) return
   if (sendStatusTimer) {
     clearTimeout(sendStatusTimer)
     sendStatusTimer = null
   }
-  wrapper.style.maxHeight = "0"
-  wrapper.style.opacity = "0"
+  if (_sendStatusToast) dismissGoferToast(_sendStatusToast)
+  _sendStatusToast = null
+}
+
+function _composeToastConfig(status) {
+  if (status === "sent") return { title: "Message sent", variant: "success", icon: "success" }
+  if (status === "sending") return { title: "Working...", variant: "info", icon: "spinner" }
+  if (status === "ambiguous") return { title: "Needs review", variant: "warning", icon: "warning" }
+  return { title: "Action failed", variant: "error", icon: "error" }
+}
+
+function _goferToastIcon(icon) {
+  if (icon === "success") return '<svg class="size-[22px] text-green-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>'
+  if (icon === "warning") return '<svg class="size-[22px] text-yellow-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
+  if (icon === "error") return '<svg class="size-[22px] text-red-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>'
+  if (icon === "spinner") return '<svg class="size-[22px] text-blue-500 mr-3 flex-shrink-0 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>'
+  return '<svg class="size-[22px] text-blue-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+}
+
+function dismissGoferToast(toast) {
+  if (!toast || !toast.isConnected) return
+  if (toast._goferToastTimer) clearTimeout(toast._goferToastTimer)
+  toast.style.transition = "opacity 300ms, transform 300ms"
+  toast.style.opacity = "0"
+  toast.style.transform = "translateY(1rem)"
+  setTimeout(function () { if (toast.isConnected) toast.remove() }, 300)
+}
+
+function showGoferToast(opts) {
+  opts = opts || {}
+  var id = opts.id || "gofer-toast-" + Date.now()
+  var existing = document.getElementById(id)
+  if (existing) dismissGoferToast(existing)
+  var duration = Number(opts.duration || 0)
+  var toast = document.createElement("div")
+  toast.id = id
+  toast.dataset.tuiToast = ""
+  toast.dataset.tuiToastDuration = String(duration)
+  toast.dataset.position = opts.position || "top-center"
+  toast.dataset.variant = opts.variant || "default"
+  toast.className = "z-50 fixed pointer-events-auto p-4 w-fit max-w-[calc(100vw-2rem)] md:max-w-[680px] animate-in fade-in slide-in-from-bottom-4 duration-300 data-[position=top-right]:top-0 data-[position=top-right]:right-0 data-[position=top-left]:top-0 data-[position=top-left]:left-0 data-[position=top-center]:top-0 data-[position=top-center]:left-1/2 data-[position=top-center]:-translate-x-1/2 data-[position=bottom-right]:bottom-0 data-[position=bottom-right]:right-0 data-[position=bottom-left]:bottom-0 data-[position=bottom-left]:left-0 data-[position=bottom-center]:bottom-0 data-[position=bottom-center]:left-1/2 data-[position=bottom-center]:-translate-x-1/2 data-[position*=top]:slide-in-from-top-4 data-[position*=bottom]:slide-in-from-bottom-4"
+  toast.innerHTML =
+    '<div class="gofer-toast-card" data-variant="' + _escapeComposeHTML(opts.variant || "default") + '">' +
+      (duration > 0 ? '<div class="gofer-toast-progress-wrap"><div class="toast-progress gofer-toast-progress" data-variant="' + _escapeComposeHTML(opts.variant || "default") + '"></div></div>' : '') +
+      _goferToastIcon(opts.icon || "info") +
+      '<span class="flex-1 min-w-0">' +
+        (opts.title ? '<p class="text-sm font-semibold truncate">' + _escapeComposeHTML(opts.title) + '</p>' : '') +
+        (opts.description ? '<p class="text-sm opacity-90 mt-1">' + _escapeComposeHTML(opts.description) + '</p>' : '') +
+      '</span>' +
+      (opts.dismissible ? '<button type="button" class="gofer-toast-dismiss" aria-label="Close" data-tui-toast-dismiss>x</button>' : '') +
+    '</div>'
+  var dismiss = toast.querySelector("[data-tui-toast-dismiss]")
+  if (dismiss) dismiss.addEventListener("click", function () { dismissGoferToast(toast) })
+  document.body.appendChild(toast)
+  if (duration > 0) {
+    var progress = toast.querySelector(".gofer-toast-progress")
+    if (progress) {
+      progress.style.width = "100%"
+      progress.offsetWidth
+      progress.style.transition = "width " + duration + "ms linear"
+      progress.style.width = "0px"
+    }
+    toast._goferToastTimer = setTimeout(function () { dismissGoferToast(toast) }, duration)
+  }
+  return toast
 }
 
 var _composeActive = false
@@ -2051,6 +2085,13 @@ function handleComposePaste(event) {
   var editor = event.currentTarget
   var clipboard = event.clipboardData || window.clipboardData
   if (!clipboard) return
+  var pastedImages = _composeImageFilesFromClipboard(clipboard)
+  if (pastedImages.length) {
+    event.preventDefault()
+    _saveComposeSelection(editor)
+    _showComposeImageDropChoice(_composeFormFrom(editor), pastedImages)
+    return
+  }
   event.preventDefault()
   var html = clipboard.getData("text/html")
   var text = clipboard.getData("text/plain")
@@ -2205,14 +2246,6 @@ function changeComposeUploadCount(form, delta, label) {
   var pending = Math.max(0, _composePendingUploads(form) + delta)
   form.dataset.composeUploadsPending = String(pending)
   updateComposeSendState(form)
-  if (pending > 0) {
-    showSendStatus("sending", "Uploading " + pending + " " + (pending === 1 ? "file" : "files") + "...")
-  } else if (form.dataset.composeSending !== "true") {
-    if (label === "failed") return
-    setTimeout(function () {
-      if (_composePendingUploads(form) === 0 && form.dataset.composeSending !== "true") hideSendStatus()
-    }, 500)
-  }
 }
 
 function composeUploadFailed(form, message) {
@@ -2257,6 +2290,10 @@ function saveComposeDraft(fromPane, auto) {
   finalizeComposeRecipients(form)
   if (!form || !_composeHasDraftContent(form)) {
     if (!auto) _setComposeDraftButtonState(form, "empty")
+    return Promise.resolve(false)
+  }
+  if (!validateComposeMessageSize(form)) {
+    if (!auto) _setComposeDraftButtonState(form, "failed")
     return Promise.resolve(false)
   }
   _setComposeDraftButtonState(form, "saving")
@@ -2315,22 +2352,20 @@ function uploadComposeAttachments(files, input) {
   var form = _composeFormFrom(input)
   if (!form || !files || !files.length) return
   Array.prototype.forEach.call(files, function (file) {
+    if (!validateComposeUploadFile(form, file)) return
+    var pendingChip = addComposePendingAttachment(form, file, false)
     changeComposeUploadCount(form, 1)
-    var data = new FormData()
-    data.append("attachment", file)
-    fetch("/compose/attachments", { method: "POST", body: data })
-      .then(function (r) {
-        if (!r.ok) throw new Error("Failed to attach " + file.name)
-        return r.json()
-      })
+    uploadComposeAttachmentFile(file, pendingChip)
       .then(function (att) {
+        removeComposePendingAttachment(pendingChip)
         addComposeAttachment(form, att)
         _markComposeDirty(form)
         changeComposeUploadCount(form, -1)
       })
       .catch(function (err) {
+        failComposePendingAttachment(pendingChip)
         changeComposeUploadCount(form, -1, "failed")
-        composeUploadFailed(form, err && err.message ? err.message : "Failed to attach file")
+        composeUploadFailed(form, composeUploadErrorMessage("attach", file, err))
       })
   })
   if (input && "value" in input) input.value = ""
@@ -2340,27 +2375,25 @@ function uploadComposeInlineImages(files, input) {
   var form = _composeFormFrom(input)
   if (!form || !files || !files.length) return
   Array.prototype.forEach.call(files, function (file) {
-    if (file.type && file.type.indexOf("image/") !== 0) {
-      composeUploadFailed(form, "Inline images must be image files")
+    if (!_composeFileLooksImage(file)) {
+      composeUploadFailed(form, "Could not insert " + ((file && file.name) || "file") + " inline: only image files can be inserted inline. Attach this file instead.")
       return
     }
+    if (!validateComposeUploadFile(form, file)) return
+    var pendingChip = addComposePendingAttachment(form, file, true)
     changeComposeUploadCount(form, 1)
-    var data = new FormData()
-    data.append("attachment", file)
-    fetch("/compose/attachments", { method: "POST", body: data })
-      .then(function (r) {
-        if (!r.ok) throw new Error("Failed to insert " + file.name)
-        return r.json()
-      })
+    uploadComposeAttachmentFile(file, pendingChip)
       .then(function (att) {
         if (!att.preview_url) throw new Error("That image type cannot be previewed inline")
+        removeComposePendingAttachment(pendingChip)
         insertComposeInlineImage(form, att)
         _markComposeDirty(form)
         changeComposeUploadCount(form, -1)
       })
       .catch(function (err) {
+        failComposePendingAttachment(pendingChip)
         changeComposeUploadCount(form, -1, "failed")
-        composeUploadFailed(form, err && err.message ? err.message : "Failed to insert image")
+        composeUploadFailed(form, composeUploadErrorMessage("insert", file, err))
       })
   })
   if (input && "value" in input) input.value = ""
@@ -2369,6 +2402,111 @@ function uploadComposeInlineImages(files, input) {
 var _composeDropForm = null
 var _composeDropClearTimer = null
 var _composeDropChoice = null
+var COMPOSE_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
+var COMPOSE_MESSAGE_MAX_BYTES = 35 * 1024 * 1024
+
+function _composeUploadLimitLabel() {
+  return formatComposeAttachmentSize(COMPOSE_ATTACHMENT_MAX_BYTES)
+}
+
+function _composeMessageLimitLabel() {
+  return formatComposeAttachmentSize(COMPOSE_MESSAGE_MAX_BYTES)
+}
+
+function estimateComposeEncodedSize(form) {
+  if (!form) return 0
+  _syncComposeFormEditor(form)
+  var body = form.querySelector('textarea[name="body"]')
+  var html = form.querySelector('textarea[name="html_body"]')
+  var total = String((body && body.value) || "").length + String((html && html.value) || "").length + 4096
+  function addAttachment(att) {
+    var size = Number((att && att.size) || 0)
+    var encoded = Math.ceil(size / 3) * 4
+    total += encoded + Math.floor(encoded / 76) * 2 + 1024
+  }
+  readComposeAttachments(form).forEach(addAttachment)
+  readComposeInlineImages(form).forEach(addAttachment)
+  return total
+}
+
+function validateComposeMessageSize(form) {
+  var estimated = estimateComposeEncodedSize(form)
+  if (estimated <= COMPOSE_MESSAGE_MAX_BYTES) return true
+  showSendStatus("failed", "Message is too large: estimated " + formatComposeAttachmentSize(estimated) + " after encoding. The send limit is " + _composeMessageLimitLabel() + " total, including attachments.")
+  return false
+}
+
+function validateComposeUploadFile(form, file) {
+  if (!file) return false
+  if (file.size > COMPOSE_ATTACHMENT_MAX_BYTES) {
+    composeUploadFailed(form, (file.name || "File") + " is too large: " + formatComposeAttachmentSize(file.size) + ". The limit is " + _composeUploadLimitLabel() + " per file.")
+    return false
+  }
+  return true
+}
+
+function composeUploadErrorMessage(action, file, err) {
+  var name = (file && file.name) || "file"
+  var verb = action === "insert" ? "insert" : "attach"
+  var reason = err && err.message ? String(err.message) : "The upload did not complete."
+  if (/too large/i.test(reason)) {
+    return "Could not " + verb + " " + name + ": the file exceeds the " + _composeUploadLimitLabel() + " per-file limit."
+  }
+  if (/cancel/i.test(reason)) return "Could not " + verb + " " + name + ": the upload was cancelled."
+  if (/previewed inline/i.test(reason)) return "Could not insert " + name + " inline: this image type cannot be previewed inline. Attach it instead."
+  if (/network|failed/i.test(reason)) return "Could not " + verb + " " + name + ": upload failed before the server accepted it. Check your connection and try again."
+  return "Could not " + verb + " " + name + ": " + reason
+}
+
+function uploadComposeAttachmentFile(file, pendingChip) {
+  return new Promise(function (resolve, reject) {
+    var data = new FormData()
+    data.append("attachment", file)
+    var xhr = new XMLHttpRequest()
+    xhr.open("POST", "/compose/attachments")
+    xhr.upload.onprogress = function (event) {
+      if (event.lengthComputable) updateComposePendingAttachment(pendingChip, Math.round((event.loaded / event.total) * 100))
+    }
+    xhr.onload = function () {
+      var payload = {}
+      try { payload = JSON.parse(xhr.responseText || "{}") } catch (e) {}
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(payload.error || "Upload failed"))
+        return
+      }
+      resolve(payload)
+    }
+    xhr.onerror = function () { reject(new Error("Upload failed")) }
+    xhr.onabort = function () { reject(new Error("Upload cancelled")) }
+    xhr.send(data)
+  })
+}
+
+function _composeClipboardFileName(file, index) {
+  if (file && file.name) return file.name
+  var ext = "png"
+  var type = String((file && file.type) || "").toLowerCase()
+  if (type === "image/jpeg") ext = "jpg"
+  else if (type === "image/gif") ext = "gif"
+  else if (type === "image/webp") ext = "webp"
+  else if (type === "image/svg+xml") ext = "svg"
+  return "pasted-image" + (index > 0 ? "-" + (index + 1) : "") + "." + ext
+}
+
+function _composeImageFilesFromClipboard(clipboard) {
+  var files = []
+  var items = clipboard && clipboard.items
+  for (var i = 0; items && i < items.length; i++) {
+    if (!items[i] || items[i].kind !== "file" || String(items[i].type || "").indexOf("image/") !== 0) continue
+    var file = items[i].getAsFile && items[i].getAsFile()
+    if (!file) continue
+    if (!file.name && window.File) {
+      file = new File([file], _composeClipboardFileName(file, files.length), { type: file.type || "image/png" })
+    }
+    files.push(file)
+  }
+  return files
+}
 
 function _composeEventHasFiles(event) {
   var types = event && event.dataTransfer && event.dataTransfer.types
@@ -2484,6 +2622,10 @@ function _showComposeImageDropChoice(form, images) {
   var label = document.createElement("span")
   label.textContent = images.length === 1 ? "Add image as" : "Add " + images.length + " images as"
   panel.appendChild(label)
+  var limit = document.createElement("span")
+  limit.className = "compose-drop-choice-limit"
+  limit.textContent = "Max " + _composeUploadLimitLabel() + " per file, " + _composeMessageLimitLabel() + " total"
+  panel.appendChild(limit)
   panel.appendChild(_composeDropChoiceButton("Insert inline", "inline"))
   panel.appendChild(_composeDropChoiceButton("Attach", "attach"))
   panel.appendChild(_composeDropChoiceButton("Cancel", "cancel"))
@@ -2852,6 +2994,71 @@ function addComposeAttachment(form, att) {
   list.appendChild(item)
 }
 
+function addComposePendingAttachment(form, file, inline) {
+  var wrap = form && form.querySelector("[data-compose-attachments]")
+  var list = form && form.querySelector("[data-compose-attachment-list]")
+  if (!wrap || !list) return null
+  wrap.classList.remove("hidden")
+
+  var item = document.createElement("span")
+  item.className = "compose-attachment-chip compose-attachment-uploading"
+  item.dataset.composeUploadPending = ""
+
+  var spinner = document.createElement("span")
+  spinner.className = "compose-attachment-spinner"
+  spinner.setAttribute("aria-hidden", "true")
+  item.appendChild(spinner)
+
+  var label = document.createElement("span")
+  label.className = "truncate"
+  label.dataset.composeUploadLabel = ""
+  label.textContent = (inline ? "Inserting " : "Uploading ") + ((file && file.name) || "file")
+  item.appendChild(label)
+
+  var progress = document.createElement("span")
+  progress.className = "compose-attachment-progress"
+  progress.dataset.composeUploadProgress = ""
+  progress.textContent = "0%"
+  item.appendChild(progress)
+
+  list.appendChild(item)
+  return item
+}
+
+function updateComposePendingAttachment(item, percent) {
+  if (!item) return
+  var progress = item.querySelector("[data-compose-upload-progress]")
+  if (progress) progress.textContent = Math.max(0, Math.min(100, Number(percent) || 0)) + "%"
+}
+
+function removeComposePendingAttachment(item) {
+  if (!item) return
+  var form = _composeFormFrom(item)
+  item.remove()
+  var wrap = form && form.querySelector("[data-compose-attachments]")
+  var list = form && form.querySelector("[data-compose-attachment-list]")
+  if (wrap && list && !list.children.length) wrap.classList.add("hidden")
+}
+
+function failComposePendingAttachment(item) {
+  if (!item) return
+  item.classList.remove("compose-attachment-uploading")
+  item.classList.add("compose-attachment-failed")
+  var label = item.querySelector("[data-compose-upload-label]")
+  var progress = item.querySelector("[data-compose-upload-progress]")
+  if (label) label.textContent = label.textContent.replace(/^(Uploading|Inserting)\s+/, "Failed ")
+  if (progress) progress.textContent = "Failed"
+  if (!item.querySelector("button")) {
+    var remove = document.createElement("button")
+    remove.type = "button"
+    remove.className = "compose-attachment-remove"
+    remove.setAttribute("aria-label", "Dismiss failed upload")
+    remove.textContent = "x"
+    remove.onclick = function () { removeComposePendingAttachment(item) }
+    item.appendChild(remove)
+  }
+}
+
 function _composeHiddenInput(name, value, inline) {
   var input = document.createElement("input")
   input.type = "hidden"
@@ -3113,6 +3320,7 @@ function sendCompose(fromPane) {
     return
   }
   _syncComposeFormEditor(form)
+  if (!validateComposeMessageSize(form)) return
 
   var toField = form.querySelector('input[name="to"]')
   if (!toField || !toField.value.trim()) {

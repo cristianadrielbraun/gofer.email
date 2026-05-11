@@ -13,6 +13,7 @@ import (
 	"gofer.email/components/selectbox"
 	"gofer.email/components/tabs"
 	"gofer.email/components/tooltip"
+	"gofer.email/components/toast"
 )
 
 templ Layout(accounts []models.Account, activeFolder string, emails []models.Email, selectedEmail *models.Email, totalCount int, uiSettings map[string]string, selectedThread []models.ThreadItem) {
@@ -37,6 +38,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			@tooltip.Script()
 			@popover.Script()
 			@copybutton.Script()
+			@toast.Script()
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings={ uiSettingsJSON(uiSettings) }>
 			<div class="flex h-screen overflow-hidden">
@@ -121,6 +123,7 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 			@tooltip.Script()
 			@popover.Script()
 			@copybutton.Script()
+			@toast.Script()
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings={ uiSettingsJSON(uiSettings) }>
 			<div class="flex h-screen overflow-hidden">

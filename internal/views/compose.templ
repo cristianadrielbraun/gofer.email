@@ -107,8 +107,8 @@ templ ComposeDialog(accounts []models.Account) {
 				})
 			</div>
 			@ComposeToolbar()
-			@ComposeAttachments()
 			@ComposeRichEditor()
+			@ComposeAttachments()
 			</div>
 			@dialog.Footer() {
 				<div class="flex items-center justify-between w-full gap-3">
@@ -222,11 +222,11 @@ templ ComposeToolbar() {
 					@icon.Paperclip(icon.Props{Class: "size-3.5"})
 				</button>
 			}
-			@tooltip.Content(tooltip.ContentProps{
+		@tooltip.Content(tooltip.ContentProps{
 				Position:  tooltip.PositionBottom,
 				ShowArrow: true,
 			}) {
-				Attach file
+				Attach file (max 25 MB each, 35 MB total)
 			}
 		}
 		@tooltip.Tooltip() {
@@ -317,6 +317,7 @@ templ ComposeAttachments() {
 	<div class="hidden rounded-md border border-border/60 bg-background/40 p-2" data-compose-attachments>
 		<input type="file" multiple class="hidden" data-compose-attachment-input onchange="uploadComposeAttachments(this.files, this)"/>
 		<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp,image/x-icon" class="hidden" data-compose-inline-input onchange="uploadComposeInlineImages(this.files, this)"/>
+		<div class="mb-2 text-[11px] font-medium text-muted-foreground/70">Max 25 MB per file, 35 MB total</div>
 		<div class="flex flex-wrap gap-2" data-compose-attachment-list></div>
 	</div>
 }
@@ -372,8 +373,8 @@ templ ComposePane(accounts []models.Account) {
 			</div>
 			<div class="h-px bg-gradient-to-r from-transparent via-amber-900/10 to-transparent"></div>
 			<div class="flex-1 overflow-y-auto">
-				<div id="compose-pane-content" class="mx-auto px-8 py-4">
-					<div id="compose-pane-form" class="flex flex-col gap-3">
+				<div id="compose-pane-content" class="mx-auto flex h-full flex-col px-8 py-4">
+					<div id="compose-pane-form" class="flex flex-1 min-h-0 flex-col gap-3">
 						<input type="hidden" name="account_id" id="compose-pane-account-id" value={ composeDefaultAccountID(accounts) }/>
 						<input type="hidden" name="draft_id" id="compose-pane-draft-id" value=""/>
 						<input type="hidden" name="in_reply_to" id="compose-pane-in-reply-to" value=""/>
@@ -434,8 +435,8 @@ templ ComposePane(accounts []models.Account) {
 						})
 					</div>
 					@ComposeToolbar()
-					@ComposeAttachments()
 					@ComposeRichEditor()
+					@ComposeAttachments()
 					</div>
 				</div>
 			</div>

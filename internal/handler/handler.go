@@ -42,6 +42,12 @@ type Handler struct {
 	bodyFetches  map[int64]chan struct{}
 }
 
+const (
+	composeAttachmentMaxBytes     int64 = 25 << 20
+	composeMessageMaxBytes        int64 = 35 << 20
+	composeStagedAttachmentMaxAge       = 24 * time.Hour
+)
+
 func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrchestrator, blobStore *store.BlobStore, authManager *auth.Manager) *Handler {
 	return &Handler{
 		db:           db,
@@ -1509,7 +1515,8 @@ func (h *Handler) handleAttachmentPreview(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) handleComposeAttachmentUpload(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(25 << 20); err != nil {
+	h.cleanupUnreferencedComposeAttachments(r.Context())
+	if err := r.ParseMultipartForm(composeAttachmentMaxBytes); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid attachment upload"})
@@ -1524,8 +1531,8 @@ func (h *Handler) handleComposeAttachmentUpload(w http.ResponseWriter, r *http.R
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(io.LimitReader(file, (25<<20)+1))
-	if err != nil || len(data) > 25<<20 {
+	data, err := io.ReadAll(io.LimitReader(file, composeAttachmentMaxBytes+1))
+	if err != nil || int64(len(data)) > composeAttachmentMaxBytes {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "attachment is too large"})
@@ -1582,6 +1589,22 @@ func (h *Handler) handleComposeAttachmentDelete(w http.ResponseWriter, r *http.R
 	_ = h.blobStore.DeleteComposeAttachment(r.PathValue("id"))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+func (h *Handler) cleanupUnreferencedComposeAttachments(ctx context.Context) {
+	rows, err := h.db.Read().QueryContext(ctx, `SELECT storage_path FROM attachments WHERE storage_path LIKE ?`, "%/_compose/%")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	keep := make(map[string]bool)
+	for rows.Next() {
+		var path string
+		if rows.Scan(&path) == nil && path != "" {
+			keep[filepath.Clean(path)] = true
+		}
+	}
+	_, _ = h.blobStore.CleanupComposeAttachments(composeStagedAttachmentMaxAge, keep)
 }
 
 func composeAttachmentPreviewURL(id, contentType, filename string) string {
@@ -1967,7 +1990,13 @@ func (h *Handler) handleComposeDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	subject := r.FormValue("subject")
 	snippet := sentSnippet(body, subject)
-	_, attachmentRows := h.collectComposeAttachments(r)
+	outgoingAttachments, attachmentRows := h.collectComposeAttachments(r)
+	if err := validateComposeMessageSize(outgoingAttachments, body, htmlBody); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
 
 	msgID, err := h.db.SaveDraftMessage(ctx, storage.DraftMessageInput{
 		AccountID:         accountID,
@@ -2044,6 +2073,36 @@ func parseDraftRecipients(raw string) []storage.Recipient {
 		recipients = append(recipients, storage.Recipient{Name: addr.Name, Email: addr.Address})
 	}
 	return recipients
+}
+
+func validateComposeMessageSize(attachments []message.OutgoingAttachment, body, htmlBody string) error {
+	total := int64(len(body) + len(htmlBody) + 4096)
+	for _, att := range attachments {
+		size := att.Size
+		if size <= 0 && att.Path != "" {
+			if info, err := os.Stat(att.Path); err == nil {
+				size = info.Size()
+			}
+		}
+		// Base64 expands by 4/3, plus CRLF every 76 bytes and MIME headers.
+		encoded := ((size + 2) / 3) * 4
+		encoded += encoded/76*2 + 1024
+		total += encoded
+	}
+	if total > composeMessageMaxBytes {
+		return fmt.Errorf("message is too large: estimated %s after encoding. The send limit is %s total, including attachments", formatByteSize(total), formatByteSize(composeMessageMaxBytes))
+	}
+	return nil
+}
+
+func formatByteSize(size int64) string {
+	if size >= 1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
+	}
+	if size >= 1024 {
+		return fmt.Sprintf("%d KB", size/1024)
+	}
+	return fmt.Sprintf("%d B", size)
 }
 
 func (h *Handler) collectComposeAttachments(r *http.Request) ([]message.OutgoingAttachment, []storage.AttachmentRow) {
@@ -2342,6 +2401,12 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 	ccAddrs, _ := message.ParseAddressList(r.FormValue("cc"))
 	bccAddrs, _ := message.ParseAddressList(r.FormValue("bcc"))
 	attachments, _ := h.collectComposeAttachments(r)
+	if err := validateComposeMessageSize(attachments, r.FormValue("body"), r.FormValue("html_body")); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
 
 	body := r.FormValue("body")
 	htmlBody := strings.TrimSpace(r.FormValue("html_body"))

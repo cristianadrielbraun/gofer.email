@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type BlobStore struct {
@@ -132,6 +133,39 @@ func (s *BlobStore) DeleteComposeAttachment(id string) error {
 		return nil
 	}
 	return os.Remove(path)
+}
+
+func (s *BlobStore) CleanupComposeAttachments(olderThan time.Duration, keep map[string]bool) (int, error) {
+	if olderThan <= 0 {
+		return 0, nil
+	}
+	dir := filepath.Join(s.basePath, "_compose")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	cutoff := time.Now().Add(-olderThan)
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		if keep != nil && keep[filepath.Clean(path)] {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.Remove(path); err == nil {
+			removed++
+		}
+	}
+	return removed, nil
 }
 
 func (s *BlobStore) Open(path string) (io.ReadCloser, error) {

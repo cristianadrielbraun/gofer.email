@@ -347,6 +347,47 @@
   pointer-events: none;
 }
 
+.compose-attachment-uploading {
+  color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground));
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.compose-attachment-failed {
+  border-color: color-mix(in srgb, var(--destructive) 40%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+  color: var(--destructive);
+}
+
+.compose-attachment-spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+  border: 2px solid color-mix(in srgb, currentcolor 22%, transparent);
+  border-top-color: currentcolor;
+  border-radius: 999px;
+  animation: compose-attachment-spin 780ms linear infinite;
+}
+
+.compose-attachment-failed .compose-attachment-spinner {
+  display: none;
+}
+
+.compose-attachment-progress {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.compose-attachment-failed .compose-attachment-progress {
+  color: currentcolor;
+}
+
+@keyframes compose-attachment-spin {
+  to { transform: rotate(360deg); }
+}
+
 #compose-form,
 #compose-pane-form,
 [data-compose-pane] {
@@ -404,6 +445,13 @@
   white-space: nowrap;
 }
 
+.compose-drop-choice .compose-drop-choice-limit {
+  padding-left: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground));
+}
+
 .compose-drop-choice button {
   border-radius: calc(var(--radius) * 0.75);
   padding: 0.45rem 0.75rem;
@@ -413,6 +461,59 @@
 }
 
 .compose-drop-choice button:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.gofer-toast-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 2px 10px color-mix(in srgb, #000 10%, transparent);
+  padding: 1.1rem 1.25rem 1rem;
+}
+
+.gofer-toast-progress-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0.18rem;
+  overflow: hidden;
+}
+
+.gofer-toast-progress {
+  height: 100%;
+  background: var(--muted-foreground);
+  transform-origin: left;
+}
+
+.gofer-toast-progress[data-variant="success"] { background: #22c55e; }
+.gofer-toast-progress[data-variant="error"] { background: #ef4444; }
+.gofer-toast-progress[data-variant="warning"] { background: #eab308; }
+.gofer-toast-progress[data-variant="info"] { background: #3b82f6; }
+
+.gofer-toast-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin-left: 0.65rem;
+  border-radius: calc(var(--radius) * 0.75);
+  color: var(--muted-foreground);
+  line-height: 1;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.gofer-toast-dismiss:hover {
   background: var(--accent);
   color: var(--accent-foreground);
 }
