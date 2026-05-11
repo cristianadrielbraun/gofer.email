@@ -165,9 +165,6 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if emailID != "" {
 		selectedEmail, _ = h.db.GetEmailByID(ctx, emailID)
 	}
-	if selectedEmail == nil && len(emails) > 0 {
-		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
-	}
 
 	var selectedThread []models.ThreadItem
 	if selectedEmail != nil && selectedEmail.ThreadID != "" {
@@ -711,14 +708,7 @@ func (h *Handler) handleFolderPartial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var selectedEmail *models.Email
-	if len(emails) > 0 {
-		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
-	}
-
 	var selectedThread []models.ThreadItem
-	if selectedEmail != nil && selectedEmail.ThreadID != "" {
-		selectedThread, _ = h.db.GetThreadMessages(ctx, selectedEmail.AccountID, selectedEmail.ThreadID)
-	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
@@ -747,14 +737,7 @@ func (h *Handler) handleFolderFull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var selectedEmail *models.Email
-	if len(emails) > 0 {
-		selectedEmail, _ = h.db.GetEmailByID(ctx, emails[0].ID)
-	}
-
 	var selectedThread []models.ThreadItem
-	if selectedEmail != nil && selectedEmail.ThreadID != "" {
-		selectedThread, _ = h.db.GetThreadMessages(ctx, selectedEmail.AccountID, selectedEmail.ThreadID)
-	}
 
 	w.Header().Set("Content-Type", "text/html")
 	views.MailContentPartial(accounts, emails, folderID, selectedEmail, totalCount, selectedThread, h.db.GetUISettings(ctx, h.userID(ctx))).Render(ctx, w)

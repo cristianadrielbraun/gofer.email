@@ -885,6 +885,7 @@ document.addEventListener("DOMContentLoaded", function () {
     container._virtualMailList = virtualMailList
     flushPendingSyncEvents()
     applyActiveFolderSyncState()
+    autoloadFirstEmail(container)
 
     container.addEventListener("click", function (e) {
       var toggle = e.target.closest("[data-thread-toggle]")
@@ -901,6 +902,21 @@ document.addEventListener("DOMContentLoaded", function () {
     var path = "/folder/" + folderID
     if (selectedId) path += "/" + selectedId
     history.replaceState({ folder: folderID, email: selectedId || null }, "", path)
+  }
+
+  function autoloadFirstEmail(container) {
+    if (!container || !container.hasAttribute("data-autoload-first-email")) return
+    container.removeAttribute("data-autoload-first-email")
+    var first = container.querySelector(".mail-list-item[data-email-id]")
+    if (!first || !first.dataset.emailId || typeof htmx === "undefined") return
+
+    if (virtualMailList) {
+      virtualMailList.selectedEmailId = first.dataset.emailId
+      virtualMailList.syncSelectionClasses(virtualMailList.itemsContainer)
+      virtualMailList.pushUrl()
+    }
+    if (typeof showMailViewLoading === "function") showMailViewLoading()
+    htmx.ajax("GET", "/email/" + first.dataset.emailId, "#mail-view")
   }
 
   function setupFolderClickInterception() {
@@ -953,6 +969,8 @@ document.addEventListener("DOMContentLoaded", function () {
       var isOnSettings = mainContent && mainContent.querySelector("[data-tui-tabs]")
       if (isOnSettings || !virtualMailList) {
         if (typeof htmx !== "undefined") {
+          history.pushState({ folder: folderID, email: null }, "", "/folder/" + folderID)
+          if (mainContent) showMailContentLoading(mainContent)
           htmx.ajax("GET", "/folder/" + folderID + "/full", {target: "#main-content", swap: "outerHTML"})
         }
       } else {
@@ -962,6 +980,15 @@ document.addEventListener("DOMContentLoaded", function () {
         }).catch(function () {})
       }
     }, true)
+  }
+
+  function showMailContentLoading(mainContent) {
+    mainContent.innerHTML = '<div class="flex flex-1 min-w-0 bg-background surface-desk items-center justify-center">' +
+      '<div class="flex items-center gap-2 text-sm text-muted-foreground">' +
+      '<div class="size-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin"></div>' +
+	  '<span>Loading content...</span>' +
+      '</div>' +
+      '</div>'
   }
 
   function setupEmailSelectionTracking() {
@@ -1307,6 +1334,7 @@ document.addEventListener("DOMContentLoaded", function () {
     scroll._virtualMailList = virtualMailList
     flushPendingSyncEvents()
     applyActiveFolderSyncState()
+    autoloadFirstEmail(scroll)
 
     var selectedId = virtualMailList.selectedEmailId
     var path = "/folder/" + folderID

@@ -414,6 +414,7 @@ templ MailListEmails(accounts []models.Account, emails []models.Email, folderID 
 		data-folder-id={ folderID }
 		data-view-mode={ mailListViewMode(viewMode) }
 		data-account-marker-style={ accountMarkerStyle(accounts) }
+		data-autoload-first-email?={ selectedEmail == nil && len(emails) > 0 }
 	>
 		if mailListViewMode(viewMode) == "table" {
 			@MailListTableHeader(accountMarkerStyle(accounts))
