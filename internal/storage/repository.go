@@ -2429,6 +2429,43 @@ func (db *DB) InsertAttachments(ctx context.Context, messageID int64, atts []Att
 	return tx.Commit()
 }
 
+func (db *DB) ReplaceAttachments(ctx context.Context, messageID int64, atts []AttachmentRow) error {
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM attachments WHERE message_id = ?`, messageID); err != nil {
+		return fmt.Errorf("delete attachments: %w", err)
+	}
+	if len(atts) > 0 {
+		stmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO attachments (message_id, filename, content_type, size_bytes, content_id, inline, storage_path)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return fmt.Errorf("prepare: %w", err)
+		}
+		defer stmt.Close()
+		for _, a := range atts {
+			var inline int
+			if a.Inline {
+				inline = 1
+			}
+			if _, err := stmt.ExecContext(ctx, messageID, a.Filename, a.ContentType, a.SizeBytes, a.ContentID, inline, a.StoragePath); err != nil {
+				return fmt.Errorf("insert attachment: %w", err)
+			}
+		}
+	}
+	hasAttach := 0
+	if len(atts) > 0 {
+		hasAttach = 1
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET has_attachments = ? WHERE id = ?`, hasAttach, messageID); err != nil {
+		return fmt.Errorf("update has_attachments: %w", err)
+	}
+	return tx.Commit()
+}
+
 type AttachmentRow struct {
 	Filename    string
 	ContentType string

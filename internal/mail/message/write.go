@@ -2,9 +2,12 @@ package message
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"mime"
 	"net/mail"
+	"os"
 	"strings"
 	"time"
 
@@ -12,18 +15,26 @@ import (
 )
 
 type OutgoingMessage struct {
-	FromName   string
-	FromEmail  string
-	To         []*mail.Address
-	CC         []*mail.Address
-	Bcc        []*mail.Address
-	Subject    string
-	TextBody   string
-	HTMLBody   string
-	InReplyTo  string
-	References string
-	MessageID  string
-	Date       time.Time
+	FromName    string
+	FromEmail   string
+	To          []*mail.Address
+	CC          []*mail.Address
+	Bcc         []*mail.Address
+	Subject     string
+	TextBody    string
+	HTMLBody    string
+	InReplyTo   string
+	References  string
+	MessageID   string
+	Date        time.Time
+	Attachments []OutgoingAttachment
+}
+
+type OutgoingAttachment struct {
+	Filename    string
+	ContentType string
+	Path        string
+	Size        int64
 }
 
 func NewMessageID() string {
@@ -58,14 +69,39 @@ func BuildMIMEMessage(msg *OutgoingMessage) ([]byte, error) {
 		buf.WriteString(fmt.Sprintf("References: %s\r\n", msg.References))
 	}
 
+	body, bodyContentType := buildMessageBody(msg)
+	if len(msg.Attachments) > 0 {
+		boundary := uuid.New().String()
+		buf.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=%s\r\n", boundary))
+		buf.WriteString("\r\n")
+		buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		buf.WriteString(bodyContentType)
+		buf.WriteString("\r\n\r\n")
+		buf.Write(body)
+		buf.WriteString("\r\n")
+		for _, att := range msg.Attachments {
+			if err := writeAttachmentPart(&buf, boundary, att); err != nil {
+				return nil, err
+			}
+		}
+		buf.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+		return buf.Bytes(), nil
+	}
+
+	buf.WriteString(bodyContentType)
+	buf.WriteString("\r\n\r\n")
+	buf.Write(body)
+
+	return buf.Bytes(), nil
+}
+
+func buildMessageBody(msg *OutgoingMessage) ([]byte, string) {
 	hasText := msg.TextBody != ""
 	hasHTML := msg.HTMLBody != ""
+	var buf bytes.Buffer
 
 	if hasText && hasHTML {
 		boundary := uuid.New().String()
-		buf.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=%s\r\n", boundary))
-		buf.WriteString("\r\n")
-
 		buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
 		buf.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
 		buf.WriteString(msg.TextBody)
@@ -77,15 +113,60 @@ func BuildMIMEMessage(msg *OutgoingMessage) ([]byte, error) {
 		buf.WriteString("\r\n")
 
 		buf.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+		return buf.Bytes(), fmt.Sprintf("Content-Type: multipart/alternative; boundary=%s", boundary)
 	} else if hasHTML {
-		buf.WriteString("Content-Type: text/html; charset=utf-8\r\n\r\n")
 		buf.WriteString(msg.HTMLBody)
+		return buf.Bytes(), "Content-Type: text/html; charset=utf-8"
 	} else {
-		buf.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
 		buf.WriteString(msg.TextBody)
+		return buf.Bytes(), "Content-Type: text/plain; charset=utf-8"
 	}
+}
 
-	return buf.Bytes(), nil
+func writeAttachmentPart(buf *bytes.Buffer, boundary string, att OutgoingAttachment) error {
+	f, err := os.Open(att.Path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	contentType := att.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	filename := mime.QEncoding.Encode("utf-8", att.Filename)
+	buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, filename))
+	buf.WriteString("Content-Transfer-Encoding: base64\r\n")
+	buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n\r\n", filename))
+	enc := base64.NewEncoder(base64.StdEncoding, newBase64LineWriter(buf))
+	if _, err := io.Copy(enc, f); err != nil {
+		enc.Close()
+		return err
+	}
+	if err := enc.Close(); err != nil {
+		return err
+	}
+	buf.WriteString("\r\n")
+	return nil
+}
+
+type base64LineWriter struct {
+	buf *bytes.Buffer
+	n   int
+}
+
+func newBase64LineWriter(buf *bytes.Buffer) io.Writer { return &base64LineWriter{buf: buf} }
+
+func (w *base64LineWriter) Write(p []byte) (int, error) {
+	for _, b := range p {
+		if w.n == 76 {
+			w.buf.WriteString("\r\n")
+			w.n = 0
+		}
+		w.buf.WriteByte(b)
+		w.n++
+	}
+	return len(p), nil
 }
 
 func formatAddressList(addrs []*mail.Address) string {

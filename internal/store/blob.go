@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -75,6 +77,52 @@ func (s *BlobStore) StoreAttachment(ctx context.Context, accountID string, local
 		return "", fmt.Errorf("write attachment: %w", err)
 	}
 	return p, nil
+}
+
+func (s *BlobStore) StoreComposeAttachment(ctx context.Context, filename string, r io.Reader) (id, path string, err error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", "", err
+	}
+	id = hex.EncodeToString(b[:])
+	dir := filepath.Join(s.basePath, "_compose")
+	if err := s.ensureDir(dir); err != nil {
+		return "", "", fmt.Errorf("create compose attachments dir: %w", err)
+	}
+	sanitized := sanitizeFilename(filename)
+	if sanitized == "" {
+		sanitized = "attachment"
+	}
+	path = filepath.Join(dir, id+"-"+sanitized)
+	f, err := os.Create(path)
+	if err != nil {
+		return "", "", err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, r); err != nil {
+		os.Remove(path)
+		return "", "", err
+	}
+	return id, path, nil
+}
+
+func (s *BlobStore) ComposeAttachmentPath(id string) (string, error) {
+	if id == "" || strings.ContainsAny(id, `/\`) || strings.Contains(id, "..") {
+		return "", fmt.Errorf("invalid compose attachment id")
+	}
+	matches, err := filepath.Glob(filepath.Join(s.basePath, "_compose", id+"-*"))
+	if err != nil || len(matches) == 0 {
+		return "", os.ErrNotExist
+	}
+	return matches[0], nil
+}
+
+func (s *BlobStore) DeleteComposeAttachment(id string) error {
+	path, err := s.ComposeAttachmentPath(id)
+	if err != nil {
+		return nil
+	}
+	return os.Remove(path)
 }
 
 func (s *BlobStore) Open(path string) (io.ReadCloser, error) {

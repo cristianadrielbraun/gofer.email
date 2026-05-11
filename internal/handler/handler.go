@@ -103,7 +103,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/settings/ui", h.handleGetUISettings)
 	mux.HandleFunc("PATCH /api/settings/ui", h.handleSaveUISettings)
 	mux.HandleFunc("GET /api/attachments/{id}/download", h.handleAttachmentDownload)
+	mux.HandleFunc("GET /api/attachments/{id}/preview", h.handleAttachmentPreview)
 	mux.HandleFunc("GET /api/inline-content/{messageID}/{contentID}", h.handleInlineContent)
+	mux.HandleFunc("POST /compose/attachments", h.handleComposeAttachmentUpload)
+	mux.HandleFunc("GET /compose/attachments/{id}/preview", h.handleComposeAttachmentPreview)
+	mux.HandleFunc("DELETE /compose/attachments/{id}", h.handleComposeAttachmentDelete)
 	mux.HandleFunc("GET /api/events", h.handleSSE)
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 	mux.HandleFunc("GET /api/system/processing", h.handleProcessingStatus)
@@ -1422,6 +1426,140 @@ func (h *Handler) handleAttachmentDownload(w http.ResponseWriter, r *http.Reques
 	http.ServeContent(w, r, filename, time.Time{}, f)
 }
 
+func (h *Handler) handleAttachmentPreview(w http.ResponseWriter, r *http.Request) {
+	attID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	var filename, contentType, storagePath string
+	err = h.db.Read().QueryRowContext(r.Context(),
+		`SELECT filename, content_type, storage_path FROM attachments WHERE id = ?`, attID,
+	).Scan(&filename, &contentType, &storagePath)
+	if err != nil || !isPreviewableImage(contentType, filename) {
+		http.NotFound(w, r)
+		return
+	}
+	serveAttachmentPreview(w, r, filename, contentType, storagePath)
+}
+
+func (h *Handler) handleComposeAttachmentUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(25 << 20); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid attachment upload"})
+		return
+	}
+	file, header, err := r.FormFile("attachment")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing attachment"})
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, (25<<20)+1))
+	if err != nil || len(data) > 25<<20 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "attachment is too large"})
+		return
+	}
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+	id, path, err := h.blobStore.StoreComposeAttachment(r.Context(), header.Filename, bytes.NewReader(data))
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to store attachment"})
+		return
+	}
+	_ = path
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":           id,
+		"filename":     header.Filename,
+		"content_type": contentType,
+		"size":         len(data),
+		"preview_url":  composeAttachmentPreviewURL(id, contentType, header.Filename),
+	})
+}
+
+func (h *Handler) handleComposeAttachmentPreview(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	path, err := h.blobStore.ComposeAttachmentPath(id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	filename := strings.TrimPrefix(filepath.Base(path), id+"-")
+	f, err := os.Open(path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	buf := make([]byte, 512)
+	n, _ := f.Read(buf)
+	f.Close()
+	contentType := http.DetectContentType(buf[:n])
+	if !isPreviewableImage(contentType, filename) {
+		http.NotFound(w, r)
+		return
+	}
+	serveAttachmentPreview(w, r, filename, contentType, path)
+}
+
+func (h *Handler) handleComposeAttachmentDelete(w http.ResponseWriter, r *http.Request) {
+	_ = h.blobStore.DeleteComposeAttachment(r.PathValue("id"))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+func composeAttachmentPreviewURL(id, contentType, filename string) string {
+	if !isPreviewableImage(contentType, filename) {
+		return ""
+	}
+	return "/compose/attachments/" + id + "/preview"
+}
+
+func attachmentPreviewURL(id int64, contentType, filename string) string {
+	if !isPreviewableImage(contentType, filename) {
+		return ""
+	}
+	return "/api/attachments/" + strconv.FormatInt(id, 10) + "/preview"
+}
+
+func isPreviewableImage(contentType, filename string) bool {
+	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	switch contentType {
+	case "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/svg+xml", "image/bmp", "image/x-icon", "image/vnd.microsoft.icon":
+		return true
+	}
+	lower := strings.ToLower(filename)
+	for _, ext := range []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+func serveAttachmentPreview(w http.ResponseWriter, r *http.Request, filename, contentType, storagePath string) {
+	f, err := os.Open(storagePath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	http.ServeContent(w, r, filename, time.Time{}, f)
+}
+
 func (h *Handler) handleInlineContent(w http.ResponseWriter, r *http.Request) {
 	messageID := r.PathValue("messageID")
 	contentID := r.PathValue("contentID")
@@ -1740,6 +1878,7 @@ func (h *Handler) handleComposeDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	subject := r.FormValue("subject")
 	snippet := sentSnippet(body, subject)
+	_, attachmentRows := h.collectComposeAttachments(r)
 
 	msgID, err := h.db.SaveDraftMessage(ctx, storage.DraftMessageInput{
 		AccountID:         accountID,
@@ -1775,6 +1914,7 @@ func (h *Handler) handleComposeDraft(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = h.db.UpdateMessageBody(ctx, msgID, textPath, htmlPath, "", snippet)
+	_ = h.db.ReplaceAttachments(ctx, msgID, attachmentRows)
 	h.publishMutation(accountID, draftFolderID)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1817,14 +1957,78 @@ func parseDraftRecipients(raw string) []storage.Recipient {
 	return recipients
 }
 
+func (h *Handler) collectComposeAttachments(r *http.Request) ([]message.OutgoingAttachment, []storage.AttachmentRow) {
+	ctx := r.Context()
+	var outgoing []message.OutgoingAttachment
+	var rows []storage.AttachmentRow
+
+	ids := r.Form["attachment_id"]
+	filenames := r.Form["attachment_filename"]
+	contentTypes := r.Form["attachment_content_type"]
+	sizes := r.Form["attachment_size"]
+	for i, id := range ids {
+		path, err := h.blobStore.ComposeAttachmentPath(id)
+		if err != nil {
+			continue
+		}
+		filename := formValueAt(filenames, i, filepath.Base(path))
+		contentType := formValueAt(contentTypes, i, "application/octet-stream")
+		size, _ := strconv.ParseInt(formValueAt(sizes, i, "0"), 10, 64)
+		outgoing = append(outgoing, message.OutgoingAttachment{Filename: filename, ContentType: contentType, Path: path, Size: size})
+		rows = append(rows, storage.AttachmentRow{Filename: filename, ContentType: contentType, SizeBytes: size, StoragePath: path})
+	}
+
+	for _, existingID := range r.Form["existing_attachment_id"] {
+		attID, err := strconv.ParseInt(existingID, 10, 64)
+		if err != nil {
+			continue
+		}
+		var filename, contentType, storagePath string
+		var size int64
+		err = h.db.Read().QueryRowContext(ctx,
+			`SELECT filename, content_type, size_bytes, storage_path FROM attachments WHERE id = ?`, attID,
+		).Scan(&filename, &contentType, &size, &storagePath)
+		if err != nil {
+			continue
+		}
+		outgoing = append(outgoing, message.OutgoingAttachment{Filename: filename, ContentType: contentType, Path: storagePath, Size: size})
+		rows = append(rows, storage.AttachmentRow{Filename: filename, ContentType: contentType, SizeBytes: size, StoragePath: storagePath})
+	}
+
+	return outgoing, rows
+}
+
+func formValueAt(values []string, idx int, fallback string) string {
+	if idx >= 0 && idx < len(values) && values[idx] != "" {
+		return values[idx]
+	}
+	return fallback
+}
+
 func (h *Handler) handleGetDraft(w http.ResponseWriter, r *http.Request) {
 	email, err := h.db.GetEmailByID(r.Context(), r.PathValue("id"))
 	if err != nil || email == nil || !email.IsDraft {
 		http.NotFound(w, r)
 		return
 	}
+	type draftAttachment struct {
+		ID          int64  `json:"id"`
+		Filename    string `json:"filename"`
+		ContentType string `json:"content_type"`
+		Size        int64  `json:"size"`
+		Existing    bool   `json:"existing"`
+		PreviewURL  string `json:"preview_url"`
+	}
+	attachments := make([]draftAttachment, 0, len(email.Attachments))
+	for _, att := range email.Attachments {
+		if att.Inline {
+			continue
+		}
+		attachments = append(attachments, draftAttachment{ID: att.ID, Filename: att.Filename, ContentType: att.ContentType, Size: att.SizeBytes, Existing: true})
+		attachments[len(attachments)-1].PreviewURL = attachmentPreviewURL(att.ID, att.ContentType, att.Filename)
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	json.NewEncoder(w).Encode(map[string]any{
 		"account_id":  email.AccountID,
 		"draft_id":    email.InternetMessageID,
 		"to":          contactsToAddressList(email.To),
@@ -1835,6 +2039,7 @@ func (h *Handler) handleGetDraft(w http.ResponseWriter, r *http.Request) {
 		"html_body":   email.HTMLBody,
 		"in_reply_to": email.InReplyTo,
 		"references":  email.References,
+		"attachments": attachments,
 	})
 }
 
@@ -1934,6 +2139,7 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 	}
 	ccAddrs, _ := message.ParseAddressList(r.FormValue("cc"))
 	bccAddrs, _ := message.ParseAddressList(r.FormValue("bcc"))
+	attachments, _ := h.collectComposeAttachments(r)
 
 	body := r.FormValue("body")
 	htmlBody := strings.TrimSpace(r.FormValue("html_body"))
@@ -1948,18 +2154,19 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 	inReplyTo, references := h.validComposeThreadHeaders(ctx, accountID, r.FormValue("subject"), r.FormValue("in_reply_to"), r.FormValue("references"))
 
 	msg := &message.OutgoingMessage{
-		FromName:   account.Name,
-		FromEmail:  account.Email,
-		To:         toAddrs,
-		CC:         ccAddrs,
-		Bcc:        bccAddrs,
-		Subject:    r.FormValue("subject"),
-		TextBody:   body,
-		HTMLBody:   htmlBody,
-		InReplyTo:  inReplyTo,
-		References: references,
-		MessageID:  message.NewMessageID(),
-		Date:       time.Now().UTC(),
+		FromName:    account.Name,
+		FromEmail:   account.Email,
+		To:          toAddrs,
+		CC:          ccAddrs,
+		Bcc:         bccAddrs,
+		Subject:     r.FormValue("subject"),
+		TextBody:    body,
+		HTMLBody:    htmlBody,
+		InReplyTo:   inReplyTo,
+		References:  references,
+		MessageID:   message.NewMessageID(),
+		Date:        time.Now().UTC(),
+		Attachments: attachments,
 	}
 	draftID := strings.TrimSpace(r.FormValue("draft_id"))
 
@@ -2057,6 +2264,22 @@ func (h *Handler) saveSentMessage(ctx context.Context, accountID string, msg *me
 		}
 	}
 	_ = h.db.UpdateMessageBody(ctx, localID, textPath, htmlPath, rawPath, snippet)
+	if len(msg.Attachments) > 0 {
+		var attRows []storage.AttachmentRow
+		for i, att := range msg.Attachments {
+			f, err := os.Open(att.Path)
+			if err != nil {
+				continue
+			}
+			storedPath, err := h.blobStore.StoreAttachment(ctx, accountID, localID, int64(i+1), att.Filename, f)
+			f.Close()
+			if err != nil {
+				continue
+			}
+			attRows = append(attRows, storage.AttachmentRow{Filename: att.Filename, ContentType: att.ContentType, SizeBytes: att.Size, StoragePath: storedPath})
+		}
+		_ = h.db.ReplaceAttachments(ctx, localID, attRows)
+	}
 	h.publishMutation(accountID, sentFolderID)
 }
 

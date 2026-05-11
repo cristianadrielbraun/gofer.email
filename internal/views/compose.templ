@@ -107,6 +107,7 @@ templ ComposeDialog(accounts []models.Account) {
 				})
 			</div>
 			@ComposeToolbar()
+			@ComposeAttachments()
 			@ComposeRichEditor()
 			</div>
 			@dialog.Footer() {
@@ -217,7 +218,7 @@ templ ComposeToolbar() {
 		<div class="w-px h-4 bg-border mx-0.5"></div>
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" onclick="composeUnavailable('Attachments are next on the compose roadmap.')">
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" onclick="triggerComposeAttachmentUpload(this)">
 					@icon.Paperclip(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -309,6 +310,13 @@ templ ComposeRichEditor() {
 			onfocus="setActiveComposeEditor(this)"
 			onpaste="handleComposePaste(event)"
 		></div>
+	</div>
+}
+
+templ ComposeAttachments() {
+	<div class="hidden rounded-md border border-border/60 bg-background/40 p-2" data-compose-attachments>
+		<input type="file" multiple class="hidden" data-compose-attachment-input onchange="uploadComposeAttachments(this.files, this)"/>
+		<div class="flex flex-wrap gap-2" data-compose-attachment-list></div>
 	</div>
 }
 
@@ -425,6 +433,7 @@ templ ComposePane(accounts []models.Account) {
 						})
 					</div>
 					@ComposeToolbar()
+					@ComposeAttachments()
 					@ComposeRichEditor()
 					</div>
 				</div>

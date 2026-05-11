@@ -270,6 +270,83 @@
   pointer-events: none;
 }
 
+.compose-attachment-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--foreground);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  animation: compose-recipient-chip-in 140ms ease-out;
+}
+
+.compose-attachment-preview {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: calc(var(--radius) * 0.75);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.compose-attachment-icon {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: calc(var(--radius) * 0.75);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: color-mix(in srgb, var(--ink) 72%, var(--foreground));
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.compose-attachment-icon-pdf { background: color-mix(in srgb, #ef4444 12%, transparent); color: #b91c1c; }
+.compose-attachment-icon-sheet { background: color-mix(in srgb, #22c55e 14%, transparent); color: #15803d; }
+.compose-attachment-icon-doc { background: color-mix(in srgb, #3b82f6 14%, transparent); color: #1d4ed8; }
+.compose-attachment-icon-deck { background: color-mix(in srgb, #f97316 14%, transparent); color: #c2410c; }
+.compose-attachment-icon-archive { background: color-mix(in srgb, #a855f7 14%, transparent); color: #7e22ce; }
+.compose-attachment-icon-text { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.compose-attachment-icon-code { background: color-mix(in srgb, #06b6d4 14%, transparent); color: #0e7490; }
+.compose-attachment-icon-audio { background: color-mix(in srgb, #ec4899 14%, transparent); color: #be185d; }
+.compose-attachment-icon-video { background: color-mix(in srgb, #6366f1 14%, transparent); color: #4338ca; }
+
+.compose-attachment-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: -0.3rem;
+  padding: 0 0 0.0625rem;
+  border-radius: calc(var(--radius) * 0.8);
+  color: currentcolor;
+  opacity: 0.55;
+  line-height: 1;
+  transition: opacity 150ms ease, background-color 150ms ease;
+}
+
+.compose-attachment-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentcolor 10%, transparent);
+}
+
+.compose-attachment-removing {
+  animation: compose-recipient-chip-out 140ms ease-in forwards;
+  pointer-events: none;
+}
+
 @keyframes compose-recipient-chip-in {
   from { opacity: 0; transform: translateY(2px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }

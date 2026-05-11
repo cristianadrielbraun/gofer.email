@@ -1526,6 +1526,7 @@ function resetComposeForm(fromPane) {
   if (editor) editor.innerHTML = ""
   var recipientFields = form.querySelectorAll("[data-compose-recipient-field]")
   for (var i = 0; i < recipientFields.length; i++) renderComposeRecipientField(recipientFields[i], "")
+  renderComposeAttachments(form, [])
   form.dataset.composeDirty = "false"
   _setComposeDraftButtonState(form, "default")
 }
@@ -1939,6 +1940,7 @@ function _composeHasDraftContent(form) {
   for (var r = 0; r < recipientInputs.length; r++) {
     if ((recipientInputs[r].textContent || "").trim()) return true
   }
+  if (form.querySelector("[data-compose-attachment]")) return true
   var names = ["to", "cc", "bcc", "subject", "body", "html_body"]
   for (var i = 0; i < names.length; i++) {
     var field = form.querySelector('[name="' + names[i] + '"]')
@@ -2001,6 +2003,168 @@ function saveActiveComposeDraft(auto) {
   saveComposeDraft(form && form.id === "compose-pane-form", !!auto)
 }
 
+function triggerComposeAttachmentUpload(el) {
+  var form = _composeFormFrom(el)
+  var input = form && form.querySelector("[data-compose-attachment-input]")
+  if (input) input.click()
+}
+
+function uploadComposeAttachments(files, input) {
+  var form = _composeFormFrom(input)
+  if (!form || !files || !files.length) return
+  Array.prototype.forEach.call(files, function (file) {
+    var data = new FormData()
+    data.append("attachment", file)
+    fetch("/compose/attachments", { method: "POST", body: data })
+      .then(function (r) {
+        if (!r.ok) throw new Error("Failed to attach " + file.name)
+        return r.json()
+      })
+      .then(function (att) {
+        addComposeAttachment(form, att)
+        _markComposeDirty(form)
+      })
+      .catch(function (err) {
+        showSendStatus("failed", err && err.message ? err.message : "Failed to attach file")
+      })
+  })
+  input.value = ""
+}
+
+function composeAttachmentKind(att) {
+  var filename = (att && att.filename ? att.filename : "").toLowerCase()
+  var contentType = (att && att.content_type ? att.content_type : "").toLowerCase().split(";")[0]
+  function hasExt(exts) {
+    for (var i = 0; i < exts.length; i++) {
+      if (filename.endsWith(exts[i])) return true
+    }
+    return false
+  }
+  if (contentType.indexOf("image/") === 0 || hasExt([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"])) return { kind: "image", label: "IMG", title: "Image file" }
+  if (contentType === "application/pdf" || hasExt([".pdf"])) return { kind: "pdf", label: "PDF", title: "PDF document" }
+  if (contentType.indexOf("spreadsheet") >= 0 || contentType.indexOf("excel") >= 0 || contentType === "text/csv" || hasExt([".xls", ".xlsx", ".csv", ".ods"])) return { kind: "sheet", label: hasExt([".csv"]) ? "CSV" : "XLS", title: "Spreadsheet" }
+  if (contentType.indexOf("word") >= 0 || hasExt([".doc", ".docx", ".odt", ".rtf"])) return { kind: "doc", label: "DOC", title: "Document" }
+  if (contentType.indexOf("presentation") >= 0 || contentType.indexOf("powerpoint") >= 0 || hasExt([".ppt", ".pptx", ".odp"])) return { kind: "deck", label: "PPT", title: "Presentation" }
+  if (contentType.indexOf("zip") >= 0 || contentType.indexOf("compressed") >= 0 || contentType.indexOf("tar") >= 0 || hasExt([".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2"])) return { kind: "archive", label: "ZIP", title: "Archive" }
+  if (contentType.indexOf("audio/") === 0 || hasExt([".mp3", ".wav", ".m4a", ".ogg", ".flac"])) return { kind: "audio", label: "AUD", title: "Audio file" }
+  if (contentType.indexOf("video/") === 0 || hasExt([".mp4", ".mov", ".avi", ".webm", ".mkv"])) return { kind: "video", label: "VID", title: "Video file" }
+  if (hasExt([".json", ".xml", ".html", ".css", ".js", ".ts", ".go", ".py", ".rb", ".java", ".c", ".cpp", ".sh"])) return { kind: "code", label: "DEV", title: "Code file" }
+  if (contentType.indexOf("text/") === 0 || hasExt([".txt", ".md", ".log"])) return { kind: "text", label: "TXT", title: "Text file" }
+  return { kind: "file", label: "FILE", title: "File" }
+}
+
+function addComposeAttachment(form, att) {
+  var wrap = form.querySelector("[data-compose-attachments]")
+  var list = form.querySelector("[data-compose-attachment-list]")
+  if (!wrap || !list) return
+  wrap.classList.remove("hidden")
+
+  var item = document.createElement("span")
+  item.className = "compose-attachment-chip"
+  item.dataset.composeAttachment = ""
+  item.dataset.attachmentId = att.id || ""
+  item.dataset.existingAttachmentId = att.existing ? String(att.id || "") : ""
+  item.dataset.filename = att.filename || "attachment"
+  item.dataset.contentType = att.content_type || "application/octet-stream"
+  item.dataset.size = String(att.size || 0)
+  item.dataset.previewUrl = att.preview_url || ""
+
+  var hiddenName = att.existing ? "existing_attachment_id" : "attachment_id"
+  item.appendChild(_composeHiddenInput(hiddenName, att.id || ""))
+  if (!att.existing) {
+    item.appendChild(_composeHiddenInput("attachment_filename", att.filename || "attachment"))
+    item.appendChild(_composeHiddenInput("attachment_content_type", att.content_type || "application/octet-stream"))
+    item.appendChild(_composeHiddenInput("attachment_size", String(att.size || 0)))
+  }
+
+  if (att.preview_url) {
+    var preview = document.createElement("img")
+    preview.className = "compose-attachment-preview"
+    preview.src = att.preview_url
+    preview.alt = ""
+    preview.loading = "lazy"
+    item.appendChild(preview)
+  } else {
+    var kind = composeAttachmentKind(att)
+    var icon = document.createElement("span")
+    icon.className = "compose-attachment-icon compose-attachment-icon-" + kind.kind
+    icon.textContent = kind.label
+    icon.title = kind.title
+    icon.setAttribute("aria-hidden", "true")
+    item.appendChild(icon)
+  }
+
+  var label = document.createElement("span")
+  label.className = "truncate"
+  label.textContent = (att.filename || "attachment") + (att.size ? " (" + formatComposeAttachmentSize(att.size) + ")" : "")
+  var remove = document.createElement("button")
+  remove.type = "button"
+  remove.className = "compose-attachment-remove"
+  remove.setAttribute("aria-label", "Remove attachment")
+  remove.textContent = "x"
+  remove.onclick = function () { removeComposeAttachment(item) }
+  item.appendChild(label)
+  item.appendChild(remove)
+  list.appendChild(item)
+}
+
+function _composeHiddenInput(name, value) {
+  var input = document.createElement("input")
+  input.type = "hidden"
+  input.name = name
+  input.value = value
+  return input
+}
+
+function removeComposeAttachment(item) {
+  var form = _composeFormFrom(item)
+  var id = item.dataset.attachmentId
+  var existing = item.dataset.existingAttachmentId
+  item.classList.add("compose-attachment-removing")
+  setTimeout(function () {
+    item.remove()
+    var wrap = form && form.querySelector("[data-compose-attachments]")
+    var list = form && form.querySelector("[data-compose-attachment-list]")
+    if (wrap && list && !list.querySelector("[data-compose-attachment]")) wrap.classList.add("hidden")
+    _markComposeDirty(form)
+  }, 140)
+  if (id && !existing) fetch("/compose/attachments/" + encodeURIComponent(id), { method: "DELETE" }).catch(function () {})
+}
+
+function formatComposeAttachmentSize(size) {
+  size = Number(size || 0)
+  if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + " MB"
+  if (size >= 1024) return Math.round(size / 1024) + " KB"
+  return size + " B"
+}
+
+function renderComposeAttachments(form, attachments) {
+  if (!form) return
+  var list = form.querySelector("[data-compose-attachment-list]")
+  var wrap = form.querySelector("[data-compose-attachments]")
+  if (!list || !wrap) return
+  list.innerHTML = ""
+  for (var i = 0; attachments && i < attachments.length; i++) addComposeAttachment(form, attachments[i])
+  wrap.classList.toggle("hidden", !attachments || !attachments.length)
+}
+
+function readComposeAttachments(form) {
+  var items = form ? form.querySelectorAll("[data-compose-attachment]") : []
+  var attachments = []
+  for (var i = 0; i < items.length; i++) {
+    var existing = items[i].dataset.existingAttachmentId
+    attachments.push({
+      id: existing || items[i].dataset.attachmentId || "",
+      existing: !!existing,
+      filename: items[i].dataset.filename || "attachment",
+      content_type: items[i].dataset.contentType || "application/octet-stream",
+      size: Number(items[i].dataset.size || 0),
+      preview_url: items[i].dataset.previewUrl || ""
+    })
+  }
+  return attachments
+}
+
 function _composeValsFromDraft(draft) {
   return {
     account_id: draft.account_id || "",
@@ -2013,6 +2177,7 @@ function _composeValsFromDraft(draft) {
     html_body: draft.html_body || "",
     in_reply_to: draft.in_reply_to || "",
     references: draft.references || "",
+    attachments: draft.attachments || [],
     _ccVisible: !!(draft.cc && draft.cc.trim()),
     _bccVisible: !!(draft.bcc && draft.bcc.trim()),
     _composeDirty: "false"
@@ -2031,6 +2196,7 @@ function _showComposeOptionalFields(form, vals) {
   if (bccField) bccField.classList.toggle("hidden", !vals._bccVisible)
   if (bccBtn) bccBtn.classList.toggle("hidden", !!vals._bccVisible)
   renderComposeRecipientFields(form)
+  renderComposeAttachments(form, vals.attachments || [])
 }
 
 function _activeComposeCanBeReplaced() {
@@ -2769,6 +2935,7 @@ function _readComposeFormValues(form) {
   vals._ccVisible = ccVisible
   vals._bccVisible = bccVisible
   vals._composeDirty = form.dataset.composeDirty || "false"
+  vals.attachments = readComposeAttachments(form)
   return vals
 }
 
@@ -2786,6 +2953,7 @@ function _writeComposeFormValues(form, vals, prefix) {
     if (display) display.innerHTML = vals._fromDisplay
   }
   _setComposeEditorValue(form, vals.body || "", vals.html_body || "")
+  renderComposeAttachments(form, vals.attachments || [])
   form.dataset.composeDirty = vals._composeDirty || "false"
   _setComposeDraftButtonState(form, "default")
 }
