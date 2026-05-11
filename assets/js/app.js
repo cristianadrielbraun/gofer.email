@@ -970,7 +970,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (isOnSettings || !virtualMailList) {
         if (typeof htmx !== "undefined") {
           history.pushState({ folder: folderID, email: null }, "", "/folder/" + folderID)
-          if (mainContent) showMailContentLoading(mainContent)
+          if (mainContent) showMailContentLoading(mainContent, link)
           htmx.ajax("GET", "/folder/" + folderID + "/full", {target: "#main-content", swap: "outerHTML"})
         }
       } else {
@@ -982,13 +982,45 @@ document.addEventListener("DOMContentLoaded", function () {
     }, true)
   }
 
-  function showMailContentLoading(mainContent) {
-    mainContent.innerHTML = '<div class="flex flex-1 min-w-0 bg-background surface-desk items-center justify-center">' +
+  function showMailContentLoading(mainContent, folderLink) {
+    var folderName = textFrom(folderLink, ".flex-1") || "Mail"
+    var count = textFrom(folderLink, "[data-folder-unread]")
+    mainContent.innerHTML = '<div id="mail-list" class="w-full lg:flex flex-col border-r border-border bg-card h-full overflow-hidden">' +
+      '<div class="px-4 py-4 space-y-3">' +
+      '<div class="flex items-center justify-between">' +
+      '<div class="flex items-center gap-2">' +
+      '<h2 id="mail-folder-name" class="text-lg font-bold tracking-tight" style="font-family: var(--font-serif)">' + escapeHTML(folderName) + '</h2>' +
+      (count ? '<span id="mail-folder-count" class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-medium shadow-[0_1px_2px_rgba(0,0,0,0.06)]">' + escapeHTML(count) + '</span>' : '') +
+      '</div>' +
+      '<div class="h-8 w-8 rounded-md bg-muted/50"></div>' +
+      '</div>' +
+      '<div class="flex items-center gap-2">' +
+      '<div class="relative groove rounded-lg flex-1 min-w-0">' +
+      '<input type="text" placeholder="Quick search" disabled class="h-9 w-full pl-3 pr-3 rounded-lg text-sm bg-background border border-border/50 opacity-60" />' +
+      '</div>' +
+      '<button type="button" disabled class="inline-flex h-9 shrink-0 items-center rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-muted-foreground opacity-60">Advanced filters</button>' +
+      '</div>' +
+      '</div>' +
+      '<div class="flex items-center gap-1 px-4 py-1.5 border-y border-border/70">' +
+      '<div class="h-7 w-7 rounded-md bg-muted/50"></div>' +
+      '<div class="flex-1"></div>' +
+      '<div class="h-7 w-20 rounded-lg bg-muted/50"></div>' +
+      '</div>' +
+      '<div class="flex-1 overflow-y-auto px-2 py-2 flex items-center justify-center">' +
       '<div class="flex items-center gap-2 text-sm text-muted-foreground">' +
       '<div class="size-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin"></div>' +
-	  '<span>Loading content...</span>' +
+      '<span>Loading content...</span>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      '<div class="resize-handle" data-panel="maillist" draggable="false"></div>' +
+      '<div id="mail-view" class="hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk">' +
+      '<div class="flex flex-col items-center justify-center h-full text-center p-8">' +
+      '<h3 class="text-lg font-semibold mb-2">Select an email</h3>' +
+      '<p class="text-sm text-muted-foreground">Choose a message from the list to read it.</p>' +
       '</div>' +
       '</div>'
+    if (typeof initResizeHandles === "function") initResizeHandles()
   }
 
   function setupEmailSelectionTracking() {
