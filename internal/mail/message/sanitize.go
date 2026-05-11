@@ -16,6 +16,17 @@ func SanitizeHTML(input []byte) []byte {
 	return sanitized
 }
 
+func SanitizeOriginalHTML(input []byte) []byte {
+	if len(input) == 0 {
+		return nil
+	}
+
+	sanitized := removeDangerousTags(input)
+	sanitized = blockRemoteImages(sanitized)
+
+	return sanitized
+}
+
 func RewriteCIDReferences(html []byte, cidToURL map[string]string) []byte {
 	if len(cidToURL) == 0 {
 		return html

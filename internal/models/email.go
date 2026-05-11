@@ -36,6 +36,7 @@ type Email struct {
 	Preview           string
 	Body              template.HTML
 	HTMLBody          string
+	OriginalHTMLBody  string
 	TextBody          string
 	Date              string
 	DateFull          string

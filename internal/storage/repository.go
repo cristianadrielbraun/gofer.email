@@ -1593,31 +1593,32 @@ func (db *DB) GetEmailByID(ctx context.Context, id string) (*models.Email, error
 	}
 
 	var (
-		email             models.Email
-		dateReceived      sqliteNullTime
-		fromName          string
-		fromEmail         string
-		subject           string
-		snippet           string
-		accountID         string
-		accountColor      string
-		hasAttach         int
-		bodyTextPath      sql.NullString
-		bodyHTMLPath      sql.NullString
-		internetMessageID sql.NullString
-		threadID          sql.NullString
-		inReplyTo         string
-		references        string
+		email                models.Email
+		dateReceived         sqliteNullTime
+		fromName             string
+		fromEmail            string
+		subject              string
+		snippet              string
+		accountID            string
+		accountColor         string
+		hasAttach            int
+		bodyTextPath         sql.NullString
+		bodyHTMLPath         sql.NullString
+		bodyHTMLOriginalPath sql.NullString
+		internetMessageID    sql.NullString
+		threadID             sql.NullString
+		inReplyTo            string
+		references           string
 	)
 
 	err = db.Read().QueryRowContext(ctx,
 		`SELECT m.id, m.account_id, a.color, m.subject, m.from_name, m.from_email,
 		        m.date_received, m.snippet, m.has_attachments,
-		        m.body_text_path, m.body_html_path, m.internet_message_id, m.thread_id, m.in_reply_to, m."references"
+		        m.body_text_path, m.body_html_path, m.body_html_original_path, m.internet_message_id, m.thread_id, m.in_reply_to, m."references"
 		 FROM messages m
 		 JOIN accounts a ON m.account_id = a.id
 		 WHERE m.id = ?`, msgID,
-	).Scan(&msgID, &accountID, &accountColor, &subject, &fromName, &fromEmail, &dateReceived, &snippet, &hasAttach, &bodyTextPath, &bodyHTMLPath, &internetMessageID, &threadID, &inReplyTo, &references)
+	).Scan(&msgID, &accountID, &accountColor, &subject, &fromName, &fromEmail, &dateReceived, &snippet, &hasAttach, &bodyTextPath, &bodyHTMLPath, &bodyHTMLOriginalPath, &internetMessageID, &threadID, &inReplyTo, &references)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1644,6 +1645,11 @@ func (db *DB) GetEmailByID(ctx context.Context, id string) (*models.Email, error
 	if bodyHTMLPath.Valid && bodyHTMLPath.String != "" {
 		if data, err := os.ReadFile(bodyHTMLPath.String); err == nil {
 			email.HTMLBody = string(data)
+		}
+	}
+	if bodyHTMLOriginalPath.Valid && bodyHTMLOriginalPath.String != "" {
+		if data, err := os.ReadFile(bodyHTMLOriginalPath.String); err == nil {
+			email.OriginalHTMLBody = string(data)
 		}
 	}
 
@@ -2296,6 +2302,32 @@ func (db *DB) GetEmailBody(ctx context.Context, id string) ([]byte, error) {
 	return nil, nil
 }
 
+func (db *DB) GetEmailOriginalHTMLBody(ctx context.Context, id string) ([]byte, error) {
+	msgID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return nil, nil
+	}
+
+	var bodyHTMLOriginalPath sql.NullString
+	err = db.Read().QueryRowContext(ctx,
+		`SELECT body_html_original_path FROM messages WHERE id = ?`, msgID,
+	).Scan(&bodyHTMLOriginalPath)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query original body path: %w", err)
+	}
+	if !bodyHTMLOriginalPath.Valid || bodyHTMLOriginalPath.String == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(bodyHTMLOriginalPath.String)
+	if err != nil {
+		return nil, fmt.Errorf("read original html body: %w", err)
+	}
+	return data, nil
+}
+
 func (db *DB) UpdateMessageBody(ctx context.Context, messageID int64, textPath, htmlPath, rawPath string, snippet string) error {
 	_, err := db.Write().ExecContext(ctx,
 		`UPDATE messages SET body_text_path = ?, body_html_path = ?, raw_path = ?, snippet = ?, preview_text = ?, updated_at = CURRENT_TIMESTAMP
@@ -2303,9 +2335,15 @@ func (db *DB) UpdateMessageBody(ctx context.Context, messageID int64, textPath, 
 	return err
 }
 
+func (db *DB) UpdateMessageOriginalHTMLPath(ctx context.Context, messageID int64, htmlPath string) error {
+	_, err := db.Write().ExecContext(ctx,
+		`UPDATE messages SET body_html_original_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, htmlPath, messageID)
+	return err
+}
+
 func (db *DB) ClearEmailBody(ctx context.Context, messageID int64) error {
 	_, err := db.Write().ExecContext(ctx,
-		`UPDATE messages SET body_text_path = NULL, body_html_path = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, messageID)
+		`UPDATE messages SET body_text_path = NULL, body_html_path = NULL, body_html_original_path = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, messageID)
 	return err
 }
 
@@ -2323,7 +2361,7 @@ func (db *DB) ClearEmailData(ctx context.Context, messageID int64) error {
 		return fmt.Errorf("delete recipients: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE messages SET body_text_path = NULL, body_html_path = NULL, raw_path = NULL, has_attachments = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, messageID); err != nil {
+		`UPDATE messages SET body_text_path = NULL, body_html_path = NULL, body_html_original_path = NULL, raw_path = NULL, has_attachments = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, messageID); err != nil {
 		return fmt.Errorf("clear body: %w", err)
 	}
 

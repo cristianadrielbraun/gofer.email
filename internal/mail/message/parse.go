@@ -199,6 +199,29 @@ func ParseMessage(ctx context.Context, r io.Reader, blobStore *store.BlobStore, 
 	return parsed, nil
 }
 
+func ExtractHTMLBody(r io.Reader) ([]byte, error) {
+	msgReader, err := mail.CreateReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("parse message: %w", err)
+	}
+	for {
+		part, err := msgReader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read part: %w", err)
+		}
+		if h, ok := part.Header.(*mail.InlineHeader); ok {
+			ct, _, _ := h.ContentType()
+			if ct == "text/html" {
+				return io.ReadAll(part.Body)
+			}
+		}
+	}
+	return nil, nil
+}
+
 func generateSnippet(text string, html []byte) string {
 	if text != "" {
 		return truncate(strings.TrimSpace(text), 200)

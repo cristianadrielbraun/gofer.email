@@ -55,6 +55,15 @@ func (s *BlobStore) StoreBodyHTML(ctx context.Context, accountID string, localID
 	return p, os.WriteFile(p, data, 0644)
 }
 
+func (s *BlobStore) StoreBodyOriginalHTML(ctx context.Context, accountID string, localID int64, data []byte) (string, error) {
+	dir := s.msgDir(accountID, localID)
+	if err := s.ensureDir(dir); err != nil {
+		return "", fmt.Errorf("create message dir: %w", err)
+	}
+	p := filepath.Join(dir, "body_original.html")
+	return p, os.WriteFile(p, data, 0644)
+}
+
 func (s *BlobStore) StoreAttachment(ctx context.Context, accountID string, localID int64, attID int64, filename string, r io.Reader) (string, error) {
 	dir := filepath.Join(s.msgDir(accountID, localID), "attachments")
 	if err := s.ensureDir(dir); err != nil {

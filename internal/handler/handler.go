@@ -262,12 +262,22 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	msgID, _ := strconv.ParseInt(emailID, 10, 64)
+	theme := r.URL.Query().Get("theme")
+	bg := r.URL.Query().Get("bg")
+	fg := r.URL.Query().Get("fg")
+	link := r.URL.Query().Get("link")
+	original := r.URL.Query().Get("mode") == "original"
+	loadRemote := r.URL.Query().Get("remote") == "true"
 	var body []byte
 	if msgID > 0 && !h.db.IsBodyFetched(ctx, msgID) {
 		info, err := h.db.GetMessageFetchInfo(ctx, msgID)
 		if err == nil && info != nil {
 			if parsed, err := h.fetchParsedBody(ctx, msgID, info.AccountID); err == nil {
-				body = bodyFromParsedMessage(parsed, msgID)
+				if original {
+					body = originalBodyFromParsedMessage(parsed, msgID)
+				} else {
+					body = bodyFromParsedMessage(parsed, msgID)
+				}
 				h.persistParsedBodyAsync(msgID, info.AccountID, parsed)
 			}
 		}
@@ -275,19 +285,17 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 
 	if body == nil {
 		var err error
-		body, err = h.db.GetEmailBody(ctx, emailID)
+		if original && msgID > 0 {
+			body, err = h.originalBodyFromStoredMessage(ctx, emailID, msgID)
+		}
+		if err == nil && body == nil {
+			body, err = h.db.GetEmailBody(ctx, emailID)
+		}
 		if err != nil || body == nil {
 			http.NotFound(w, r)
 			return
 		}
 	}
-
-	theme := r.URL.Query().Get("theme")
-	bg := r.URL.Query().Get("bg")
-	fg := r.URL.Query().Get("fg")
-	link := r.URL.Query().Get("link")
-	original := r.URL.Query().Get("mode") == "original"
-	loadRemote := r.URL.Query().Get("remote") == "true"
 
 	if !loadRemote && msgID > 0 {
 		if h.db.IsRemoteContentAllowedForMessage(ctx, msgID) {
@@ -549,6 +557,56 @@ func bodyFromParsedMessage(parsed *message.ParsedMessage, msgID int64) []byte {
 	return nil
 }
 
+func originalBodyFromParsedMessage(parsed *message.ParsedMessage, msgID int64) []byte {
+	if parsed == nil || len(parsed.HTMLBody) == 0 {
+		return bodyFromParsedMessage(parsed, msgID)
+	}
+	cidToURL := make(map[string]string)
+	for _, a := range parsed.Attachments {
+		if a.Inline && a.ContentID != "" {
+			cidToURL[a.ContentID] = "/api/inline-content/" + strconv.FormatInt(msgID, 10) + "/" + a.ContentID
+		}
+	}
+	sanitized := message.SanitizeOriginalHTML(parsed.HTMLBody)
+	return message.RewriteCIDReferences(sanitized, cidToURL)
+}
+
+func (h *Handler) originalBodyFromStoredMessage(ctx context.Context, emailID string, msgID int64) ([]byte, error) {
+	body, err := h.db.GetEmailOriginalHTMLBody(ctx, emailID)
+	if err != nil {
+		return nil, err
+	}
+	if body == nil {
+		var accountID, rawPath string
+		_ = h.db.Read().QueryRowContext(ctx, `SELECT account_id, raw_path FROM messages WHERE id = ?`, msgID).Scan(&accountID, &rawPath)
+		if rawPath != "" {
+			if raw, readErr := os.ReadFile(rawPath); readErr == nil {
+				if extracted, extractErr := message.ExtractHTMLBody(bytes.NewReader(raw)); extractErr == nil && len(extracted) > 0 {
+					body = extracted
+					if p, storeErr := h.blobStore.StoreBodyOriginalHTML(ctx, accountID, msgID, extracted); storeErr == nil {
+						_ = h.db.UpdateMessageOriginalHTMLPath(ctx, msgID, p)
+					}
+				}
+			}
+		}
+		if body == nil {
+			return nil, nil
+		}
+	}
+	cidToURL := make(map[string]string)
+	atts, err := h.db.GetAttachments(ctx, msgID)
+	if err == nil {
+		for _, a := range atts {
+			if a.Inline && a.ContentID != "" {
+				cidToURL[a.ContentID] = "/api/inline-content/" + strconv.FormatInt(msgID, 10) + "/" + a.ContentID
+			}
+		}
+	}
+	body = message.SanitizeOriginalHTML(body)
+	body = message.RewriteCIDReferences(body, cidToURL)
+	return body, nil
+}
+
 func (h *Handler) storeParsedBody(ctx context.Context, parsed *message.ParsedMessage, msgID int64, accountID string) {
 	if len(parsed.Attachments) > 0 {
 		var attRows []storage.AttachmentRow
@@ -572,7 +630,7 @@ func (h *Handler) storeParsedBody(ctx context.Context, parsed *message.ParsedMes
 		}
 	}
 
-	var textPath, htmlPath string
+	var textPath, htmlPath, originalHTMLPath string
 	if parsed.TextBody != "" {
 		p, err := h.blobStore.StoreBodyText(ctx, accountID, msgID, []byte(parsed.TextBody))
 		if err == nil {
@@ -581,6 +639,9 @@ func (h *Handler) storeParsedBody(ctx context.Context, parsed *message.ParsedMes
 	}
 
 	if len(parsed.HTMLBody) > 0 {
+		if p, err := h.blobStore.StoreBodyOriginalHTML(ctx, accountID, msgID, parsed.HTMLBody); err == nil {
+			originalHTMLPath = p
+		}
 		sanitized := message.SanitizeHTML(parsed.HTMLBody)
 		sanitized = message.RewriteCIDReferences(sanitized, cidToURL)
 		p, err := h.blobStore.StoreBodyHTML(ctx, accountID, msgID, sanitized)
@@ -596,6 +657,9 @@ func (h *Handler) storeParsedBody(ctx context.Context, parsed *message.ParsedMes
 
 	if err := h.db.UpdateMessageBody(ctx, msgID, textPath, htmlPath, parsed.RawPath, snippet); err != nil {
 		return
+	}
+	if originalHTMLPath != "" {
+		_ = h.db.UpdateMessageOriginalHTMLPath(ctx, msgID, originalHTMLPath)
 	}
 
 	var toRecs, ccRecs []storage.Recipient
@@ -2115,6 +2179,13 @@ func (h *Handler) handleComposeSource(w http.ResponseWriter, r *http.Request) {
 			PreviewURL:  attachmentPreviewURL(att.ID, att.ContentType, att.Filename),
 		})
 	}
+	htmlBody := ""
+	if originalBody, err := h.originalBodyFromStoredMessage(r.Context(), email.ID, localID); err == nil && len(originalBody) > 0 {
+		htmlBody = string(originalBody)
+	}
+	if htmlBody == "" {
+		htmlBody = email.HTMLBody
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"account_id":  email.AccountID,
@@ -2127,7 +2198,7 @@ func (h *Handler) handleComposeSource(w http.ResponseWriter, r *http.Request) {
 		"to":          contactsToAddressList(email.To),
 		"cc":          contactsToAddressList(email.CC),
 		"body":        email.TextBody,
-		"html_body":   email.HTMLBody,
+		"html_body":   htmlBody,
 		"attachments": attachments,
 	})
 }

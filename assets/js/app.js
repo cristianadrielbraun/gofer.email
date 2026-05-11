@@ -712,10 +712,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (data.status === "sent") {
         showSendStatus("sent", "Message sent")
+        handleComposeSendResult("sent")
       } else if (data.status === "ambiguous") {
         showSendStatus("ambiguous", data.error || "Send status unknown")
+        handleComposeSendResult("ambiguous")
       } else {
         showSendStatus("failed", data.error || "Failed to send")
+        handleComposeSendResult("failed")
       }
     })
 
@@ -1488,8 +1491,20 @@ function showSendStatus(status, text) {
   }
 }
 
+function hideSendStatus() {
+  var wrapper = document.getElementById("send-status-wrapper")
+  if (!wrapper) return
+  if (sendStatusTimer) {
+    clearTimeout(sendStatusTimer)
+    sendStatusTimer = null
+  }
+  wrapper.style.maxHeight = "0"
+  wrapper.style.opacity = "0"
+}
+
 var _composeActive = false
 var _activeComposeEditor = null
+var _composeSendState = null
 
 function _updateComposeBtn(disabled) {
   if (!disabled) _composeActive = false
@@ -1528,7 +1543,11 @@ function resetComposeForm(fromPane) {
   var recipientFields = form.querySelectorAll("[data-compose-recipient-field]")
   for (var i = 0; i < recipientFields.length; i++) renderComposeRecipientField(recipientFields[i], "")
   renderComposeAttachments(form, [])
+  form.dataset.composeUploadsPending = "0"
+  form.dataset.composeSending = "false"
+  delete form.dataset.composeUploadFailed
   form.dataset.composeDirty = "false"
+  updateComposeSendState(form)
   _setComposeDraftButtonState(form, "default")
 }
 
@@ -1762,7 +1781,7 @@ function _sanitizeComposeStyle(style) {
     "font-weight": true, "height": true, "letter-spacing": true, "line-height": true, "margin": true,
     "margin-bottom": true, "margin-left": true, "margin-right": true, "margin-top": true, "max-height": true,
     "max-width": true, "min-height": true, "min-width": true, "mso-line-height-rule": true, "opacity": true,
-    "padding": true, "padding-bottom": true, "padding-left": true, "padding-right": true, "padding-top": true,
+    "overflow": true, "padding": true, "padding-bottom": true, "padding-left": true, "padding-right": true, "padding-top": true,
     "text-align": true, "text-decoration": true, "text-transform": true, "vertical-align": true, "white-space": true,
     "width": true, "word-break": true, "word-wrap": true
   }
@@ -1779,9 +1798,51 @@ function _sanitizeComposeStyle(style) {
   return safe.join("; ")
 }
 
+function _mergeComposeStyle(el, styleText) {
+  var safeStyle = _sanitizeComposeStyle(styleText)
+  if (!safeStyle) return
+  var existing = el.getAttribute("style") || ""
+  el.setAttribute("style", existing ? existing + "; " + safeStyle : safeStyle)
+}
+
+function _inlineComposeStyleRules(root) {
+  var styles = root.querySelectorAll("style")
+  for (var i = 0; i < styles.length; i++) {
+    var css = styles[i].textContent || ""
+    if (!css.trim()) continue
+    var parserDoc = document.implementation.createHTMLDocument("")
+    var styleEl = parserDoc.createElement("style")
+    styleEl.textContent = css
+    parserDoc.head.appendChild(styleEl)
+    try {
+      var rules = styleEl.sheet ? styleEl.sheet.cssRules : []
+      for (var r = 0; r < rules.length; r++) {
+        if (!rules[r].selectorText || !rules[r].style) continue
+        var styleText = rules[r].style.cssText || ""
+        var selectors = rules[r].selectorText.split(",")
+        for (var s = 0; s < selectors.length; s++) {
+          var selector = selectors[s].trim()
+          if (!selector || /:(?!first-child|last-child)/.test(selector)) continue
+          try {
+            if (/^(html|body)$/i.test(selector)) {
+              var body = root.querySelector("body")
+              var targets = body ? body.children : root.children
+              for (var t = 0; t < targets.length; t++) _mergeComposeStyle(targets[t], styleText)
+              continue
+            }
+            var nodes = root.querySelectorAll(selector)
+            for (var n = 0; n < nodes.length; n++) _mergeComposeStyle(nodes[n], styleText)
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+  }
+}
+
 function _sanitizeComposeHTML(html) {
   var template = document.createElement("template")
   template.innerHTML = html || ""
+  _inlineComposeStyleRules(template.content)
   var blocked = template.content.querySelectorAll("script, style, head, title, iframe, object, embed, form, meta, link")
   for (var i = 0; i < blocked.length; i++) blocked[i].remove()
   var allowed = { A: true, B: true, BIG: true, BLOCKQUOTE: true, BR: true, CENTER: true, CODE: true, COL: true, COLGROUP: true, DIV: true, EM: true, FONT: true, H1: true, H2: true, H3: true, H4: true, H5: true, H6: true, HR: true, I: true, IMG: true, LI: true, OL: true, P: true, PRE: true, S: true, SMALL: true, SPAN: true, STRIKE: true, STRONG: true, SUB: true, SUP: true, TABLE: true, TBODY: true, TD: true, TFOOT: true, TH: true, THEAD: true, TR: true, U: true, UL: true }
@@ -1839,7 +1900,7 @@ function _sanitizeComposeHTML(html) {
         src = remoteSrc
         node.setAttribute("src", src)
       }
-      if (!/^(cid:|https?:|\/api\/attachments\/|\/compose\/attachments\/|\/api\/remote-assets\/)/i.test(src)) {
+      if (!/^(cid:|https?:|\/api\/attachments\/|\/api\/inline-content\/|\/compose\/attachments\/|\/api\/remote-assets\/)/i.test(src)) {
         node.remove()
         continue
       }
@@ -2104,6 +2165,93 @@ function _markComposeDirty(form) {
   }
 }
 
+function _composeSendButton(form) {
+  if (!form) return null
+  return document.getElementById(form.id === "compose-pane-form" ? "compose-pane-send-btn" : "compose-send-btn")
+}
+
+function _composePendingUploads(form) {
+  return Number((form && form.dataset.composeUploadsPending) || 0)
+}
+
+function _setComposeSending(form, sending) {
+  if (!form) return
+  form.dataset.composeSending = sending ? "true" : "false"
+  updateComposeSendState(form)
+}
+
+function updateComposeSendState(form) {
+  if (!form) return
+  var button = _composeSendButton(form)
+  if (!button) return
+  var pending = _composePendingUploads(form)
+  var sending = form.dataset.composeSending === "true"
+  var disabled = pending > 0 || sending
+  button.disabled = disabled
+  button.setAttribute("aria-busy", sending || pending > 0 ? "true" : "false")
+  button.classList.toggle("opacity-60", disabled)
+  button.classList.toggle("cursor-not-allowed", disabled)
+  if (sending) {
+    button.title = "Sending..."
+  } else if (pending > 0) {
+    button.title = "Waiting for uploads to finish"
+  } else {
+    button.removeAttribute("title")
+  }
+}
+
+function changeComposeUploadCount(form, delta, label) {
+  if (!form) return
+  var pending = Math.max(0, _composePendingUploads(form) + delta)
+  form.dataset.composeUploadsPending = String(pending)
+  updateComposeSendState(form)
+  if (pending > 0) {
+    showSendStatus("sending", "Uploading " + pending + " " + (pending === 1 ? "file" : "files") + "...")
+  } else if (form.dataset.composeSending !== "true") {
+    if (label === "failed") return
+    setTimeout(function () {
+      if (_composePendingUploads(form) === 0 && form.dataset.composeSending !== "true") hideSendStatus()
+    }, 500)
+  }
+}
+
+function composeUploadFailed(form, message) {
+  if (form) form.dataset.composeUploadFailed = "true"
+  showSendStatus("failed", message || "Upload failed")
+}
+
+function finishComposeSendSuccess(state) {
+  if (!state) return
+  var form = document.getElementById(state.formId)
+  if (form) _setComposeSending(form, false)
+  _composeSendState = null
+  setTimeout(function () {
+    if (state.fromPane) {
+      setMailViewEmpty()
+      _updateComposeBtn(false)
+    } else {
+      resetComposeForm(false)
+      if (window.tui && window.tui.dialog) window.tui.dialog.close("compose-dialog")
+      _updateComposeBtn(false)
+    }
+  }, 300)
+}
+
+function handleComposeSendResult(status) {
+  if (!_composeSendState) return
+  var state = _composeSendState
+  var form = document.getElementById(state.formId)
+  if (status === "sent") {
+    finishComposeSendSuccess(state)
+    return
+  }
+  if (form) {
+    _setComposeSending(form, false)
+    form.dataset.composeDirty = "true"
+  }
+  _composeSendState = null
+}
+
 function saveComposeDraft(fromPane, auto) {
   var form = document.getElementById(fromPane ? "compose-pane-form" : "compose-form")
   finalizeComposeRecipients(form)
@@ -2167,6 +2315,7 @@ function uploadComposeAttachments(files, input) {
   var form = _composeFormFrom(input)
   if (!form || !files || !files.length) return
   Array.prototype.forEach.call(files, function (file) {
+    changeComposeUploadCount(form, 1)
     var data = new FormData()
     data.append("attachment", file)
     fetch("/compose/attachments", { method: "POST", body: data })
@@ -2177,9 +2326,11 @@ function uploadComposeAttachments(files, input) {
       .then(function (att) {
         addComposeAttachment(form, att)
         _markComposeDirty(form)
+        changeComposeUploadCount(form, -1)
       })
       .catch(function (err) {
-        showSendStatus("failed", err && err.message ? err.message : "Failed to attach file")
+        changeComposeUploadCount(form, -1, "failed")
+        composeUploadFailed(form, err && err.message ? err.message : "Failed to attach file")
       })
   })
   input.value = ""
@@ -2190,9 +2341,10 @@ function uploadComposeInlineImages(files, input) {
   if (!form || !files || !files.length) return
   Array.prototype.forEach.call(files, function (file) {
     if (file.type && file.type.indexOf("image/") !== 0) {
-      showSendStatus("failed", "Inline images must be image files")
+      composeUploadFailed(form, "Inline images must be image files")
       return
     }
+    changeComposeUploadCount(form, 1)
     var data = new FormData()
     data.append("attachment", file)
     fetch("/compose/attachments", { method: "POST", body: data })
@@ -2204,9 +2356,11 @@ function uploadComposeInlineImages(files, input) {
         if (!att.preview_url) throw new Error("That image type cannot be previewed inline")
         insertComposeInlineImage(form, att)
         _markComposeDirty(form)
+        changeComposeUploadCount(form, -1)
       })
       .catch(function (err) {
-        showSendStatus("failed", err && err.message ? err.message : "Failed to insert image")
+        changeComposeUploadCount(form, -1, "failed")
+        composeUploadFailed(form, err && err.message ? err.message : "Failed to insert image")
       })
   })
   input.value = ""
@@ -2735,7 +2889,7 @@ document.addEventListener("input", function (event) {
 window.addEventListener("beforeunload", function (event) {
   var forms = [document.getElementById("compose-form"), document.getElementById("compose-pane-form")]
   for (var i = 0; i < forms.length; i++) {
-    if (forms[i] && forms[i].dataset.composeDirty === "true" && _composeHasDraftContent(forms[i])) {
+    if (forms[i] && ((forms[i].dataset.composeDirty === "true" && _composeHasDraftContent(forms[i])) || _composePendingUploads(forms[i]) > 0 || forms[i].dataset.composeSending === "true")) {
       event.preventDefault()
       event.returnValue = ""
       return ""
@@ -2747,6 +2901,12 @@ function sendCompose(fromPane) {
   var formId = fromPane ? "compose-pane-form" : "compose-form"
   var form = document.getElementById(formId)
   if (!form) return
+  if (_composePendingUploads(form) > 0) {
+    showSendStatus("failed", "Wait for uploads to finish before sending")
+    updateComposeSendState(form)
+    return
+  }
+  if (form.dataset.composeSending === "true") return
   if (!finalizeComposeRecipients(form)) {
     showSendStatus("failed", "Fix invalid recipient addresses before sending")
     return
@@ -2755,6 +2915,7 @@ function sendCompose(fromPane) {
 
   var toField = form.querySelector('input[name="to"]')
   if (!toField || !toField.value.trim()) {
+    showSendStatus("failed", "Please enter at least one recipient.")
     return
   }
 
@@ -2765,6 +2926,8 @@ function sendCompose(fromPane) {
   }
 
   showSendStatus("sending", "Sending...")
+  _setComposeSending(form, true)
+  _composeSendState = { formId: form.id, fromPane: !!fromPane }
 
   fetch("/compose", {
     method: "POST",
@@ -2776,14 +2939,11 @@ function sendCompose(fromPane) {
         throw new Error(data.error || "Failed to send message")
       })
     }
-    if (fromPane) {
-      setMailViewEmpty()
-      _updateComposeBtn(false)
-    } else if (window.tui && window.tui.dialog) {
-      window.tui.dialog.close("compose-dialog")
-      _updateComposeBtn(false)
-    }
+    return r.json().catch(function () { return {} })
   }).catch(function (err) {
+    _setComposeSending(form, false)
+    _composeSendState = null
+    form.dataset.composeDirty = "true"
     showSendStatus("failed", err && err.message ? err.message : "Failed to connect to server")
   })
 }
@@ -3516,7 +3676,11 @@ function _writeComposeFormValues(form, vals, prefix) {
   }
   _setComposeEditorValue(form, vals.body || "", vals.html_body || "", vals.inline_images || [])
   renderComposeAttachments(form, vals.attachments || [])
+  form.dataset.composeUploadsPending = "0"
+  form.dataset.composeSending = "false"
+  delete form.dataset.composeUploadFailed
   form.dataset.composeDirty = vals._composeDirty || "false"
+  updateComposeSendState(form)
   _setComposeDraftButtonState(form, "default")
 }
 

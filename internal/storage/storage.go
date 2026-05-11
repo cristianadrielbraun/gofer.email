@@ -16,9 +16,9 @@ import (
 var schemaFS embed.FS
 
 type DB struct {
-	write *sql.DB
-	read  *sql.DB
-	path  string
+	write          *sql.DB
+	read           *sql.DB
+	path           string
 	threadingState ThreadingState
 	threadingMu    sync.RWMutex
 }
@@ -109,7 +109,7 @@ func (db *DB) migrate() error {
 		currentVersion = 0
 	}
 
-	const targetSchemaVersion = 13
+	const targetSchemaVersion = 14
 
 	if currentVersion >= targetSchemaVersion {
 		log.Printf("schema at version %d, no migration needed", currentVersion)
@@ -196,6 +196,12 @@ func (db *DB) migrate() error {
 	if currentVersion >= 1 && currentVersion <= 12 {
 		if err := migrateV12ToV13(tx); err != nil {
 			return fmt.Errorf("migrate v12 to v13: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 13 {
+		if err := migrateV13ToV14(tx); err != nil {
+			return fmt.Errorf("migrate v13 to v14: %w", err)
 		}
 	}
 
@@ -485,6 +491,19 @@ func migrateV12ToV13(tx *sql.Tx) error {
 		`INSERT OR REPLACE INTO schema_version (version) VALUES (13)`,
 	}
 
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV13ToV14(tx *sql.Tx) error {
+	migrations := []string{
+		`ALTER TABLE messages ADD COLUMN body_html_original_path TEXT`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (14)`,
+	}
 	for _, m := range migrations {
 		if _, err := tx.Exec(m); err != nil {
 			return err

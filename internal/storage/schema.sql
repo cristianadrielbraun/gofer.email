@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS messages (
     preview_text TEXT NOT NULL DEFAULT '',
     body_text_path TEXT,
     body_html_path TEXT,
+    body_html_original_path TEXT,
     raw_path TEXT,
     size_bytes INTEGER NOT NULL DEFAULT 0,
     has_attachments INTEGER NOT NULL DEFAULT 0,
@@ -350,4 +351,4 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires
     ON sessions(expires_at);
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (13);
+INSERT OR REPLACE INTO schema_version (version) VALUES (14);
