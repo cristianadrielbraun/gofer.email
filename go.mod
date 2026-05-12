@@ -1,4 +1,4 @@
-module gofer.email
+module github.com/cristianadrielbraun/gofer
 
 go 1.26.2
 

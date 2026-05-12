@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"gofer.email/internal/config"
-	"gofer.email/internal/mail/imap"
-	"gofer.email/internal/models"
-	"gofer.email/internal/storage"
-	"gofer.email/internal/store"
+	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 type TokenProvider interface {

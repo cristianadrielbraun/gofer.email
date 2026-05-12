@@ -10,18 +10,18 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 
-	"gofer.email/components/button"
-	"gofer.email/components/calendar"
-	"gofer.email/components/checkbox"
-	"gofer.email/components/dialog"
-	"gofer.email/components/dropdown"
-	"gofer.email/components/icon"
-	"gofer.email/components/input"
-	"gofer.email/components/selectbox"
-	switchcomp "gofer.email/components/switch"
-	"gofer.email/components/tooltip"
+	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/calendar"
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/components/dropdown"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/input"
+	"github.com/cristianadrielbraun/gofer/components/selectbox"
+	switchcomp "github.com/cristianadrielbraun/gofer/components/switch"
+	"github.com/cristianadrielbraun/gofer/components/tooltip"
 )
 
 func MailList(accounts []models.Account, emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, width string, senderDisplayMode string, viewMode string) templ.Component {

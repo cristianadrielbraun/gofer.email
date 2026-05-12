@@ -14,10 +14,10 @@ type AccountConfig struct {
 }
 
 type ConnectionTestResult struct {
-	Success    bool   `json:"success"`
-	Service    string `json:"service"`
-	Message    string `json:"message"`
-	Error      string `json:"error,omitempty"`
+	Success bool   `json:"success"`
+	Service string `json:"service"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
 }
 
 type EditAccountData struct {
@@ -58,19 +58,19 @@ type SyncSettings struct {
 }
 
 type AccountSyncStatus struct {
-	AccountID   string
-	AccountName string
+	AccountID    string
+	AccountName  string
 	AccountEmail string
-	Color       string
-	Initials    string
-	Folders     []FolderSyncStatus
+	Color        string
+	Initials     string
+	Folders      []FolderSyncStatus
 }
 
 type FolderSyncStatus struct {
-	Name          string
-	Icon          string
-	Role          string
-	LastSyncedAt  string
-	MessageCount  int
-	IsIDLE        bool
+	Name         string
+	Icon         string
+	Role         string
+	LastSyncedAt string
+	MessageCount int
+	IsIDLE       bool
 }

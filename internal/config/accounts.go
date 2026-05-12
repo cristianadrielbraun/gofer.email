@@ -10,8 +10,8 @@ import (
 	"io"
 	"strings"
 
-	"gofer.email/internal/models"
-	"gofer.email/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 type AccountStore struct {

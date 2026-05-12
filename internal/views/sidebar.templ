@@ -2,11 +2,11 @@ package views
 
 import (
 	"fmt"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 
-	"gofer.email/components/icon"
-	"gofer.email/components/button"
-	"gofer.email/components/dropdown"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/dropdown"
 )
 
 templ Sidebar(accounts []models.Account, activeFolder string, width string, uiSettings map[string]string) {
@@ -22,10 +22,8 @@ templ SidebarHeader(accounts []models.Account) {
 	<div class="px-4 pt-5 pb-4">
 		<div class="flex items-center justify-between mb-5">
 			<div class="flex items-center gap-2.5">
-				<img src="/assets/logo.svg" alt="gofer.email" class="h-8 w-8 shrink-0 p-1"/>
-				<span class="text-lg font-bold tracking-tight text-sidebar-accent-foreground" style="font-family: var(--font-serif)">
-					gofer<span class="text-sidebar-primary">.email</span>
-				</span>
+				<img src="/assets/logo.svg" alt="Gofer" class="h-8 w-8 shrink-0 p-1"/>
+				<span class="text-lg font-bold tracking-tight text-sidebar-accent-foreground" style="font-family: var(--font-serif)">Gofer</span>
 			</div>
 			@dropdown.Dropdown() {
 				@dropdown.Trigger() {

@@ -14,8 +14,8 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"gofer.email/components/icon"
-	"gofer.email/utils"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/utils"
 	"strconv"
 )
 

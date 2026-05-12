@@ -1,9 +1,9 @@
 <h1>
-  <img src="./assets/logo.svg" width="48" align="absmiddle" alt="gofer.email logo" />
-  gofer.email
+  <img src="./assets/logo.svg" width="48" align="absmiddle" alt="Gofer logo" />
+  Gofer
 </h1>
 
-<img width="2417" height="1499" alt="gofer-email-screenshot" src="https://github.com/user-attachments/assets/709e6ce1-1bf8-4cae-b679-5bd8891385b5" />
+<img width="2417" height="1499" alt="gofer-screenshot" src="https://github.com/user-attachments/assets/709e6ce1-1bf8-4cae-b679-5bd8891385b5" />
 
 <br>
 

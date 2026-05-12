@@ -14,7 +14,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"gofer.email/utils"
+	"github.com/cristianadrielbraun/gofer/utils"
 )
 
 type Props struct {

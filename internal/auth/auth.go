@@ -9,10 +9,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"gofer.email/internal/storage"
 )
 
 type User struct {
@@ -74,7 +74,7 @@ func LoadConfig() *Config {
 	enabled := os.Getenv("GOFER_AUTH_ENABLED") == "true"
 	baseURL := os.Getenv("GOFER_BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:8090"
+		baseURL = "http://local.localhost:8090"
 	}
 
 	cfg := &Config{
@@ -158,7 +158,7 @@ func (m *Manager) EnsureDefaultUser() error {
 	now := time.Now()
 	_, err = m.db.Write().Exec(
 		`INSERT INTO users (id, email, name, is_admin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		"default", "local@gofer.email", "Local User", 1, now, now,
+		"default", "local@gofer.local", "Local User", 1, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("create default user: %w", err)
@@ -183,7 +183,7 @@ func (m *Manager) GetDefaultUser() *User {
 	}
 	return &User{
 		ID:      "default",
-		Email:   "local@gofer.email",
+		Email:   "local@gofer.local",
 		Name:    "Local User",
 		IsAdmin: true,
 	}

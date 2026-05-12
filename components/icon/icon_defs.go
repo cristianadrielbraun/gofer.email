@@ -1,6 +1,7 @@
 // templui component icon - version: v1.10.0 installed by templui v1.10.0
 // 📚 Documentation: https://templui.io/docs/components/icon
 package icon
+
 // This file is auto generated
 // Using Lucide icons version 0.576.0
 var AArrowDown = Icon("a-arrow-down")

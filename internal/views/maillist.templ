@@ -2,18 +2,18 @@ package views
 
 import (
 	"fmt"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 
-	"gofer.email/components/icon"
-	"gofer.email/components/button"
-	"gofer.email/components/tooltip"
-	"gofer.email/components/dropdown"
-	"gofer.email/components/checkbox"
-	switchcomp "gofer.email/components/switch"
-	"gofer.email/components/dialog"
-	"gofer.email/components/input"
-	"gofer.email/components/calendar"
-	"gofer.email/components/selectbox"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/tooltip"
+	"github.com/cristianadrielbraun/gofer/components/dropdown"
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
+	switchcomp "github.com/cristianadrielbraun/gofer/components/switch"
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/components/input"
+	"github.com/cristianadrielbraun/gofer/components/calendar"
+	"github.com/cristianadrielbraun/gofer/components/selectbox"
 )
 
 templ MailList(accounts []models.Account, emails []models.Email, activeFolder string, selectedEmail *models.Email, totalCount int, width string, senderDisplayMode string, viewMode string) {

@@ -12,7 +12,7 @@ import (
 	"github.com/emersion/go-imap/v2/imapclient"
 	"github.com/emersion/go-sasl"
 
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
 type FolderInfo struct {

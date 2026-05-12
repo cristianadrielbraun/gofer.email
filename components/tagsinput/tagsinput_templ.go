@@ -13,10 +13,10 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"gofer.email/components/badge"
-	"gofer.email/components/input"
-	"gofer.email/components/popover"
-	"gofer.email/utils"
+	"github.com/cristianadrielbraun/gofer/components/badge"
+	"github.com/cristianadrielbraun/gofer/components/input"
+	"github.com/cristianadrielbraun/gofer/components/popover"
+	"github.com/cristianadrielbraun/gofer/utils"
 )
 
 type Props struct {

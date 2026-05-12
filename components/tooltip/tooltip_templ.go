@@ -13,8 +13,8 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"gofer.email/components/popover"
-	"gofer.email/utils"
+	"github.com/cristianadrielbraun/gofer/components/popover"
+	"github.com/cristianadrielbraun/gofer/utils"
 )
 
 type Position string

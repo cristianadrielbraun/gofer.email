@@ -10,8 +10,8 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
-	"gofer.email/internal/mail/message"
-	"gofer.email/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/mail/message"
+	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 type SyncResult struct {

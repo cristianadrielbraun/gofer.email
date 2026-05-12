@@ -5,12 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"gofer.email/internal/auth"
-	"gofer.email/internal/config"
-	"gofer.email/internal/handler"
-	"gofer.email/internal/mail"
-	"gofer.email/internal/storage"
-	"gofer.email/internal/store"
+	"github.com/cristianadrielbraun/gofer/internal/auth"
+	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/handler"
+	"github.com/cristianadrielbraun/gofer/internal/mail"
+	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 	"log"
 	"net/http"
 	"os"
@@ -93,7 +93,7 @@ func main() {
 	handler = authManager.Middleware(handler)
 
 	addr := ":8090"
-	fmt.Printf("gofer.email running on http://localhost%s\n", addr)
+	fmt.Printf("Gofer running on http://localhost%s\n", addr)
 	fmt.Printf("database: %s\n", db.Path())
 	if authConfig.Enabled {
 		fmt.Printf("auth: enabled (Google OAuth2)\n")

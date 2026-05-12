@@ -1,7 +1,7 @@
 {
   "componentsDir": "components",
   "utilsDir": "utils",
-  "moduleName": "gofer.email",
+  "moduleName": "github.com/cristianadrielbraun/gofer",
   "jsDir": "assets/js",
   "jsPublicPath": "/assets/js"
 }

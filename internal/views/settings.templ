@@ -2,19 +2,19 @@ package views
 
 import (
 	"fmt"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 	"strconv"
 
-	"gofer.email/components/button"
-	"gofer.email/components/checkbox"
-	"gofer.email/components/dialog"
-	"gofer.email/components/dropdown"
-	"gofer.email/components/icon"
-	"gofer.email/components/input"
-	"gofer.email/components/radio"
-	"gofer.email/components/selectbox"
-	switchcomp "gofer.email/components/switch"
-	"gofer.email/components/tabs"
+	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/components/dropdown"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/input"
+	"github.com/cristianadrielbraun/gofer/components/radio"
+	"github.com/cristianadrielbraun/gofer/components/selectbox"
+	switchcomp "github.com/cristianadrielbraun/gofer/components/switch"
+	"github.com/cristianadrielbraun/gofer/components/tabs"
 )
 
 templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) {
@@ -291,7 +291,7 @@ templ SettingsAppearanceTab(uiSettings map[string]string) {
 				<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 					<div>
 						<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Visual Style</h3>
-						<p class="text-xs text-muted-foreground">Choose the overall look and feel of gofer.email.</p>
+						<p class="text-xs text-muted-foreground">Choose the overall look and feel of Gofer.</p>
 					</div>
 					<div class="space-y-1 sm:text-right" data-mode-picker>
 						<h4 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Color Mode</h4>
@@ -1013,7 +1013,7 @@ templ GmailAccountDialog() {
 					Connect Gmail
 				}
 				@dialog.Description() {
-					Authorize gofer.email to access your Gmail account
+					Authorize Gofer to access your Gmail account
 				}
 			}
 			<form id="gmail-form" method="POST" action="/api/accounts/oauth2/authorize" class="px-1 pt-2 pb-4 space-y-4">
@@ -1047,7 +1047,7 @@ templ GmailAccountDialog() {
 				<div class="rounded-lg bg-accent/50 border border-border p-3">
 					<div class="flex items-start gap-2.5">
 						<svg class="size-4 text-muted-foreground mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-						<p class="text-xs text-muted-foreground leading-relaxed">You will be redirected to Google to grant gofer.email access to read and send email on your behalf.</p>
+						<p class="text-xs text-muted-foreground leading-relaxed">You will be redirected to Google to grant Gofer access to read and send email on your behalf.</p>
 					</div>
 				</div>
 				<button type="submit" class="w-full inline-flex items-center justify-center gap-2.5 text-sm font-medium px-4 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">

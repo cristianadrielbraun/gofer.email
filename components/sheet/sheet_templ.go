@@ -14,8 +14,8 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"context"
-	"gofer.email/components/dialog"
-	"gofer.email/utils"
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/utils"
 )
 
 type contextKey string

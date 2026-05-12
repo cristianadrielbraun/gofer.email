@@ -10,16 +10,16 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 	"strings"
 
-	"gofer.email/components/button"
-	"gofer.email/components/copybutton"
-	"gofer.email/components/dropdown"
-	"gofer.email/components/icon"
-	"gofer.email/components/popover"
-	"gofer.email/components/tabs"
-	"gofer.email/components/tooltip"
+	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/copybutton"
+	"github.com/cristianadrielbraun/gofer/components/dropdown"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/popover"
+	"github.com/cristianadrielbraun/gofer/components/tabs"
+	"github.com/cristianadrielbraun/gofer/components/tooltip"
 
 	"github.com/dustin/go-humanize"
 )

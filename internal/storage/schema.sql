@@ -1,4 +1,4 @@
--- gofer.email schema
+-- Gofer schema
 -- Version 1: Initial schema
 
 CREATE TABLE IF NOT EXISTS schema_version (

@@ -12,7 +12,7 @@ import (
 	_ "github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/mail"
 
-	"gofer.email/internal/store"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 type ParsedMessage struct {

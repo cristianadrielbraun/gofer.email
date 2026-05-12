@@ -9,12 +9,12 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"gofer.email/components/dialog"
-	"gofer.email/components/dropdown"
-	"gofer.email/components/icon"
-	"gofer.email/components/input"
-	"gofer.email/components/tooltip"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/components/dropdown"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/input"
+	"github.com/cristianadrielbraun/gofer/components/tooltip"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
 func ComposeDialog(accounts []models.Account) templ.Component {

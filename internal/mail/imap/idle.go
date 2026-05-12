@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/emersion/go-imap/v2/imapclient"
-	"gofer.email/internal/models"
 )
 
 type IdleWatcher struct {

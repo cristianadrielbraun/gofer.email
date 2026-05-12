@@ -5,24 +5,24 @@ import "sync"
 type EventType string
 
 const (
-	EventNewMail      EventType = "new-mail"
-	EventSyncStarted  EventType = "sync-started"
-	EventSyncProgress EventType = "sync-progress"
-	EventSyncComplete EventType = "sync-complete"
+	EventNewMail          EventType = "new-mail"
+	EventSyncStarted      EventType = "sync-started"
+	EventSyncProgress     EventType = "sync-progress"
+	EventSyncComplete     EventType = "sync-complete"
 	EventProcessingStatus EventType = "processing-status"
-	EventSendResult   EventType = "send-result"
-	EventMutation     EventType = "mutation"
+	EventSendResult       EventType = "send-result"
+	EventMutation         EventType = "mutation"
 )
 
 type Event struct {
-	Type      EventType
-	AccountID string
-	FolderID  string
+	Type       EventType
+	AccountID  string
+	FolderID   string
 	FolderRole string
-	Status    string
-	Error     string
-	Current   int
-	Total     int
+	Status     string
+	Error      string
+	Current    int
+	Total      int
 }
 
 type EventBus struct {

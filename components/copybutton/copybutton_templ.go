@@ -13,9 +13,9 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"gofer.email/components/button"
-	"gofer.email/components/icon"
-	"gofer.email/utils"
+	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/utils"
 )
 
 type Props struct {

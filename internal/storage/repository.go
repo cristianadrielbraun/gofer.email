@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
+	mailmessage "github.com/cristianadrielbraun/gofer/internal/mail/message"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/google/uuid"
-	mailmessage "gofer.email/internal/mail/message"
-	"gofer.email/internal/models"
 )
 
 var reHTMLTag = regexp.MustCompile(`<[^>]*>`)

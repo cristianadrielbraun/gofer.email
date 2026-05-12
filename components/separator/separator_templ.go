@@ -12,7 +12,7 @@ package separator
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "gofer.email/utils"
+import "github.com/cristianadrielbraun/gofer/utils"
 
 type Orientation string
 type Decoration string

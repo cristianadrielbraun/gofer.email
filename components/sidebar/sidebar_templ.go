@@ -13,11 +13,11 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import "context"
-import "gofer.email/utils"
-import "gofer.email/components/icon"
-import "gofer.email/components/button"
-import "gofer.email/components/sheet"
-import "gofer.email/components/tooltip"
+import "github.com/cristianadrielbraun/gofer/utils"
+import "github.com/cristianadrielbraun/gofer/components/icon"
+import "github.com/cristianadrielbraun/gofer/components/button"
+import "github.com/cristianadrielbraun/gofer/components/sheet"
+import "github.com/cristianadrielbraun/gofer/components/tooltip"
 
 type contextKey string
 

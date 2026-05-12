@@ -7,11 +7,11 @@ import (
 	"net"
 	"time"
 
-	smtp "github.com/emersion/go-smtp"
 	"github.com/emersion/go-sasl"
+	smtp "github.com/emersion/go-smtp"
 
-	"gofer.email/internal/mail/message"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/mail/message"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
 type Client struct {

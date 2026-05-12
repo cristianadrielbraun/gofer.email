@@ -3,7 +3,7 @@ package views
 import (
 	"encoding/json"
 	"fmt"
-	"gofer.email/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 	"math/rand"
 	"strings"
 
