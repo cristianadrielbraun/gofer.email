@@ -506,22 +506,22 @@
   color: var(--accent-foreground);
 }
 
-.compose-close-choice-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 130;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: color-mix(in srgb, #000 24%, transparent);
+.compose-close-choice {
+  color: var(--popover-foreground);
 }
 
-.compose-close-choice {
-  width: min(30rem, 100%);
+.compose-close-choice-floating {
+  position: fixed;
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  width: min(30rem, calc(100% - 2rem));
+  height: fit-content;
+  transform: translate(-50%, -50%);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) * 1.15);
   background: var(--popover);
-  color: var(--popover-foreground);
   box-shadow: 0 2px 12px color-mix(in srgb, #000 12%, transparent);
   padding: 1rem;
 }
@@ -547,7 +547,13 @@
   margin-top: 1rem;
 }
 
+.compose-close-choice-actions-nowrap {
+  flex-wrap: nowrap;
+}
+
 .compose-close-choice-actions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
   border-radius: var(--radius);
   padding: 0.5rem 0.75rem;
   font-size: 0.82rem;

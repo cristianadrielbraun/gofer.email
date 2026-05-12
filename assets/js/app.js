@@ -3711,14 +3711,79 @@ function _deleteComposeDraft(form) {
   }).catch(function () { return false })
 }
 
-function chooseComposeCloseAction(form) {
+function chooseComposeDialogCloseAction(form) {
   if (!form || !_composeHasDraftContent(form)) return Promise.resolve("discard")
+  var root = document.getElementById("compose-close-choice-dialog")
+  if (!root || !window.tui || !window.tui.dialog) return chooseComposeCloseAction(form, null, null)
   return new Promise(function (resolve) {
-    var backdrop = document.createElement("div")
-    backdrop.className = "compose-close-choice-backdrop"
+    var settled = false
+    var content = root.querySelector("[data-tui-dialog-content]")
+    function finish(action) {
+      if (settled) return
+      settled = true
+      root.removeEventListener("click", onClick)
+      if (content) content.removeEventListener("close", onClose)
+      window.tui.dialog.close(root.id)
+      resolve(action)
+    }
+    function onClick(event) {
+      var btn = event.target && event.target.closest ? event.target.closest("[data-compose-close-action]") : null
+      if (btn) finish(btn.dataset.composeCloseAction)
+    }
+    function onClose() {
+      finish("cancel")
+    }
+    root.addEventListener("click", onClick)
+    if (content) content.addEventListener("close", onClose)
+    window.tui.dialog.open(root.id)
+  })
+}
+
+function chooseComposeCloseAction(form, anchor, popoverId) {
+  if (!form || !_composeHasDraftContent(form)) return Promise.resolve("discard")
+  var root = popoverId ? document.getElementById(popoverId) : null
+  if (anchor && root && !root.contains(anchor)) root = null
+  if (root && root.id && window.tui && window.tui.popover) {
+    return new Promise(function (resolve) {
+      var settled = false
+      var content = root.querySelector("[data-tui-popover-content]")
+      function finish(action) {
+        if (settled) return
+        settled = true
+        root.removeEventListener("click", onClick)
+        if (content) content.removeEventListener("toggle", onToggle)
+        window.tui.popover.close(root.id)
+        resolve(action)
+      }
+      function onClick(event) {
+        var btn = event.target && event.target.closest ? event.target.closest("[data-compose-close-action]") : null
+        if (btn) finish(btn.dataset.composeCloseAction)
+      }
+      function onToggle(event) {
+        if (event.newState === "closed") finish("cancel")
+      }
+      root.addEventListener("click", onClick)
+      if (content) content.addEventListener("toggle", onToggle)
+      window.tui.popover.open(root.id)
+    })
+  }
+  return new Promise(function (resolve) {
     var panel = document.createElement("div")
-    panel.className = "compose-close-choice"
+    panel.className = "compose-close-choice compose-close-choice-floating"
+    panel.setAttribute("popover", "auto")
     panel.innerHTML = '<h2>Close compose?</h2><p>Keep this message as a draft, discard it permanently, or continue editing.</p>'
+    var settled = false
+    function finish(action) {
+      if (settled) return
+      settled = true
+      panel.removeEventListener("toggle", onToggle)
+      if (panel.matches && panel.matches(":popover-open")) panel.hidePopover()
+      panel.remove()
+      resolve(action)
+    }
+    function onToggle(event) {
+      if (event.newState === "closed") finish("cancel")
+    }
     function button(label, action, primary) {
       var btn = document.createElement("button")
       btn.type = "button"
@@ -3733,20 +3798,20 @@ function chooseComposeCloseAction(form) {
     actions.appendChild(button("Exit and discard", "discard", false))
     actions.appendChild(button("Cancel", "cancel", false))
     panel.appendChild(actions)
-    backdrop.appendChild(panel)
-    backdrop.addEventListener("click", function (event) {
+    panel.addEventListener("click", function (event) {
       var btn = event.target && event.target.closest ? event.target.closest("[data-compose-close-action]") : null
-      if (!btn && event.target !== backdrop) return
-      backdrop.remove()
-      resolve(btn ? btn.dataset.composeCloseAction : "cancel")
+      if (!btn) return
+      finish(btn.dataset.composeCloseAction)
     })
-    document.body.appendChild(backdrop)
+    panel.addEventListener("toggle", onToggle)
+    document.body.appendChild(panel)
+    if (panel.showPopover) panel.showPopover()
   })
 }
 
 function discardComposeDialog() {
   var form = document.getElementById("compose-form")
-  chooseComposeCloseAction(form).then(function (action) {
+  chooseComposeDialogCloseAction(form).then(function (action) {
     if (action === "cancel") return
     if (action === "keep") {
       saveComposeDraft(false, false).then(function (saved) {
@@ -4659,6 +4724,7 @@ function _readComposeFormValues(form) {
   }
   var fromDisplay = form.querySelector("[id$='-from-display']")
   if (fromDisplay) vals._fromDisplay = fromDisplay.innerHTML
+  vals._skipDefaultSignature = !!existingComposeSignature(form.querySelector("[data-compose-editor]"))
   var ccVisible = !!form.querySelector('[id^="pane-cc-field"]') && !document.getElementById("pane-cc-field").classList.contains("hidden")
   var bccVisible = !!form.querySelector('[id^="pane-bcc-field"]') && !document.getElementById("pane-bcc-field").classList.contains("hidden")
   if (form.id === "compose-form") {
@@ -4782,9 +4848,9 @@ function collapseToDialog() {
   }
 }
 
-function discardComposePane() {
+function discardComposePane(anchor) {
   var paneForm = document.getElementById("compose-pane-form")
-  chooseComposeCloseAction(paneForm).then(function (action) {
+  chooseComposeCloseAction(paneForm, anchor, "compose-pane-close-choice-popover").then(function (action) {
     if (action === "cancel") return
     if (action === "keep") {
       saveComposeDraft(true, false).then(function (saved) {
