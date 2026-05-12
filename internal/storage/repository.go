@@ -2871,6 +2871,208 @@ func (db *DB) SetUISettings(ctx context.Context, userID string, settings map[str
 	return db.SetSetting(ctx, userID, "ui_settings", string(val))
 }
 
+func (db *DB) ListSignatures(ctx context.Context, userID string) ([]models.Signature, error) {
+	rows, err := db.Read().QueryContext(ctx,
+		`SELECT id, name, html_body, text_body, created_at, updated_at
+		 FROM signatures WHERE user_id = ? ORDER BY name COLLATE NOCASE, created_at`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("query signatures: %w", err)
+	}
+	defer rows.Close()
+
+	var signatures []models.Signature
+	for rows.Next() {
+		var sig models.Signature
+		if err := rows.Scan(&sig.ID, &sig.Name, &sig.HTMLBody, &sig.TextBody, &sig.CreatedAt, &sig.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan signature: %w", err)
+		}
+		signatures = append(signatures, sig)
+	}
+	return signatures, rows.Err()
+}
+
+func (db *DB) SaveSignature(ctx context.Context, userID string, sig models.Signature) (models.Signature, error) {
+	sig.Name = strings.TrimSpace(sig.Name)
+	if sig.Name == "" {
+		return models.Signature{}, fmt.Errorf("signature name is required")
+	}
+	if strings.TrimSpace(sig.HTMLBody) == "" && strings.TrimSpace(sig.TextBody) == "" {
+		return models.Signature{}, fmt.Errorf("signature body is required")
+	}
+	if sig.ID == "" {
+		sig.ID = "sig_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	}
+
+	res, err := db.Write().ExecContext(ctx,
+		`INSERT INTO signatures (id, user_id, name, html_body, text_body)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			html_body = excluded.html_body,
+			text_body = excluded.text_body,
+			updated_at = CURRENT_TIMESTAMP
+		 WHERE user_id = excluded.user_id`, sig.ID, userID, sig.Name, sig.HTMLBody, sig.TextBody)
+	if err != nil {
+		return models.Signature{}, fmt.Errorf("save signature: %w", err)
+	}
+	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+		return models.Signature{}, sql.ErrNoRows
+	}
+
+	return db.GetSignature(ctx, userID, sig.ID)
+}
+
+func (db *DB) GetSignature(ctx context.Context, userID, signatureID string) (models.Signature, error) {
+	var sig models.Signature
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT id, name, html_body, text_body, created_at, updated_at
+		 FROM signatures WHERE user_id = ? AND id = ?`, userID, signatureID).
+		Scan(&sig.ID, &sig.Name, &sig.HTMLBody, &sig.TextBody, &sig.CreatedAt, &sig.UpdatedAt)
+	return sig, err
+}
+
+func (db *DB) DeleteSignature(ctx context.Context, userID, signatureID string) error {
+	_, err := db.Write().ExecContext(ctx, `DELETE FROM signatures WHERE user_id = ? AND id = ?`, userID, signatureID)
+	return err
+}
+
+func (db *DB) GetAccountSignatureSettings(ctx context.Context, userID, accountID string) (models.AccountSignatureSettings, error) {
+	settings := models.AccountSignatureSettings{AccountID: accountID, ReplyPlacement: "before", ForwardPlacement: "before"}
+	var newID, replyID, forwardID sql.NullString
+	var replyPlacement, forwardPlacement string
+	var newEnabled, replyEnabled, forwardEnabled int
+	err := db.Read().QueryRowContext(ctx, `
+		SELECT COALESCE(s.new_enabled, 0), s.new_signature_id,
+		       COALESCE(s.reply_enabled, 0), s.reply_signature_id,
+		       COALESCE(s.forward_enabled, 0), s.forward_signature_id,
+		       COALESCE(s.reply_placement, 'before'), COALESCE(s.forward_placement, 'before')
+		FROM accounts a
+		LEFT JOIN account_signature_settings s ON s.account_id = a.id
+		WHERE a.user_id = ? AND a.id = ?`, userID, accountID).
+		Scan(&newEnabled, &newID, &replyEnabled, &replyID, &forwardEnabled, &forwardID, &replyPlacement, &forwardPlacement)
+	if err != nil {
+		return settings, err
+	}
+	settings.NewEnabled = newEnabled == 1
+	settings.ReplyEnabled = replyEnabled == 1
+	settings.ForwardEnabled = forwardEnabled == 1
+	settings.NewSignatureID = nullStringValue(newID)
+	settings.ReplySignatureID = nullStringValue(replyID)
+	settings.ForwardSignatureID = nullStringValue(forwardID)
+	settings.ReplyPlacement = normalizeSignaturePlacement(replyPlacement)
+	settings.ForwardPlacement = normalizeSignaturePlacement(forwardPlacement)
+	return settings, nil
+}
+
+func (db *DB) SaveAccountSignatureSettings(ctx context.Context, userID string, settings models.AccountSignatureSettings) error {
+	if settings.AccountID == "" {
+		return fmt.Errorf("account id is required")
+	}
+	settings.NewSignatureID = strings.TrimSpace(settings.NewSignatureID)
+	settings.ReplySignatureID = strings.TrimSpace(settings.ReplySignatureID)
+	settings.ForwardSignatureID = strings.TrimSpace(settings.ForwardSignatureID)
+	settings.ReplyPlacement = normalizeSignaturePlacement(settings.ReplyPlacement)
+	settings.ForwardPlacement = normalizeSignaturePlacement(settings.ForwardPlacement)
+	settings.NewEnabled = settings.NewEnabled && settings.NewSignatureID != ""
+	settings.ReplyEnabled = settings.ReplyEnabled && settings.ReplySignatureID != ""
+	settings.ForwardEnabled = settings.ForwardEnabled && settings.ForwardSignatureID != ""
+	var exists int
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM accounts WHERE user_id = ? AND id = ?`, userID, settings.AccountID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return sql.ErrNoRows
+	}
+	for _, signatureID := range []string{settings.NewSignatureID, settings.ReplySignatureID, settings.ForwardSignatureID} {
+		signatureID = strings.TrimSpace(signatureID)
+		if signatureID == "" {
+			continue
+		}
+		var owned int
+		if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM signatures WHERE user_id = ? AND id = ?`, userID, signatureID).Scan(&owned); err != nil {
+			return err
+		}
+		if owned == 0 {
+			return sql.ErrNoRows
+		}
+	}
+
+	normalizeSignatureID := func(id string, enabled bool) any {
+		id = strings.TrimSpace(id)
+		if !enabled || id == "" {
+			return nil
+		}
+		return id
+	}
+	_, err := db.Write().ExecContext(ctx, `
+		INSERT INTO account_signature_settings (
+			account_id, new_signature_id, reply_signature_id, forward_signature_id,
+			new_enabled, reply_enabled, forward_enabled, reply_placement, forward_placement, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(account_id) DO UPDATE SET
+			new_signature_id = excluded.new_signature_id,
+			reply_signature_id = excluded.reply_signature_id,
+			forward_signature_id = excluded.forward_signature_id,
+			new_enabled = excluded.new_enabled,
+			reply_enabled = excluded.reply_enabled,
+			forward_enabled = excluded.forward_enabled,
+			reply_placement = excluded.reply_placement,
+			forward_placement = excluded.forward_placement,
+			updated_at = CURRENT_TIMESTAMP`,
+		settings.AccountID,
+		normalizeSignatureID(settings.NewSignatureID, settings.NewEnabled),
+		normalizeSignatureID(settings.ReplySignatureID, settings.ReplyEnabled),
+		normalizeSignatureID(settings.ForwardSignatureID, settings.ForwardEnabled),
+		boolInt(settings.NewEnabled), boolInt(settings.ReplyEnabled), boolInt(settings.ForwardEnabled),
+		settings.ReplyPlacement, settings.ForwardPlacement)
+	return err
+}
+
+func normalizeSignaturePlacement(v string) string {
+	if strings.EqualFold(strings.TrimSpace(v), "after") {
+		return "after"
+	}
+	return "before"
+}
+
+func (db *DB) GetComposeSignature(ctx context.Context, userID, accountID, mode string) (*models.Signature, bool, error) {
+	settings, err := db.GetAccountSignatureSettings(ctx, userID, accountID)
+	if err != nil {
+		return nil, false, err
+	}
+	signatureID := ""
+	enabled := false
+	switch mode {
+	case "reply", "reply-all":
+		signatureID = settings.ReplySignatureID
+		enabled = settings.ReplyEnabled
+	case "forward":
+		signatureID = settings.ForwardSignatureID
+		enabled = settings.ForwardEnabled
+	default:
+		signatureID = settings.NewSignatureID
+		enabled = settings.NewEnabled
+	}
+	if !enabled || signatureID == "" {
+		return nil, false, nil
+	}
+	sig, err := db.GetSignature(ctx, userID, signatureID)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return &sig, true, nil
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 func defaultUISettings() map[string]string {
 	return map[string]string{
 		"theme":                       "dark",

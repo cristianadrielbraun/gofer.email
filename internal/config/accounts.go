@@ -114,6 +114,11 @@ func (s *AccountStore) GetEditData(ctx context.Context, accountID string) (*mode
 		return nil, fmt.Errorf("query account edit data: %w", err)
 	}
 	data.SameSmtpAuth = data.SmtpUsername == "" || data.SmtpUsername == data.Username
+	userID, err := s.db.GetAccountUserID(ctx, accountID)
+	if err == nil && userID != "" {
+		data.Signatures, _ = s.db.ListSignatures(ctx, userID)
+		data.SignatureSettings, _ = s.db.GetAccountSignatureSettings(ctx, userID, accountID)
+	}
 	return &data, nil
 }
 

@@ -109,7 +109,7 @@ func (db *DB) migrate() error {
 		currentVersion = 0
 	}
 
-	const targetSchemaVersion = 14
+	const targetSchemaVersion = 16
 
 	if currentVersion >= targetSchemaVersion {
 		log.Printf("schema at version %d, no migration needed", currentVersion)
@@ -202,6 +202,18 @@ func (db *DB) migrate() error {
 	if currentVersion >= 1 && currentVersion <= 13 {
 		if err := migrateV13ToV14(tx); err != nil {
 			return fmt.Errorf("migrate v13 to v14: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 14 {
+		if err := migrateV14ToV15(tx); err != nil {
+			return fmt.Errorf("migrate v14 to v15: %w", err)
+		}
+	}
+
+	if currentVersion >= 1 && currentVersion <= 15 {
+		if err := migrateV15ToV16(tx); err != nil {
+			return fmt.Errorf("migrate v15 to v16: %w", err)
 		}
 	}
 
@@ -503,6 +515,52 @@ func migrateV13ToV14(tx *sql.Tx) error {
 	migrations := []string{
 		`ALTER TABLE messages ADD COLUMN body_html_original_path TEXT`,
 		`INSERT OR REPLACE INTO schema_version (version) VALUES (14)`,
+	}
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV14ToV15(tx *sql.Tx) error {
+	migrations := []string{
+		`CREATE TABLE IF NOT EXISTS signatures (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			html_body TEXT NOT NULL DEFAULT '',
+			text_body TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_signatures_user ON signatures(user_id, name)`,
+		`CREATE TABLE IF NOT EXISTS account_signature_settings (
+			account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+			new_signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+			reply_signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+			forward_signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+			new_enabled INTEGER NOT NULL DEFAULT 0,
+			reply_enabled INTEGER NOT NULL DEFAULT 0,
+			forward_enabled INTEGER NOT NULL DEFAULT 0,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (15)`,
+	}
+	for _, m := range migrations {
+		if _, err := tx.Exec(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV15ToV16(tx *sql.Tx) error {
+	migrations := []string{
+		`ALTER TABLE account_signature_settings ADD COLUMN reply_placement TEXT NOT NULL DEFAULT 'before'`,
+		`ALTER TABLE account_signature_settings ADD COLUMN forward_placement TEXT NOT NULL DEFAULT 'before'`,
+		`INSERT OR REPLACE INTO schema_version (version) VALUES (16)`,
 	}
 	for _, m := range migrations {
 		if _, err := tx.Exec(m); err != nil {

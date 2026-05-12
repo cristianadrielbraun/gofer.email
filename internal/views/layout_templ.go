@@ -205,7 +205,7 @@ func Layout(accounts []models.Account, activeFolder string, emails []models.Emai
 	})
 }
 
-func SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) templ.Component {
+func SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string, signatureData []models.AccountSignatureData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -346,7 +346,7 @@ func SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings,
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = SettingsPage(accounts, syncSettings, activeTab, uiSettings).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = SettingsPage(accounts, syncSettings, activeTab, uiSettings, signatureData).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -542,7 +542,7 @@ func MailContentPartial(accounts []models.Account, emails []models.Email, active
 	})
 }
 
-func SettingsPartial(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) templ.Component {
+func SettingsPartial(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string, signatureData []models.AccountSignatureData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -567,7 +567,7 @@ func SettingsPartial(accounts []models.Account, syncSettings models.SyncSettings
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = SettingsPage(accounts, syncSettings, activeTab, uiSettings).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = SettingsPage(accounts, syncSettings, activeTab, uiSettings, signatureData).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

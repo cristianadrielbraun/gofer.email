@@ -1536,9 +1536,11 @@ function showGoferToast(opts) {
   return toast
 }
 
-var _composeActive = false
-var _activeComposeEditor = null
-var _composeSendState = null
+  var _composeActive = false
+  var _activeComposeEditor = null
+  var _composeSendState = null
+  var _composeSignatureCache = Object.create(null)
+  var _composeSignatureMenu = null
 
 function _updateComposeBtn(disabled) {
   if (!disabled) _composeActive = false
@@ -1563,6 +1565,7 @@ function selectComposeAccount(el, fromPane) {
   if (idField) idField.value = accountId
   if (display) display.innerHTML = (name ? name + " &lt;" : "") + email + (name ? "&gt;" : "")
   _markComposeDirty(document.getElementById(prefix + "form"))
+  applyDefaultComposeSignature(document.getElementById(prefix + "form"), true)
 }
 
 function resetComposeForm(fromPane, skipCleanup) {
@@ -1573,6 +1576,8 @@ function resetComposeForm(fromPane, skipCleanup) {
   if (!skipCleanup) cleanupComposeStagedUploads(form)
   var fields = form.querySelectorAll('input[name="to"], input[name="cc"], input[name="bcc"], input[name="subject"], input[name="draft_id"], input[name="in_reply_to"], input[name="references"], textarea[name="body"], textarea[name="html_body"]')
   for (var i = 0; i < fields.length; i++) fields[i].value = ""
+  var modeField = form.querySelector('input[name="compose_mode"]')
+  if (modeField) modeField.value = "new"
   var editor = form.querySelector("[data-compose-editor]")
   if (editor) editor.innerHTML = ""
   syncComposeInlineImageInputs(form)
@@ -1586,6 +1591,182 @@ function resetComposeForm(fromPane, skipCleanup) {
   updateComposeSendState(form)
   _setComposeDraftButtonState(form, "default")
 }
+
+function composeModeForForm(form) {
+  var field = form && form.querySelector('input[name="compose_mode"]')
+  return (field && field.value) || "new"
+}
+
+function setComposeMode(form, mode) {
+  var field = form && form.querySelector('input[name="compose_mode"]')
+  if (field) field.value = mode || "new"
+}
+
+function composeSignatureCacheKey(form) {
+  var account = form && form.querySelector('input[name="account_id"]')
+  if (!account || !account.value) return ""
+  return account.value + "::" + composeModeForForm(form)
+}
+
+function loadComposeSignatures(form, refresh) {
+  var account = form && form.querySelector('input[name="account_id"]')
+  if (!account || !account.value) return Promise.resolve(null)
+  var key = composeSignatureCacheKey(form)
+  if (!refresh && _composeSignatureCache[key]) return Promise.resolve(_composeSignatureCache[key])
+  var params = new URLSearchParams()
+  params.set("mode", composeModeForForm(form))
+  return fetch("/api/accounts/" + encodeURIComponent(account.value) + "/signatures?" + params.toString())
+    .then(function (r) { if (!r.ok) throw new Error("Failed to load signatures"); return r.json() })
+    .then(function (data) { _composeSignatureCache[key] = data; return data })
+    .catch(function () { return null })
+}
+
+function composeSignatureHTML(sig, source) {
+  var html = sig && sig.html_body ? _sanitizeComposeHTML(sig.html_body) : _composePlainToHTML((sig && sig.text_body) || "")
+  return '<div data-gofer-signature="' + source + '" data-signature-id="' + _escapeComposeHTML(sig.id || "") + '" data-signature-html="' + _escapeComposeHTML(html) + '">' + html + '</div>'
+}
+
+function existingComposeSignature(editor) {
+  return editor && editor.querySelector('[data-gofer-signature]')
+}
+
+function autoComposeSignatureWasEdited(node) {
+  if (!node || node.getAttribute("data-gofer-signature") !== "auto") return false
+  return (node.getAttribute("data-signature-html") || "") !== node.innerHTML
+}
+
+function autoComposeSignatureSpacerHTML() {
+  return '<p data-gofer-signature-cursor="true"><br></p><p><br></p><p><br></p><p><br></p>'
+}
+
+function placeComposeCursorBeforeSignature(editor, signatureNode) {
+  if (!editor || !signatureNode) return
+  editor.focus()
+  var target = editor.querySelector('[data-gofer-signature-cursor]')
+  if (!target) target = signatureNode.previousSibling
+  if (!target || target.nodeType !== Node.ELEMENT_NODE) {
+    signatureNode.insertAdjacentHTML("beforebegin", autoComposeSignatureSpacerHTML())
+    target = editor.querySelector('[data-gofer-signature-cursor]') || signatureNode.previousSibling
+  }
+  if (target.removeAttribute) target.removeAttribute("data-gofer-signature-cursor")
+  var range = document.createRange()
+  if (target.nodeType === Node.ELEMENT_NODE) {
+    range.selectNodeContents(target)
+    range.collapse(true)
+  } else {
+    range.setStartBefore(signatureNode)
+    range.collapse(true)
+  }
+  var selection = window.getSelection()
+  if (selection) {
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+}
+
+function insertComposeSignature(form, sig, source) {
+  return insertComposeSignatureWithPlacement(form, sig, source, "before")
+}
+
+function insertComposeSignatureWithPlacement(form, sig, source, placement) {
+  var editor = form && form.querySelector("[data-compose-editor]")
+  if (!editor || !sig) return false
+  var existing = existingComposeSignature(editor)
+  var html = composeSignatureHTML(sig, source)
+  if (existing) {
+    if (source === "auto" && autoComposeSignatureWasEdited(existing)) return false
+    if (source === "auto") {
+      existing.remove()
+      existing = null
+    } else {
+      existing.outerHTML = html
+      syncComposeEditor(editor)
+      return true
+    }
+  }
+  if (source === "auto" && placement === "after" && (composeModeForForm(form) === "reply" || composeModeForForm(form) === "reply-all" || composeModeForForm(form) === "forward")) {
+    editor.insertAdjacentHTML("beforeend", autoComposeSignatureSpacerHTML() + html)
+  } else if (source === "auto") {
+    var first = editor.firstElementChild
+    if (first && first.tagName === "P" && !first.textContent.trim() && !first.querySelector("img")) {
+      first.insertAdjacentHTML("afterend", autoComposeSignatureSpacerHTML() + html)
+    } else {
+      editor.insertAdjacentHTML(editor.textContent.trim() ? "afterbegin" : "beforeend", autoComposeSignatureSpacerHTML() + html)
+    }
+  } else {
+    editor.focus()
+    _restoreComposeSelection(editor)
+    document.execCommand("insertHTML", false, html)
+  }
+  if (source === "auto") placeComposeCursorBeforeSignature(editor, existingComposeSignature(editor))
+  syncComposeEditor(editor)
+  return true
+}
+
+function composeSignaturePlacement(form, data) {
+  var mode = composeModeForForm(form)
+  var settings = (data && data.settings) || {}
+  if ((mode === "reply" || mode === "reply-all") && settings.reply_placement === "after") return "after"
+  if (mode === "forward" && settings.forward_placement === "after") return "after"
+  return "before"
+}
+
+function applyDefaultComposeSignature(form, refresh) {
+  if (!form) return Promise.resolve(false)
+  return loadComposeSignatures(form, refresh).then(function (data) {
+    if (!data || !data.default_signature) return
+    return insertComposeSignatureWithPlacement(form, data.default_signature, "auto", composeSignaturePlacement(form, data))
+  })
+}
+
+function applyDefaultComposeSignatureWhenReady(form, refresh) {
+  if (!form) return
+  requestAnimationFrame(function () {
+    applyDefaultComposeSignature(form, refresh)
+  })
+}
+
+function closeComposeSignatureMenu() {
+  if (_composeSignatureMenu) _composeSignatureMenu.remove()
+  _composeSignatureMenu = null
+}
+
+function showComposeSignaturePicker(el) {
+  closeComposeSignatureMenu()
+  var form = _composeFormFrom(el)
+  if (!form) return
+  loadComposeSignatures(form, true).then(function (data) {
+    var menu = document.createElement("div")
+    menu.className = "compose-attachment-menu"
+    var signatures = (data && data.signatures) || []
+    if (!signatures.length) {
+      var empty = document.createElement("div")
+      empty.className = "px-3 py-2 text-xs text-muted-foreground"
+      empty.textContent = "No signatures configured"
+      menu.appendChild(empty)
+    }
+    for (var i = 0; i < signatures.length; i++) {
+      ;(function (sig) {
+        var btn = document.createElement("button")
+        btn.type = "button"
+        btn.textContent = sig.name || "Signature"
+        btn.onclick = function () {
+          closeComposeSignatureMenu()
+          if (insertComposeSignature(form, sig, "manual")) _markComposeDirty(form)
+        }
+        menu.appendChild(btn)
+      })(signatures[i])
+    }
+    document.body.appendChild(menu)
+    _composeSignatureMenu = menu
+    var rect = el.getBoundingClientRect()
+    menu.style.top = Math.min(window.innerHeight - menu.offsetHeight - 8, rect.bottom + 6) + "px"
+    menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8)) + "px"
+    setTimeout(function () { document.addEventListener("mousedown", closeComposeSignatureMenu, { once: true }) }, 0)
+  })
+}
+
+window.showComposeSignaturePicker = showComposeSignaturePicker
 
 function cleanupComposeStagedUploads(form) {
   if (!form) return
@@ -3425,6 +3606,7 @@ function _composeValsFromDraft(draft) {
     subject: draft.subject || "",
     body: draft.body || "",
     html_body: draft.html_body || "",
+    compose_mode: draft.compose_mode || "new",
     in_reply_to: draft.in_reply_to || "",
     references: draft.references || "",
     attachments: draft.attachments || [],
@@ -3772,6 +3954,7 @@ function composeValuesFromSource(source, mode) {
     subject: "",
     body: "",
     html_body: "",
+    compose_mode: mode === "forward" ? "forward" : "reply",
     in_reply_to: "",
     references: "",
     attachments: [],
@@ -3822,8 +4005,10 @@ function focusComposePrefill(form, mode) {
 
 function writeComposePrefill(form, vals, prefix, mode) {
   _writeComposeFormValues(form, vals, prefix)
+  setComposeMode(form, mode === "forward" ? "forward" : "reply")
   _showComposeOptionalFields(form, vals)
   setComposeAccount(form, vals.account_id)
+  applyDefaultComposeSignature(form, true)
   focusComposePrefill(form, mode)
 }
 
@@ -3874,6 +4059,7 @@ function openNewCompose() {
   if (window.tui && window.tui.dialog) {
     window.tui.dialog.open("compose-dialog")
   }
+  applyDefaultComposeSignatureWhenReady(document.getElementById("compose-form"), true)
 }
 
 function openComposeInMain(fullWidth, instantFullWidth) {
@@ -4406,6 +4592,7 @@ function writeComposePane(html, vals, fullWidth, instantFullWidth) {
 
   var paneForm = document.getElementById("compose-pane-form")
   _writeComposeFormValues(paneForm, vals, "compose-pane-")
+  applyDefaultComposeSignatureWhenReady(paneForm, false)
 
   if (vals._ccVisible) {
     var ccField = document.getElementById("pane-cc-field")

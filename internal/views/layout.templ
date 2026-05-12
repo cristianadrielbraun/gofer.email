@@ -101,7 +101,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 	</html>
 }
 
-templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) {
+templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string, signatureData []models.AccountSignatureData) {
 	<!DOCTYPE html>
 	<html lang="en" class={ themeClass(uiSettings) } data-theme={ themeStyle(uiSettings) }>
 		<head>
@@ -130,7 +130,7 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 				@Sidebar(accounts, "", uiSettingGet(uiSettings, "sidebar_width", "256px"), uiSettings)
 				@ResizeHandle("sidebar")
 				<div id="main-content" class="flex flex-1 min-w-0">
-					@SettingsPage(accounts, syncSettings, activeTab, uiSettings)
+					@SettingsPage(accounts, syncSettings, activeTab, uiSettings, signatureData)
 				</div>
 			</div>
 			@ComposeDialog(accounts)
@@ -238,9 +238,9 @@ templ MailContentPartial(accounts []models.Account, emails []models.Email, activ
 	</div>
 }
 
-templ SettingsPartial(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) {
+templ SettingsPartial(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string, signatureData []models.AccountSignatureData) {
 	<div id="main-content" class="flex flex-1 min-w-0">
-		@SettingsPage(accounts, syncSettings, activeTab, uiSettings)
+		@SettingsPage(accounts, syncSettings, activeTab, uiSettings, signatureData)
 	</div>
 	@ChooseAccountTypeDialog()
 	@GmailAccountDialog()

@@ -255,6 +255,38 @@ func composeAutosaveConditionsLabel(settings map[string]string) string {
 	return fmt.Sprintf("%d conditions", count)
 }
 
+func signatureTotal(data []models.AccountSignatureData) int {
+	if len(data) == 0 {
+		return 0
+	}
+	return len(data[0].Signatures)
+}
+
+func signatureAssignmentCount(data []models.AccountSignatureData) int {
+	count := 0
+	for _, item := range data {
+		if item.Settings.NewEnabled && item.Settings.NewSignatureID != "" {
+			count++
+		}
+		if item.Settings.ReplyEnabled && item.Settings.ReplySignatureID != "" {
+			count++
+		}
+		if item.Settings.ForwardEnabled && item.Settings.ForwardSignatureID != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func signatureName(signatures []models.Signature, id string) string {
+	for _, sig := range signatures {
+		if sig.ID == id {
+			return sig.Name
+		}
+	}
+	return "No signature"
+}
+
 func mailListViewMode(mode string) string {
 	if mode == "table" {
 		return "table"

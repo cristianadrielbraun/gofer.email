@@ -21,19 +21,21 @@ type ConnectionTestResult struct {
 }
 
 type EditAccountData struct {
-	AccountID    string
-	EmailAddress string
-	DisplayName  string
-	IMAPHost     string
-	IMAPPort     int
-	IMAPTLSMode  string
-	SMTPHost     string
-	SMTPPort     int
-	SMTPTLSMode  string
-	Username     string
-	AuthMethod   string
-	SmtpUsername string
-	SameSmtpAuth bool
+	AccountID         string
+	EmailAddress      string
+	DisplayName       string
+	IMAPHost          string
+	IMAPPort          int
+	IMAPTLSMode       string
+	SMTPHost          string
+	SMTPPort          int
+	SMTPTLSMode       string
+	Username          string
+	AuthMethod        string
+	SmtpUsername      string
+	SameSmtpAuth      bool
+	Signatures        []Signature
+	SignatureSettings AccountSignatureSettings
 }
 
 type CreateAccountRequest struct {
@@ -73,4 +75,31 @@ type FolderSyncStatus struct {
 	LastSyncedAt string
 	MessageCount int
 	IsIDLE       bool
+}
+
+type Signature struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	HTMLBody  string `json:"html_body"`
+	TextBody  string `json:"text_body"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+type AccountSignatureSettings struct {
+	AccountID          string `json:"account_id"`
+	NewSignatureID     string `json:"new_signature_id"`
+	ReplySignatureID   string `json:"reply_signature_id"`
+	ForwardSignatureID string `json:"forward_signature_id"`
+	NewEnabled         bool   `json:"new_enabled"`
+	ReplyEnabled       bool   `json:"reply_enabled"`
+	ForwardEnabled     bool   `json:"forward_enabled"`
+	ReplyPlacement     string `json:"reply_placement"`
+	ForwardPlacement   string `json:"forward_placement"`
+}
+
+type AccountSignatureData struct {
+	Account    Account
+	Signatures []Signature
+	Settings   AccountSignatureSettings
 }

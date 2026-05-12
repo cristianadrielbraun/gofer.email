@@ -17,7 +17,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/components/tabs"
 )
 
-templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string) {
+templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string, signatureData []models.AccountSignatureData) {
 	<div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 		<div class="flex-1 overflow-y-auto">
 			<div class="max-w-3xl px-8 py-10">
@@ -53,7 +53,7 @@ templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, 
 							@SettingsAppearanceTab(uiSettings)
 						}
 						@tabs.Content(tabs.ContentProps{Value: "compose-display", IsActive: activeTab == "compose-display"}) {
-							@SettingsComposeDisplayTab(uiSettings)
+							@SettingsComposeDisplayTab(uiSettings, signatureData)
 						}
 						@tabs.Content(tabs.ContentProps{Value: "advanced", IsActive: activeTab == "advanced"}) {
 							@SettingsAdvancedTab(uiSettings)
@@ -64,7 +64,7 @@ templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, 
 	</div>
 }
 
-templ SettingsComposeDisplayTab(uiSettings map[string]string) {
+templ SettingsComposeDisplayTab(uiSettings map[string]string, signatureData []models.AccountSignatureData) {
 	<div class="mt-6 space-y-6">
 		<div class="bg-card rounded-lg border p-6 space-y-5">
 			<div>
@@ -152,6 +152,7 @@ templ SettingsComposeDisplayTab(uiSettings map[string]string) {
 				</div>
 			</div>
 		</div>
+		@AccountSignaturesSettings(signatureData)
 		<div class="bg-card rounded-lg border p-6 space-y-5">
 			<div>
 				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">List view</h3>
@@ -956,6 +957,317 @@ templ SettingsAccountCard(account models.Account) {
 					</button>
 				}
 			}
+		}
+	</div>
+}
+
+templ AccountSignaturesSettings(accounts []models.AccountSignatureData) {
+	<div class="bg-card rounded-lg border p-6">
+		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="min-w-0">
+				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Signatures</h3>
+				<p class="text-xs text-muted-foreground">Create reusable signatures and choose which accounts use them for new messages, replies, and forwards.</p>
+				<div class="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+					<span class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1">
+						@icon.Signature(icon.Props{Class: "size-3"})
+						{ strconv.Itoa(signatureTotal(accounts)) } total
+					</span>
+					<span class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1">
+						@icon.Link(icon.Props{Class: "size-3"})
+						{ strconv.Itoa(signatureAssignmentCount(accounts)) } assigned
+					</span>
+				</div>
+			</div>
+			@dialog.Trigger(dialog.TriggerProps{For: "compose-signatures-dialog"}) {
+				<button type="button" class="btn-skeuo inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold">
+					@icon.Signature(icon.Props{Class: "size-4"})
+					Manage Signatures
+				</button>
+			}
+		</div>
+	</div>
+	<div id="compose-signatures-dialog-container">
+		@ComposeSignaturesDialog(accounts)
+	</div>
+}
+
+templ ComposeSignaturesDialog(accounts []models.AccountSignatureData) {
+	@dialog.Dialog(dialog.Props{ID: "compose-signatures-dialog"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-5xl max-h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden"}) {
+			@dialog.Header() {
+				@dialog.Title() {
+					Signatures
+				}
+				@dialog.Description() {
+					Manage your reusable signatures and account assignments.
+				}
+			}
+			@ComposeSignaturesManager(accounts)
+		}
+	}
+}
+
+templ ComposeSignaturesManager(accounts []models.AccountSignatureData) {
+	<div id="compose-signatures-manager" class="min-w-0" data-account-signatures-manager data-refresh-url="/api/settings/signatures/manage" data-refresh-target="#compose-signatures-manager" data-refresh-swap="outerHTML">
+		@SignatureManagerGrid(accounts)
+	</div>
+}
+
+templ SignatureManagerGrid(accounts []models.AccountSignatureData) {
+	if len(accounts) == 0 {
+		<div class="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Add an account before configuring signatures.</div>
+	} else {
+		{{ first := accounts[0] }}
+		<div class="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+			<div class="min-w-0 space-y-4">
+				@SignatureLibrary(first)
+			</div>
+			<div class="min-w-0 rounded-lg border border-border bg-background/60 p-4 space-y-4">
+				<div class="space-y-2">
+					<label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</label>
+					@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+						@selectbox.Trigger(selectbox.TriggerProps{Name: "signature_account_id", Class: "bg-background", DisableClear: true, Attributes: templ.Attributes{"data-signature-account-select": ""}}) {
+							<span class="flex min-w-0 flex-1 items-center gap-2">
+								<span class="account-color-marker size-3.5 shrink-0" style={ accountColorStyle(first.Account.Color) } data-signature-account-marker></span>
+								@selectbox.Value(selectbox.ValueProps{Placeholder: "Choose account", Class: "min-w-0 text-left"}) {
+									{ first.Account.Name } &lt;{ first.Account.Email }&gt;
+								}
+							</span>
+						}
+						@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+							for _, data := range accounts {
+								@selectbox.Item(selectbox.ItemProps{Value: data.Account.ID, Selected: data.Account.ID == first.Account.ID}) {
+									<span class="inline-flex min-w-0 items-center gap-2">
+										<span class="account-color-marker size-3.5 shrink-0" style={ accountColorStyle(data.Account.Color) } data-signature-account-marker-source></span>
+										<span class="truncate">{ data.Account.Name } &lt;{ data.Account.Email }&gt;</span>
+									</span>
+								}
+							}
+						}
+					}
+				</div>
+				<div class="grid" data-signature-account-panels>
+					for _, data := range accounts {
+						<form class={ "col-start-1 row-start-1 space-y-4", templ.KV("invisible pointer-events-none", data.Account.ID != first.Account.ID) } data-account-signature-settings data-account-id={ data.Account.ID } aria-hidden={ strconv.FormatBool(data.Account.ID != first.Account.ID) }>
+							@AccountSignatureAssignmentRow("new", "New messages", data.Settings.NewEnabled, data.Settings.NewSignatureID, "", data.Signatures)
+							@AccountSignatureAssignmentRow("reply", "Replies", data.Settings.ReplyEnabled, data.Settings.ReplySignatureID, data.Settings.ReplyPlacement, data.Signatures)
+							@AccountSignatureAssignmentRow("forward", "Forwards", data.Settings.ForwardEnabled, data.Settings.ForwardSignatureID, data.Settings.ForwardPlacement, data.Signatures)
+							<div class="flex items-center justify-between gap-3 pt-1">
+								<span class="text-xs text-muted-foreground" data-signature-settings-status></span>
+								<button type="submit" class="btn-skeuo inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold">
+									@icon.Check(icon.Props{Class: "size-3.5"})
+									Save
+								</button>
+							</div>
+						</form>
+					}
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ SignatureLibrary(data models.AccountSignatureData) {
+	<div class="min-w-0 rounded-lg border border-border bg-background/60 p-4 space-y-3">
+		<div class="flex items-center justify-between gap-3">
+			<div>
+				<h4 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Signature library</h4>
+				<p class="text-xs text-muted-foreground mt-1">These signatures can be assigned to any account.</p>
+			</div>
+		</div>
+		<div class="flex items-end gap-2">
+			<div class="min-w-0 flex-1 space-y-1.5">
+				<label class="text-xs font-medium text-muted-foreground">Saved signatures</label>
+				@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+					@selectbox.Trigger(selectbox.TriggerProps{Name: "signature_picker_id", Class: "bg-background", DisableClear: true, Attributes: templ.Attributes{"data-signature-select": ""}}) {
+						@selectbox.Value(selectbox.ValueProps{Placeholder: "Select signature"})
+					}
+					@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+						if len(data.Signatures) == 0 {
+							@selectbox.Item(selectbox.ItemProps{Value: "", Selected: true, Disabled: true}) { No signatures yet }
+						} else {
+							@selectbox.Item(selectbox.ItemProps{Value: "", Selected: true}) { Select signature }
+							for _, sig := range data.Signatures {
+								@selectbox.Item(selectbox.ItemProps{Value: sig.ID, Attributes: templ.Attributes{"data-signature-option": "", "data-signature-name": sig.Name, "data-signature-html": sig.HTMLBody}}) { { sig.Name } }
+							}
+						}
+					}
+				}
+			</div>
+			<button type="button" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" data-signature-new>
+				@icon.Plus(icon.Props{Class: "size-3.5"})
+				New
+			</button>
+		</div>
+		<form data-signature-form class="space-y-3">
+			<input type="hidden" name="id" value="" data-signature-id/>
+			<div>
+				<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Name</label>
+				@input.Input(input.Props{Name: "name", Type: input.TypeText, Placeholder: "Work, Personal, Support...", Attributes: templ.Attributes{"data-signature-name": ""}})
+			</div>
+			<div>
+				<div class="mb-1.5 flex items-center justify-between gap-3">
+					<label class="text-xs font-medium text-muted-foreground">Signature</label>
+					<div class="inline-flex shrink-0 rounded-[var(--radius)] border border-border bg-background p-0.5 text-[11px]" data-signature-editor-mode>
+						<button type="button" class="rounded-[calc(var(--radius)-2px)] px-2 py-0.5 font-medium text-foreground bg-card shadow-sm" data-signature-mode-button="visual">Rendered</button>
+						<button type="button" class="rounded-[calc(var(--radius)-2px)] px-2 py-0.5 font-medium text-muted-foreground hover:text-foreground" data-signature-mode-button="source">HTML</button>
+					</div>
+				</div>
+				<textarea name="html_body" class="hidden" data-signature-html></textarea>
+				<div class="min-h-28 max-w-full overflow-x-auto rounded-md border border-border bg-card px-3 py-2 text-sm leading-6 outline-none focus:ring-2 focus:ring-ring" contenteditable="true" role="textbox" data-signature-editor data-placeholder="Write your signature..." oninput="syncSignatureEditor(this)"></div>
+				<textarea class="hidden min-h-28 w-full resize-y rounded-md border border-border bg-card px-3 py-2 font-mono text-xs leading-5 text-foreground outline-none focus:ring-2 focus:ring-ring" spellcheck="false" placeholder="Paste full HTML here, then switch back to Rendered to preview it." data-signature-source></textarea>
+				<p class="text-[11px] text-muted-foreground mt-1">Use Rendered for normal editing or HTML to paste source. Unsafe tags are stripped when rendered and saved.</p>
+			</div>
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-xs text-muted-foreground" data-signature-save-status></span>
+				<div class="flex items-center gap-2">
+					<button type="button" class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-destructive/30 hover:text-destructive" data-signature-delete-current>Delete</button>
+					<button type="submit" class="btn-skeuo inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold">
+						@icon.Save(icon.Props{Class: "size-3.5"})
+						Save Signature
+					</button>
+				</div>
+			</div>
+		</form>
+	</div>
+}
+
+templ AccountSignaturesDialog(data models.AccountSignatureData) {
+	@dialog.Dialog(dialog.Props{ID: "account-signatures-dialog"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-3xl"}) {
+			@dialog.Header() {
+				@dialog.Title() {
+					Account Signatures
+				}
+				@dialog.Description() {
+					Manage shared signatures and choose when { data.Account.Email } uses them.
+				}
+			}
+			<div class="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]" data-account-signatures-manager data-account-id={ data.Account.ID }>
+				<div class="min-w-0 space-y-4">
+					<div class="min-w-0 rounded-lg border border-border bg-background/60 p-4 space-y-3">
+						<div class="flex items-center justify-between gap-3">
+							<div>
+								<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Signature library</h3>
+								<p class="text-xs text-muted-foreground mt-1">Create reusable signatures that any account can use.</p>
+							</div>
+						</div>
+						<div class="flex items-end gap-2">
+							<div class="min-w-0 flex-1 space-y-1.5">
+								<label class="text-xs font-medium text-muted-foreground">Saved signatures</label>
+								@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+									@selectbox.Trigger(selectbox.TriggerProps{Name: "signature_picker_id", Class: "bg-background", DisableClear: true, Attributes: templ.Attributes{"data-signature-select": ""}}) {
+										@selectbox.Value(selectbox.ValueProps{Placeholder: "Select signature"})
+									}
+									@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+										if len(data.Signatures) == 0 {
+											@selectbox.Item(selectbox.ItemProps{Value: "", Selected: true, Disabled: true}) { No signatures yet }
+										} else {
+											@selectbox.Item(selectbox.ItemProps{Value: "", Selected: true}) { Select signature }
+											for _, sig := range data.Signatures {
+												@selectbox.Item(selectbox.ItemProps{Value: sig.ID, Attributes: templ.Attributes{"data-signature-option": "", "data-signature-name": sig.Name, "data-signature-html": sig.HTMLBody}}) { { sig.Name } }
+											}
+										}
+									}
+								}
+							</div>
+							<button type="button" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" data-signature-new>
+								@icon.Plus(icon.Props{Class: "size-3.5"})
+								New
+							</button>
+						</div>
+						<form data-signature-form class="space-y-3">
+							<input type="hidden" name="id" value="" data-signature-id/>
+							<div>
+								<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Name</label>
+								@input.Input(input.Props{Name: "name", Type: input.TypeText, Placeholder: "Work, Personal, Support...", Attributes: templ.Attributes{"data-signature-name": ""}})
+							</div>
+							<div>
+								<div class="mb-1.5 flex items-center justify-between gap-3">
+									<label class="text-xs font-medium text-muted-foreground">Signature</label>
+									<div class="inline-flex shrink-0 rounded-[var(--radius)] border border-border bg-background p-0.5 text-[11px]" data-signature-editor-mode>
+										<button type="button" class="rounded-[calc(var(--radius)-2px)] px-2 py-0.5 font-medium text-foreground bg-card shadow-sm" data-signature-mode-button="visual">Rendered</button>
+										<button type="button" class="rounded-[calc(var(--radius)-2px)] px-2 py-0.5 font-medium text-muted-foreground hover:text-foreground" data-signature-mode-button="source">HTML</button>
+									</div>
+								</div>
+								<textarea name="html_body" class="hidden" data-signature-html></textarea>
+								<div class="min-h-28 max-w-full overflow-x-auto rounded-md border border-border bg-card px-3 py-2 text-sm leading-6 outline-none focus:ring-2 focus:ring-ring" contenteditable="true" role="textbox" data-signature-editor data-placeholder="Write your signature..." oninput="syncSignatureEditor(this)"></div>
+								<textarea class="hidden min-h-28 w-full resize-y rounded-md border border-border bg-card px-3 py-2 font-mono text-xs leading-5 text-foreground outline-none focus:ring-2 focus:ring-ring" spellcheck="false" placeholder="Paste full HTML here, then switch back to Rendered to preview it." data-signature-source></textarea>
+								<p class="text-[11px] text-muted-foreground mt-1">Use Rendered for normal editing or HTML to paste source. Unsafe tags are stripped when rendered and saved.</p>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<span class="text-xs text-muted-foreground" data-signature-save-status></span>
+								<div class="flex items-center gap-2">
+									<button type="button" class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-destructive/30 hover:text-destructive" data-signature-delete-current>Delete</button>
+									<button type="submit" class="btn-skeuo inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold">
+										@icon.Save(icon.Props{Class: "size-3.5"})
+										Save Signature
+									</button>
+								</div>
+							</div>
+						</form>
+					</div>
+				</div>
+
+				<form class="rounded-lg border border-border bg-background/60 p-4 space-y-4" data-account-signature-settings>
+					<div>
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Use on this account</h3>
+						<p class="text-xs text-muted-foreground mt-1">Choose when signatures are automatically inserted.</p>
+					</div>
+					@AccountSignatureAssignmentRow("new", "New messages", data.Settings.NewEnabled, data.Settings.NewSignatureID, "", data.Signatures)
+					@AccountSignatureAssignmentRow("reply", "Replies", data.Settings.ReplyEnabled, data.Settings.ReplySignatureID, data.Settings.ReplyPlacement, data.Signatures)
+					@AccountSignatureAssignmentRow("forward", "Forwards", data.Settings.ForwardEnabled, data.Settings.ForwardSignatureID, data.Settings.ForwardPlacement, data.Signatures)
+					<div class="flex items-center justify-between gap-3 pt-2">
+						<span class="text-xs text-muted-foreground" data-signature-settings-status></span>
+						<button type="submit" class="btn-skeuo inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold">
+							@icon.Check(icon.Props{Class: "size-3.5"})
+							Save Assignments
+						</button>
+					</div>
+				</form>
+			</div>
+		}
+	}
+}
+
+templ AccountSignatureAssignmentRow(kind string, label string, enabled bool, selectedID string, placement string, signatures []models.Signature) {
+	<div class="rounded-md border border-border/70 bg-card/60 p-3 space-y-2">
+		<label class="flex items-center gap-2 text-sm font-medium text-foreground">
+			@checkbox.Checkbox(checkbox.Props{Name: kind + "_enabled", Value: "true", Checked: enabled})
+			{ label }
+		</label>
+		@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+			@selectbox.Trigger(selectbox.TriggerProps{Name: kind + "_signature_id", Class: "bg-background"}) {
+				@selectbox.Value(selectbox.ValueProps{Placeholder: "No signature"}) {
+					{ signatureName(signatures, selectedID) }
+				}
+			}
+			@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+				@selectbox.Item(selectbox.ItemProps{Value: "", Selected: selectedID == ""}) { No signature }
+				for _, sig := range signatures {
+					@selectbox.Item(selectbox.ItemProps{Value: sig.ID, Selected: selectedID == sig.ID}) { { sig.Name } }
+				}
+			}
+		}
+		if kind != "new" {
+			<div class="grid gap-1.5">
+				<label class="text-[11px] font-medium text-muted-foreground">Place signature</label>
+				@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+					@selectbox.Trigger(selectbox.TriggerProps{Name: kind + "_placement", Class: "bg-background", DisableClear: true}) {
+						@selectbox.Value(selectbox.ValueProps{Placeholder: "Before quoted content"}) {
+							if placement == "after" {
+								After quoted content
+							} else {
+								Before quoted content
+							}
+						}
+					}
+					@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+						@selectbox.Item(selectbox.ItemProps{Value: "before", Selected: placement != "after"}) { Before quoted content }
+						@selectbox.Item(selectbox.ItemProps{Value: "after", Selected: placement == "after"}) { After quoted content }
+					}
+				}
+			</div>
 		}
 	</div>
 }

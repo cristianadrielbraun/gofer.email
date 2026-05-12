@@ -16,6 +16,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/store"
 	"github.com/cristianadrielbraun/gofer/internal/views"
+	"html"
 	"html/template"
 	"io"
 	"log"
@@ -101,11 +102,17 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/accounts", h.handleCreateAccount)
 	mux.HandleFunc("GET /api/accounts/{id}/edit", h.handleGetEditAccount)
 	mux.HandleFunc("POST /api/accounts/{id}/edit", h.handleUpdateAccount)
+	mux.HandleFunc("GET /api/accounts/{id}/signatures", h.handleAccountSignatures)
+	mux.HandleFunc("GET /api/accounts/{id}/signatures/manage", h.handleManageAccountSignatures)
+	mux.HandleFunc("POST /api/accounts/{id}/signature-settings", h.handleSaveAccountSignatureSettings)
+	mux.HandleFunc("POST /api/signatures", h.handleSaveSignature)
+	mux.HandleFunc("DELETE /api/signatures/{id}", h.handleDeleteSignature)
 	mux.HandleFunc("POST /api/accounts/{id}/test", h.handleTestAccount)
 	mux.HandleFunc("DELETE /api/accounts/{id}", h.handleDeleteAccount)
 	mux.HandleFunc("GET /settings", h.handleSettings)
 	mux.HandleFunc("GET /settings/{tab}", h.handleSettingsTab)
 	mux.HandleFunc("POST /api/settings/sync", h.handleSaveSyncSettings)
+	mux.HandleFunc("GET /api/settings/signatures/manage", h.handleManageSignaturesSettings)
 	mux.HandleFunc("GET /api/settings/ui", h.handleGetUISettings)
 	mux.HandleFunc("PATCH /api/settings/ui", h.handleSaveUISettings)
 	mux.HandleFunc("GET /api/attachments/{id}/download", h.handleAttachmentDownload)
@@ -1155,6 +1162,177 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	views.WizardStepSuccess("Account updated", accountID, "edit").Render(r.Context(), w)
 }
 
+func (h *Handler) handleAccountSignatures(w http.ResponseWriter, r *http.Request) {
+	accountID := r.PathValue("id")
+	if accountID == "" {
+		http.Error(w, "account id required", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	userID := h.userID(ctx)
+	settings, err := h.db.GetAccountSignatureSettings(ctx, userID, accountID)
+	if err != nil {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
+	signatures, err := h.db.ListSignatures(ctx, userID)
+	if err != nil {
+		http.Error(w, "failed to load signatures", http.StatusInternalServerError)
+		return
+	}
+	mode := r.URL.Query().Get("mode")
+	var defaultSignature *models.Signature
+	if sig, ok, err := h.db.GetComposeSignature(ctx, userID, accountID, mode); err == nil && ok {
+		defaultSignature = sig
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"signatures":        signatures,
+		"settings":          settings,
+		"default_signature": defaultSignature,
+	})
+}
+
+func (h *Handler) handleManageAccountSignatures(w http.ResponseWriter, r *http.Request) {
+	accountID := r.PathValue("id")
+	if accountID == "" {
+		http.Error(w, "account id required", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	userID := h.userID(ctx)
+	settings, err := h.db.GetAccountSignatureSettings(ctx, userID, accountID)
+	if err != nil {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
+	account, err := h.accountStore.GetAccountByID(ctx, accountID)
+	if err != nil || account == nil {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
+	signatures, err := h.db.ListSignatures(ctx, userID)
+	if err != nil {
+		http.Error(w, "failed to load signatures", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	views.AccountSignaturesDialog(models.AccountSignatureData{Account: *account, Signatures: signatures, Settings: settings}).Render(ctx, w)
+}
+
+func (h *Handler) handleManageSignaturesSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
+	w.Header().Set("Content-Type", "text/html")
+	views.ComposeSignaturesManager(h.buildAccountSignatureData(ctx, accounts)).Render(ctx, w)
+}
+
+func (h *Handler) handleSaveSignature(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid form data"})
+		return
+	}
+	htmlBody := strings.TrimSpace(r.FormValue("html_body"))
+	textBody := strings.TrimSpace(r.FormValue("text_body"))
+	if htmlBody == "" && textBody != "" {
+		htmlBody = plainTextToSignatureHTML(textBody)
+	}
+	if htmlBody != "" {
+		htmlBody = string(message.SanitizeHTML([]byte(htmlBody)))
+	}
+	if textBody == "" {
+		textBody = signatureHTMLToText(htmlBody)
+	}
+	sig, err := h.db.SaveSignature(r.Context(), h.userID(r.Context()), models.Signature{
+		ID:       strings.TrimSpace(r.FormValue("id")),
+		Name:     r.FormValue("name"),
+		HTMLBody: htmlBody,
+		TextBody: textBody,
+	})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(sig)
+}
+
+func (h *Handler) handleDeleteSignature(w http.ResponseWriter, r *http.Request) {
+	signatureID := r.PathValue("id")
+	if signatureID == "" {
+		http.Error(w, "signature id required", http.StatusBadRequest)
+		return
+	}
+	if err := h.db.DeleteSignature(r.Context(), h.userID(r.Context()), signatureID); err != nil {
+		http.Error(w, "failed to delete signature", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+func (h *Handler) handleSaveAccountSignatureSettings(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid form data"})
+		return
+	}
+	settings := models.AccountSignatureSettings{
+		AccountID:          r.PathValue("id"),
+		NewSignatureID:     r.FormValue("new_signature_id"),
+		ReplySignatureID:   r.FormValue("reply_signature_id"),
+		ForwardSignatureID: r.FormValue("forward_signature_id"),
+		NewEnabled:         formBool(r, "new_enabled"),
+		ReplyEnabled:       formBool(r, "reply_enabled"),
+		ForwardEnabled:     formBool(r, "forward_enabled"),
+		ReplyPlacement:     r.FormValue("reply_placement"),
+		ForwardPlacement:   r.FormValue("forward_placement"),
+	}
+	if err := h.db.SaveAccountSignatureSettings(r.Context(), h.userID(r.Context()), settings); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to save signature settings"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
+}
+
+func formBool(r *http.Request, name string) bool {
+	v := strings.ToLower(strings.TrimSpace(r.FormValue(name)))
+	return v == "1" || v == "true" || v == "on" || v == "yes"
+}
+
+func plainTextToSignatureHTML(text string) string {
+	lines := strings.Split(template.HTMLEscapeString(text), "\n")
+	return "<p>" + strings.Join(lines, "<br>") + "</p>"
+}
+
+func signatureHTMLToText(raw string) string {
+	replacer := strings.NewReplacer("<br>", "\n", "<br/>", "\n", "<br />", "\n", "</p>", "\n", "</div>", "\n")
+	raw = replacer.Replace(raw)
+	var b strings.Builder
+	inTag := false
+	for _, r := range raw {
+		switch r {
+		case '<':
+			inTag = true
+		case '>':
+			inTag = false
+		default:
+			if !inTag {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return strings.TrimSpace(html.UnescapeString(b.String()))
+}
+
 func (h *Handler) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 	if accountID == "" {
@@ -1267,14 +1445,15 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
 	syncSettings := h.buildSyncSettings(ctx, accounts)
 	uiSettings := h.db.GetUISettings(ctx, h.userID(ctx))
+	signatureData := h.buildAccountSignatureData(ctx, accounts)
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		views.SettingsPartial(accounts, syncSettings, "accounts", uiSettings).Render(ctx, w)
+		views.SettingsPartial(accounts, syncSettings, "accounts", uiSettings, signatureData).Render(ctx, w)
 		return
 	}
 
-	views.SettingsLayout(accounts, syncSettings, "accounts", uiSettings).Render(ctx, w)
+	views.SettingsLayout(accounts, syncSettings, "accounts", uiSettings, signatureData).Render(ctx, w)
 }
 
 func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
@@ -1287,14 +1466,26 @@ func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 	accounts, _ := h.db.GetAccounts(ctx, h.userID(ctx))
 	syncSettings := h.buildSyncSettings(ctx, accounts)
 	uiSettings := h.db.GetUISettings(ctx, h.userID(ctx))
+	signatureData := h.buildAccountSignatureData(ctx, accounts)
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		views.SettingsPartial(accounts, syncSettings, tab, uiSettings).Render(ctx, w)
+		views.SettingsPartial(accounts, syncSettings, tab, uiSettings, signatureData).Render(ctx, w)
 		return
 	}
 
-	views.SettingsLayout(accounts, syncSettings, tab, uiSettings).Render(ctx, w)
+	views.SettingsLayout(accounts, syncSettings, tab, uiSettings, signatureData).Render(ctx, w)
+}
+
+func (h *Handler) buildAccountSignatureData(ctx context.Context, accounts []models.Account) []models.AccountSignatureData {
+	userID := h.userID(ctx)
+	signatures, _ := h.db.ListSignatures(ctx, userID)
+	data := make([]models.AccountSignatureData, 0, len(accounts))
+	for _, account := range accounts {
+		settings, _ := h.db.GetAccountSignatureSettings(ctx, userID, account.ID)
+		data = append(data, models.AccountSignatureData{Account: account, Signatures: signatures, Settings: settings})
+	}
+	return data
 }
 
 func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Account) models.SyncSettings {

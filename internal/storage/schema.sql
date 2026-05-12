@@ -350,5 +350,32 @@ CREATE INDEX IF NOT EXISTS idx_sessions_token
 CREATE INDEX IF NOT EXISTS idx_sessions_expires
     ON sessions(expires_at);
 
+-- Shared compose signatures
+CREATE TABLE IF NOT EXISTS signatures (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    html_body TEXT NOT NULL DEFAULT '',
+    text_body TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_signatures_user
+    ON signatures(user_id, name);
+
+CREATE TABLE IF NOT EXISTS account_signature_settings (
+    account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    new_signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+    reply_signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+    forward_signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+    new_enabled INTEGER NOT NULL DEFAULT 0,
+    reply_enabled INTEGER NOT NULL DEFAULT 0,
+    forward_enabled INTEGER NOT NULL DEFAULT 0,
+    reply_placement TEXT NOT NULL DEFAULT 'before',
+    forward_placement TEXT NOT NULL DEFAULT 'before',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (14);
+INSERT OR REPLACE INTO schema_version (version) VALUES (16);

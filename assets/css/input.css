@@ -369,10 +369,13 @@
 }
 
 .compose-attachment-menu button {
+  display: block;
+  width: 100%;
   border-radius: calc(var(--radius) * 0.75);
   padding: 0.4rem 0.65rem;
   font-size: 0.78rem;
   font-weight: 650;
+  text-align: left;
 }
 
 .compose-attachment-menu button:hover {
@@ -631,6 +634,13 @@
 .compose-rich-editor:empty::before {
   content: attr(data-placeholder);
   color: color-mix(in srgb, var(--ink) 28%, transparent);
+  font-style: italic;
+  pointer-events: none;
+}
+
+[data-signature-editor]:empty::before {
+  content: attr(data-placeholder);
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
   font-style: italic;
   pointer-events: none;
 }
