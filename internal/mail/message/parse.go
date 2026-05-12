@@ -4,15 +4,23 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	stdhtml "html"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/emersion/go-message"
 	_ "github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/mail"
+	xhtml "golang.org/x/net/html"
 
 	"github.com/cristianadrielbraun/gofer/internal/store"
+)
+
+var (
+	reHTMLPreviewTag = regexp.MustCompile(`(?is)<\s*/?\s*(?:!doctype|html|head|body|style|script|meta|link|div|span|p|br|table|tbody|thead|tr|td|th|a|img|font|center|blockquote|ul|ol|li)\b[^>]*>`)
+	reCSSBlock       = regexp.MustCompile(`(?is)(?:^|[\s}])(?:body|html|[.#][a-z0-9_-]+|[a-z][a-z0-9_-]*)\s*\{[^}]*\}`)
 )
 
 type ParsedMessage struct {
@@ -194,7 +202,7 @@ func ParseMessage(ctx context.Context, r io.Reader, blobStore *store.BlobStore, 
 		}
 	}
 
-	parsed.Snippet = generateSnippet(parsed.TextBody, parsed.HTMLBody)
+	parsed.Snippet = GenerateSnippet(parsed.TextBody, parsed.HTMLBody)
 
 	return parsed, nil
 }
@@ -222,41 +230,167 @@ func ExtractHTMLBody(r io.Reader) ([]byte, error) {
 	return nil, nil
 }
 
-func generateSnippet(text string, html []byte) string {
-	if text != "" {
-		return truncate(strings.TrimSpace(text), 200)
+func GenerateSnippet(text string, html []byte) string {
+	preview := PreviewFromText(text)
+	if preview != "" && !looksLikeMarkup(preview) {
+		return preview
 	}
-	if len(html) > 0 {
-		return truncate(stripHTMLTags(string(html)), 200)
+	if htmlPreview := PreviewFromHTML(html); htmlPreview != "" {
+		return htmlPreview
 	}
-	return ""
+	return preview
 }
 
-func stripHTMLTags(s string) string {
-	var buf strings.Builder
-	inTag := false
-	for _, r := range s {
-		if r == '<' {
-			inTag = true
-			continue
-		}
-		if r == '>' {
-			inTag = false
-			continue
-		}
-		if !inTag {
-			buf.WriteRune(r)
+func PreviewFromText(text string) string {
+	text = normalizePreviewText(text)
+	if text == "" {
+		return ""
+	}
+	if reHTMLPreviewTag.MatchString(text) {
+		if preview := PreviewFromHTML([]byte(text)); preview != "" {
+			return preview
 		}
 	}
-	return strings.TrimSpace(buf.String())
+	text = normalizePreviewText(reCSSBlock.ReplaceAllString(text, " "))
+	return truncate(text, 200)
+}
+
+func PreviewFromHTML(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	doc, err := xhtml.Parse(bytes.NewReader(raw))
+	if err != nil {
+		return ""
+	}
+	var buf strings.Builder
+	appendHTMLText(doc, &buf)
+	return truncate(buf.String(), 200)
+}
+
+func appendHTMLText(n *xhtml.Node, buf *strings.Builder) {
+	if n == nil {
+		return
+	}
+
+	if n.Type == xhtml.TextNode {
+		writePreviewToken(buf, n.Data)
+		return
+	}
+
+	if n.Type == xhtml.ElementNode {
+		name := strings.ToLower(n.Data)
+		if shouldSkipPreviewElement(name) || elementHiddenFromPreview(n) {
+			return
+		}
+		if name == "br" {
+			writePreviewSpace(buf)
+			return
+		}
+		if name == "img" {
+			alt, _ := htmlAttr(n, "alt")
+			writePreviewToken(buf, alt)
+		}
+		if isPreviewBlockElement(name) {
+			writePreviewSpace(buf)
+		}
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		appendHTMLText(c, buf)
+	}
+
+	if n.Type == xhtml.ElementNode && isPreviewBlockElement(strings.ToLower(n.Data)) {
+		writePreviewSpace(buf)
+	}
+}
+
+func writePreviewToken(buf *strings.Builder, s string) {
+	s = normalizePreviewText(s)
+	if s == "" {
+		return
+	}
+	if buf.Len() > 0 && !startsWithPunctuation(s) {
+		buf.WriteByte(' ')
+	}
+	buf.WriteString(s)
+}
+
+func startsWithPunctuation(s string) bool {
+	for _, r := range s {
+		switch r {
+		case '.', ',', ':', ';', '!', '?', ')', ']', '}':
+			return true
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func writePreviewSpace(buf *strings.Builder) {
+	if buf.Len() > 0 {
+		buf.WriteByte(' ')
+	}
+}
+
+func shouldSkipPreviewElement(name string) bool {
+	switch name {
+	case "head", "style", "script", "noscript", "template", "svg", "meta", "link", "title":
+		return true
+	default:
+		return false
+	}
+}
+
+func elementHiddenFromPreview(n *xhtml.Node) bool {
+	if _, ok := htmlAttr(n, "hidden"); ok {
+		return true
+	}
+	if attr, ok := htmlAttr(n, "aria-hidden"); ok && strings.EqualFold(attr, "true") {
+		return true
+	}
+	style, _ := htmlAttr(n, "style")
+	style = strings.ToLower(style)
+	return strings.Contains(style, "display:none") || strings.Contains(style, "display: none") || strings.Contains(style, "visibility:hidden") || strings.Contains(style, "visibility: hidden")
+}
+
+func htmlAttr(n *xhtml.Node, key string) (string, bool) {
+	for _, attr := range n.Attr {
+		if strings.EqualFold(attr.Key, key) {
+			return attr.Val, true
+		}
+	}
+	return "", false
+}
+
+func isPreviewBlockElement(name string) bool {
+	switch name {
+	case "address", "article", "aside", "blockquote", "body", "br", "center", "dd", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre", "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul":
+		return true
+	default:
+		return false
+	}
+}
+
+func looksLikeMarkup(s string) bool {
+	return reHTMLPreviewTag.MatchString(s) || reCSSBlock.MatchString(s)
+}
+
+func normalizePreviewText(s string) string {
+	s = stdhtml.UnescapeString(s)
+	s = strings.ReplaceAll(s, "\u00a0", " ")
+	s = strings.ReplaceAll(s, "\u200b", "")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 func truncate(s string, maxLen int) string {
-	s = strings.TrimSpace(s)
-	if len(s) <= maxLen {
+	s = normalizePreviewText(s)
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen]
+	return string(runes[:maxLen])
 }
 
 func init() {

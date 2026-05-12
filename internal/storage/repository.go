@@ -51,14 +51,14 @@ func truncatePreview(s string) string {
 func previewFromBodyPaths(textPath, htmlPath string) string {
 	if textPath != "" {
 		if data, err := os.ReadFile(textPath); err == nil && len(data) > 0 {
-			if preview := truncatePreview(string(data)); preview != "" {
+			if preview := mailmessage.PreviewFromText(string(data)); preview != "" {
 				return preview
 			}
 		}
 	}
 	if htmlPath != "" {
 		if data, err := os.ReadFile(htmlPath); err == nil && len(data) > 0 {
-			if preview := truncatePreview(stripHTMLTags(string(data))); preview != "" {
+			if preview := mailmessage.PreviewFromHTML(data); preview != "" {
 				return preview
 			}
 		}
@@ -1529,6 +1529,7 @@ func (db *DB) GetThreadMessages(ctx context.Context, accountID, threadID string)
 			&internetMsgID, &refs, &bodyTextPath); err != nil {
 			continue
 		}
+		item.Preview = mailmessage.PreviewFromText(item.Preview)
 		item.From = contactFromSender(fromName, fromEmail)
 		item.IsRead = isRead == 1
 		item.IsStarred = isStarred == 1
@@ -1633,7 +1634,7 @@ func (db *DB) GetEmailByID(ctx context.Context, id string) (*models.Email, error
 	email.AccountColor = accountColor
 	email.Subject = subject
 	email.From = contactFromSender(fromName, fromEmail)
-	email.Preview = snippet
+	email.Preview = mailmessage.PreviewFromText(snippet)
 	email.HasAttachment = hasAttach == 1
 
 	if internetMessageID.Valid {
@@ -1910,7 +1911,7 @@ func (db *DB) scanEmailRows(ctx context.Context, rows *sql.Rows) ([]models.Email
 		r.email.AccountColor = accountColor
 		r.email.Subject = subject
 		r.email.From = contactFromSender(fromName, fromEmail)
-		r.email.Preview = snippet
+		r.email.Preview = mailmessage.PreviewFromText(snippet)
 		if r.email.Preview == "" || r.email.Preview == subject {
 			if preview := previewFromBodyPaths(nullStringValue(textPath), nullStringValue(htmlPath)); preview != "" {
 				r.email.Preview = preview
@@ -2186,7 +2187,7 @@ func (db *DB) SearchMessages(ctx context.Context, userID string, query string, l
 		r.email.AccountColor = accountColor
 		r.email.Subject = subject
 		r.email.From = contactFromSender(fromName, fromEmail)
-		r.email.Preview = snippet
+		r.email.Preview = mailmessage.PreviewFromText(snippet)
 		if r.email.Preview == "" || r.email.Preview == subject {
 			if preview := previewFromBodyPaths(nullStringValue(textPath), nullStringValue(htmlPath)); preview != "" {
 				r.email.Preview = preview
