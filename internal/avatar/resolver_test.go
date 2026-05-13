@@ -1,6 +1,20 @@
 package avatar
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestGravatarHash(t *testing.T) {
 	got := GravatarHash(" MyEmailAddress@example.com ")
@@ -126,6 +140,114 @@ func TestLooksLikeSVG(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := looksLikeSVG([]byte(tt.data)); got != tt.want {
 				t.Fatalf("looksLikeSVG() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsSafeSVGRejectsActiveContent(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{name: "simple logo", data: `<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>`, want: true},
+		{name: "script", data: `<svg><script>alert(1)</script></svg>`, want: false},
+		{name: "event handler", data: `<svg onload="alert(1)"></svg>`, want: false},
+		{name: "foreign object", data: `<svg><foreignObject><body></body></foreignObject></svg>`, want: false},
+		{name: "external style url", data: `<svg><style>rect{fill:url(https://example.com/a)}</style></svg>`, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isSafeSVG([]byte(tt.data)); got != tt.want {
+				t.Fatalf("isSafeSVG() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFetchBIMIClassifiesDNSNotFoundAsMissing(t *testing.T) {
+	r := NewResolver()
+	r.lookupTXT = func(context.Context, string) ([]string, error) {
+		return nil, &net.DNSError{IsNotFound: true}
+	}
+
+	_, found, err := r.fetchBIMI(context.Background(), "example.com")
+	if err != nil {
+		t.Fatalf("fetchBIMI() error = %v, want nil", err)
+	}
+	if found {
+		t.Fatal("fetchBIMI() found = true, want false")
+	}
+}
+
+func TestFetchBIMIClassifiesDNSTimeoutAsRetryableError(t *testing.T) {
+	r := NewResolver()
+	r.lookupTXT = func(context.Context, string) ([]string, error) {
+		return nil, &net.DNSError{IsTimeout: true}
+	}
+
+	_, found, err := r.fetchBIMI(context.Background(), "example.com")
+	if err == nil {
+		t.Fatal("fetchBIMI() error = nil, want retryable DNS error")
+	}
+	if found {
+		t.Fatal("fetchBIMI() found = true, want false")
+	}
+}
+
+func TestFetchGravatarMissingAndInvalidResponses(t *testing.T) {
+	tests := []struct {
+		name      string
+		response  *http.Response
+		wantFound bool
+		wantErr   bool
+	}{
+		{
+			name: "not found",
+			response: &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("")),
+			},
+		},
+		{
+			name: "non image",
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/html"}},
+				Body:       io.NopCloser(strings.NewReader("<html></html>")),
+			},
+			wantErr: true,
+		},
+		{
+			name: "oversized",
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"image/png"}},
+				Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", maxImageSize+1))),
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := NewResolver()
+			r.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Host != "www.gravatar.com" {
+					return nil, errors.New("unexpected host")
+				}
+				return tt.response, nil
+			})}
+
+			_, found, err := r.fetchGravatar(context.Background(), "0bc83cb571cd1c50ba6f3e8a78ef1346")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("fetchGravatar() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if found != tt.wantFound {
+				t.Fatalf("fetchGravatar() found = %v, want %v", found, tt.wantFound)
 			}
 		})
 	}

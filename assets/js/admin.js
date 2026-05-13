@@ -222,7 +222,7 @@
       this.isLoading = false
       this.totalCount = 0
       this.filters = { query: "", provider: "all", status: "all", errors: false }
-      this.providerColumns = ["gravatar", "bimi"]
+      this.providerColumns = []
       this.itemsContainer = document.createElement("div")
       this.loader = document.createElement("div")
       this.itemsContainer.style.minWidth = "0"
@@ -412,9 +412,9 @@
       fetch("/api/avatars/senders?" + params.toString(), { headers: { "Accept": "application/json" } })
         .then(function (res) { if (!res.ok) throw new Error("status " + res.status); return res.json() })
         .then(function (data) {
-          self.updateProviderColumns(data.providers || [])
           self.totalCount = data.total_count || 0
           var items = data.items || []
+          self.updateProviderColumns(self.providersFromResponse(data.providers || [], items))
           self.items = self.items.concat(items)
           self.nextOffset = data.next_offset != null ? data.next_offset : self.items.length
           self.hasMore = !!data.has_more
@@ -437,6 +437,16 @@
       var node = qs("[data-avatar-log-count]", root)
       if (!node) return
       node.textContent = this.totalCount === 1 ? "1 matching sender" : fmtNumber(this.totalCount) + " matching senders"
+    }
+
+    providersFromResponse(providers, items) {
+      var next = providers.slice()
+      ;(items || []).forEach(function (item) {
+        ;(item.providers || []).forEach(function (provider) {
+          if (provider.provider && next.indexOf(provider.provider) < 0) next.push(provider.provider)
+        })
+      })
+      return next
     }
   }
 

@@ -22,6 +22,7 @@ const (
 )
 
 var gravatarHashPattern = regexp.MustCompile(`^[a-f0-9]{32}$`)
+var svgEventAttrPattern = regexp.MustCompile(`(?i)[[:space:]]on[a-z]+[[:space:]]*=`)
 
 type Image struct {
 	Data        []byte
@@ -32,9 +33,11 @@ type Image struct {
 }
 
 type Resolver struct {
-	client *http.Client
-	mu     sync.Mutex
-	cache  map[string]cacheEntry
+	client       *http.Client
+	lookupTXT    func(context.Context, string) ([]string, error)
+	lookupIPAddr func(context.Context, string) ([]net.IPAddr, error)
+	mu           sync.Mutex
+	cache        map[string]cacheEntry
 }
 
 type cacheEntry struct {
@@ -45,8 +48,10 @@ type cacheEntry struct {
 
 func NewResolver() *Resolver {
 	return &Resolver{
-		client: &http.Client{Timeout: 4 * time.Second},
-		cache:  make(map[string]cacheEntry),
+		client:       &http.Client{Timeout: 4 * time.Second},
+		lookupTXT:    net.DefaultResolver.LookupTXT,
+		lookupIPAddr: net.DefaultResolver.LookupIPAddr,
+		cache:        make(map[string]cacheEntry),
 	}
 }
 
@@ -258,9 +263,9 @@ func (r *Resolver) fetchGravatar(ctx context.Context, hash string) (Image, bool,
 }
 
 func (r *Resolver) fetchBIMI(ctx context.Context, domain string) (Image, bool, error) {
-	records, err := net.DefaultResolver.LookupTXT(ctx, "default._bimi."+domain)
+	records, err := r.lookupTXT(ctx, "default._bimi."+domain)
 	if err != nil {
-		if dnsErr, ok := err.(*net.DNSError); ok && (dnsErr.IsNotFound || dnsErr.IsTimeout) {
+		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 			return Image{}, false, nil
 		}
 		return Image{}, false, err
@@ -273,7 +278,7 @@ func (r *Resolver) fetchBIMI(ctx context.Context, domain string) (Image, bool, e
 }
 
 func (r *Resolver) fetchBIMILogo(ctx context.Context, rawURL string) (Image, bool, error) {
-	if err := validateRemoteAvatarURL(ctx, rawURL); err != nil {
+	if err := r.validateRemoteAvatarURL(ctx, rawURL); err != nil {
 		return Image{}, false, err
 	}
 	client := *r.client
@@ -281,7 +286,7 @@ func (r *Resolver) fetchBIMILogo(ctx context.Context, rawURL string) (Image, boo
 		if len(via) >= 3 {
 			return http.ErrUseLastResponse
 		}
-		return validateRemoteAvatarURL(req.Context(), req.URL.String())
+		return r.validateRemoteAvatarURL(req.Context(), req.URL.String())
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
@@ -316,14 +321,14 @@ func (r *Resolver) fetchBIMILogo(ctx context.Context, rawURL string) (Image, boo
 	if len(data) > maxImageSize {
 		return Image{}, false, fmt.Errorf("bimi logo exceeds %d bytes", maxImageSize)
 	}
-	if !looksLikeSVG(data) {
-		return Image{}, false, fmt.Errorf("bimi logo is not SVG")
+	if !isSafeSVG(data) {
+		return Image{}, false, fmt.Errorf("bimi logo is not safe SVG")
 	}
 
 	return Image{Data: data, ContentType: "image/svg+xml", Source: "bimi", SourceURL: rawURL}, true, nil
 }
 
-func validateRemoteAvatarURL(ctx context.Context, rawURL string) error {
+func (r *Resolver) validateRemoteAvatarURL(ctx context.Context, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
@@ -334,7 +339,7 @@ func validateRemoteAvatarURL(ctx context.Context, rawURL string) error {
 	if u.Hostname() == "" {
 		return fmt.Errorf("avatar url missing host")
 	}
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, u.Hostname())
+	ips, err := r.lookupIPAddr(ctx, u.Hostname())
 	if err != nil {
 		return err
 	}
@@ -386,4 +391,30 @@ func looksLikeSVG(data []byte) bool {
 			return strings.HasPrefix(lower, "<svg")
 		}
 	}
+}
+
+func isSafeSVG(data []byte) bool {
+	if !looksLikeSVG(data) {
+		return false
+	}
+	lower := strings.ToLower(string(data))
+	blocked := []string{
+		"<script",
+		"<foreignobject",
+		"<iframe",
+		"<object",
+		"<embed",
+		"<image",
+		"javascript:",
+		"data:text/html",
+		"data:application/xhtml",
+		"url(http:",
+		"url(https:",
+	}
+	for _, token := range blocked {
+		if strings.Contains(lower, token) {
+			return false
+		}
+	}
+	return !svgEventAttrPattern.Match(data)
 }

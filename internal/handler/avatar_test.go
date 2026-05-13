@@ -3,9 +3,16 @@ package handler
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
+	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 func TestResolveAvatarWithRetryRetriesOnce(t *testing.T) {
@@ -41,5 +48,44 @@ func TestResolveAvatarWithRetryStopsOnCanceledContext(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestHandleAvatarImageAddsStrictHeadersForSVG(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db, err := storage.New(filepath.Join(dir, "gofer.db"))
+	if err != nil {
+		t.Fatalf("storage.New() error = %v", err)
+	}
+	defer db.Close()
+
+	blobs := store.NewBlobStore(filepath.Join(dir, "blobs"))
+	h := &Handler{db: db, blobStore: blobs}
+	email := "brand@example.com"
+	hash := avatarresolver.GravatarHash(email)
+	data := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>`)
+	storagePath, err := blobs.StoreAvatar(hash, "image/svg+xml", data)
+	if err != nil {
+		t.Fatalf("StoreAvatar() error = %v", err)
+	}
+	if err := db.SaveSenderAvatarFound(ctx, hash, email, "bimi", "image/svg+xml", storagePath, nil, time.Now().Add(time.Hour), "missing", "found"); err != nil {
+		t.Fatalf("SaveSenderAvatarFound() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/avatars/"+hash, nil)
+	req.SetPathValue("hash", hash)
+	rec := httptest.NewRecorder()
+	h.handleAvatarImage(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	csp := rec.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "default-src 'none'") || !strings.Contains(csp, "script-src 'none'") || !strings.Contains(csp, "object-src 'none'") {
+		t.Fatalf("Content-Security-Policy = %q, want strict SVG policy", csp)
 	}
 }

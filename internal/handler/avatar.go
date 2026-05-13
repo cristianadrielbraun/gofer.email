@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -239,59 +240,93 @@ func waitForAvatarBackfillSlot(ctx context.Context, throttle *time.Ticker) error
 	}
 }
 
+type avatarProviderSpec struct {
+	name           string
+	resolve        func(context.Context, *Handler, string, string) (avatarresolver.Image, bool, error)
+	skip           func(string) (bool, string)
+	missingMessage func(string, string) string
+	errorMessage   func(string, string, error) string
+}
+
+func avatarProviderSpecs() []avatarProviderSpec {
+	return []avatarProviderSpec{
+		{
+			name: "gravatar",
+			resolve: func(ctx context.Context, h *Handler, hash, _ string) (avatarresolver.Image, bool, error) {
+				return h.avatar.ResolveGravatar(ctx, hash)
+			},
+			missingMessage: func(hash, _ string) string { return gravatarMissingAttemptMessage(hash) },
+			errorMessage:   func(hash, _ string, err error) string { return gravatarErrorAttemptMessage(hash, err) },
+		},
+		{
+			name: "bimi",
+			skip: func(email string) (bool, string) {
+				domain := avatarresolver.EmailDomain(email)
+				if domain == "" || avatarresolver.IsPublicMailboxDomain(domain) {
+					return true, bimiSkippedAttemptMessage(domain)
+				}
+				return false, ""
+			},
+			resolve: func(ctx context.Context, h *Handler, _, email string) (avatarresolver.Image, bool, error) {
+				return h.avatar.ResolveBIMI(ctx, email)
+			},
+			missingMessage: func(_, email string) string { return bimiMissingAttemptMessage(avatarresolver.EmailDomain(email)) },
+			errorMessage: func(_, email string, err error) string {
+				return bimiErrorAttemptMessage(avatarresolver.EmailDomain(email), err)
+			},
+		},
+	}
+}
+
 func (h *Handler) fetchAndPersistAvatar(ctx context.Context, hash, email string) (avatarresolver.Image, bool, error) {
-	gravatarStatus := "missing"
-	bimiStatus := "unchecked"
+	providerStatuses := map[string]string{
+		"gravatar": "unchecked",
+		"bimi":     "unchecked",
+	}
 
-	image, found, err := resolveAvatarWithRetry(ctx, func(ctx context.Context) (avatarresolver.Image, bool, error) {
-		return h.avatar.ResolveGravatar(ctx, hash)
-	})
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return avatarresolver.Image{}, false, err
+	for _, provider := range avatarProviderSpecs() {
+		if provider.skip != nil {
+			skipped, message := provider.skip(email)
+			if skipped {
+				providerStatuses[provider.name] = "skipped"
+				_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, provider.name, "skipped", message)
+				continue
+			}
 		}
-		gravatarStatus = "error"
-		_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, "gravatar", gravatarStatus, gravatarErrorAttemptMessage(hash, err))
-		_ = h.db.SaveSenderAvatarError(ctx, hash, email, "gravatar", err.Error(), time.Now().Add(avatarErrorRetryAfter), gravatarStatus, bimiStatus)
-		return avatarresolver.Image{}, false, err
-	}
-	if found {
-		gravatarStatus = "found"
-		_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, "gravatar", gravatarStatus, avatarFoundAttemptMessage(image))
-		return h.persistFoundAvatar(ctx, hash, email, image, gravatarStatus, bimiStatus)
-	}
-	_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, "gravatar", gravatarStatus, gravatarMissingAttemptMessage(hash))
 
-	domain := avatarresolver.EmailDomain(email)
-	if domain == "" || avatarresolver.IsPublicMailboxDomain(domain) {
-		bimiStatus = "skipped"
-		_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, "bimi", bimiStatus, bimiSkippedAttemptMessage(domain))
-	} else {
-		image, found, err = resolveAvatarWithRetry(ctx, func(ctx context.Context) (avatarresolver.Image, bool, error) {
-			return h.avatar.ResolveBIMI(ctx, email)
+		image, found, err := resolveAvatarWithRetry(ctx, func(ctx context.Context) (avatarresolver.Image, bool, error) {
+			return provider.resolve(ctx, h, hash, email)
 		})
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return avatarresolver.Image{}, false, err
 			}
-			bimiStatus = "error"
-			_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, "bimi", bimiStatus, bimiErrorAttemptMessage(domain, err))
-			_ = h.db.SaveSenderAvatarError(ctx, hash, email, "bimi", err.Error(), time.Now().Add(avatarErrorRetryAfter), gravatarStatus, bimiStatus)
+			providerStatuses[provider.name] = "error"
+			_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, provider.name, "error", provider.errorMessage(hash, email, err))
+			_ = h.db.SaveSenderAvatarError(ctx, hash, email, provider.name, err.Error(), time.Now().Add(avatarErrorRetryAfter), avatarStatus(providerStatuses, "gravatar"), avatarStatus(providerStatuses, "bimi"))
 			return avatarresolver.Image{}, false, err
 		}
 		if found {
-			bimiStatus = "found"
-			_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, "bimi", bimiStatus, avatarFoundAttemptMessage(image))
-			return h.persistFoundAvatar(ctx, hash, email, image, gravatarStatus, bimiStatus)
+			providerStatuses[provider.name] = "found"
+			_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, provider.name, "found", avatarFoundAttemptMessage(image))
+			return h.persistFoundAvatar(ctx, hash, email, image, avatarStatus(providerStatuses, "gravatar"), avatarStatus(providerStatuses, "bimi"))
 		}
-		bimiStatus = "missing"
-		_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, "bimi", bimiStatus, bimiMissingAttemptMessage(domain))
+
+		providerStatuses[provider.name] = "missing"
+		_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, provider.name, "missing", provider.missingMessage(hash, email))
 	}
 
-	if err := h.db.SaveSenderAvatarMissing(ctx, hash, email, "none", time.Now().Add(avatarMissingTTL), gravatarStatus, bimiStatus); err != nil {
+	if err := h.db.SaveSenderAvatarMissing(ctx, hash, email, "none", time.Now().Add(avatarMissingTTL), avatarStatus(providerStatuses, "gravatar"), avatarStatus(providerStatuses, "bimi")); err != nil {
 		return avatarresolver.Image{}, false, err
 	}
 	return avatarresolver.Image{}, false, nil
+}
+
+func avatarStatus(statuses map[string]string, provider string) string {
+	if status := statuses[provider]; status != "" {
+		return status
+	}
+	return "unchecked"
 }
 
 func resolveAvatarWithRetry(ctx context.Context, resolve func(context.Context) (avatarresolver.Image, bool, error)) (avatarresolver.Image, bool, error) {
@@ -467,12 +502,20 @@ func (h *Handler) handleAvatarImage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if isSVGAvatarContentType(contentType) {
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'none'; media-src 'none'; object-src 'none'; script-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+	}
 	w.Header().Set("Cache-Control", "private, max-age=604800")
 	w.Header().Set("ETag", etag)
 	if rec.ExpiresAtValid {
 		w.Header().Set("Expires", rec.ExpiresAt.UTC().Format(http.TimeFormat))
 	}
 	_, _ = w.Write(data)
+}
+
+func isSVGAvatarContentType(contentType string) bool {
+	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	return contentType == "image/svg+xml" || contentType == "application/svg+xml"
 }
 
 func (h *Handler) handleAvatarAttempts(w http.ResponseWriter, r *http.Request) {
