@@ -802,26 +802,82 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function updateVisibleAvatars(hash, avatarURL) {
+    patchVirtualMailListAvatarCache(hash, avatarURL)
     var nodes = document.querySelectorAll("[data-contact-avatar][data-avatar-hash]")
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i]
       if (node.getAttribute("data-avatar-hash") !== hash) continue
+      applyAvatarURLToNode(node, avatarURL)
+    }
+  }
 
-      hideContactAvatarFallback(node)
+  function applyAvatarURLToNode(node, avatarURL) {
+    hideContactAvatarFallback(node)
 
-      var img = node.querySelector("img[data-avatar-image]")
-      if (!img) {
-        img = document.createElement("img")
-        img.setAttribute("data-avatar-image", "")
-        img.decoding = "async"
-        img.alt = ""
-        img.className = "absolute inset-0 h-full w-full object-cover"
-        node.appendChild(img)
+    var img = node.querySelector("img[data-avatar-image]")
+    if (!img) {
+      img = document.createElement("img")
+      img.setAttribute("data-avatar-image", "")
+      img.decoding = "async"
+      img.alt = ""
+      img.className = "absolute inset-0 h-full w-full object-cover"
+      node.appendChild(img)
+    }
+    if (img.getAttribute("src") !== avatarURL) {
+      img.setAttribute("src", avatarURL)
+    }
+  }
+
+  function patchVirtualMailListAvatarCache(hash, avatarURL) {
+    var lists = []
+    if (virtualMailList) lists.push(virtualMailList)
+    document.querySelectorAll("#mail-list-scroll").forEach(function (container) {
+      if (container._virtualMailList && lists.indexOf(container._virtualMailList) === -1) {
+        lists.push(container._virtualMailList)
       }
-      if (img.getAttribute("src") !== avatarURL) {
-        img.setAttribute("src", avatarURL)
+    })
+
+    for (var i = 0; i < lists.length; i++) {
+      var list = lists[i]
+      var changed = false
+      if (list.cache && typeof list.cache.forEach === "function") {
+        list.cache.forEach(function (item) {
+          if (!item || !item.html) return
+          var patched = patchAvatarHTML(item.html, hash, avatarURL)
+          if (patched !== item.html) {
+            item.html = patched
+            changed = true
+          }
+        })
+      }
+      if (list.expandedThreads && typeof list.expandedThreads.forEach === "function") {
+        list.expandedThreads.forEach(function (thread) {
+          if (!thread || !thread.html) return
+          var patched = patchAvatarHTML(thread.html, hash, avatarURL)
+          if (patched !== thread.html) {
+            thread.html = patched
+            changed = true
+          }
+        })
+      }
+      if (changed && typeof list.render === "function") {
+        list.prevFirst = null
+        list.prevLast = null
+        list.render()
       }
     }
+  }
+
+  function patchAvatarHTML(html, hash, avatarURL) {
+    var template = document.createElement("template")
+    template.innerHTML = html || ""
+    var changed = false
+    template.content.querySelectorAll("[data-contact-avatar][data-avatar-hash]").forEach(function (node) {
+      if (node.getAttribute("data-avatar-hash") !== hash) return
+      applyAvatarURLToNode(node, avatarURL)
+      changed = true
+    })
+    return changed ? template.innerHTML : html
   }
 
   function setupContactAvatarImages() {
