@@ -15,6 +15,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/components/popover"
 	"github.com/cristianadrielbraun/gofer/components/radio"
 	"github.com/cristianadrielbraun/gofer/components/selectbox"
+	"github.com/cristianadrielbraun/gofer/components/tooltip"
 	switchcomp "github.com/cristianadrielbraun/gofer/components/switch"
 )
 
@@ -748,13 +749,16 @@ templ SettingsSuppressedContacts(contacts []models.Contact, totalCount int) {
 }
 
 templ SettingsAccountsTab(accounts []models.Account) {
-	<div class="mt-6 bg-card rounded-lg border p-6">
-		<div class="flex items-center justify-between mb-6">
-			<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Accounts</h3>
+	<div class="mt-6 bg-card rounded-lg border p-6 space-y-5">
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+			<div class="min-w-0">
+				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Accounts</h3>
+				<p class="text-xs text-muted-foreground leading-relaxed">See which connected services each account provides. Email is available for existing mail accounts; contacts appear when provider sync is enabled.</p>
+			</div>
 			@dialog.Trigger(dialog.TriggerProps{For: "choose-account-type-dialog"}) {
 				@button.Button(button.Props{
 					Size:    button.SizeSm,
-					Class:   "btn-skeuo",
+					Class:   "btn-skeuo shrink-0",
 				}) {
 					@icon.Plus(icon.Props{Class: "size-4"})
 					Add Account
@@ -1156,53 +1160,66 @@ templ SettingsNoAccounts() {
 
 templ SettingsAccountCard(account models.Account) {
 	<div id={ fmt.Sprintf("account-card-%s", account.ID) }>
-		<div class="flex items-center gap-4 p-4 rounded-lg border bg-background">
-			@AccountColorPopover(account)
-			<div class="flex-1 min-w-0">
-				<p class="text-sm font-medium truncate">{ account.Name }</p>
-				<p class="text-xs text-muted-foreground truncate">{ account.Email }</p>
+		<div class="rounded-lg border border-border bg-background p-4 shadow-sm">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				<div class="flex min-w-0 items-start gap-3">
+					@AccountColorPopover(account)
+					<div class="min-w-0">
+						<div class="flex flex-wrap items-center gap-2">
+							<p class="min-w-0 truncate text-sm font-semibold text-foreground">{ account.Name }</p>
+							<span class="rounded-md border border-border/70 bg-muted/35 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{ accountProviderName(account.Provider) }</span>
+						</div>
+						<p class="mt-0.5 truncate text-xs text-muted-foreground">{ account.Email }</p>
+					</div>
+				</div>
+				<div class="flex flex-wrap items-center gap-2 sm:justify-end">
+					if account.IsDeleting {
+						<button type="button" class="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 px-2.5 py-1.5 rounded-md border border-amber-300/40 dark:border-amber-500/30 bg-amber-100/50 dark:bg-amber-500/10 cursor-default" disabled>
+							@icon.RefreshCw(icon.Props{Class: "size-3.5 animate-spin"})
+							Deleting
+						</button>
+					} else {
+						<button
+							class="account-action-btn inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-md border border-border"
+							hx-get={ fmt.Sprintf("/api/accounts/%s/edit", account.ID) }
+							hx-target="#edit-account-container"
+							hx-swap="innerHTML"
+						>
+							@icon.Pencil(icon.Props{Class: "size-3.5"})
+							Edit
+						</button>
+						<button
+							id={ fmt.Sprintf("test-btn-%s", account.ID) }
+							data-test-btn
+							data-account-id={ account.ID }
+							class="account-action-btn inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-all duration-300 px-2.5 py-1.5 rounded-md border border-border"
+							hx-post={ fmt.Sprintf("/api/accounts/%s/test", account.ID) }
+							hx-swap="none"
+						>
+							<span data-test-btn-content class="inline-flex items-center gap-1.5">
+								@icon.Wifi(icon.Props{Class: "size-3.5"})
+								Test
+							</span>
+						</button>
+						if account.Provider == "gmail" {
+							@GmailReauthForm(account)
+						}
+						@dialog.Trigger(dialog.TriggerProps{For: fmt.Sprintf("delete-account-%s", account.ID)}) {
+							<button
+								type="button"
+								class="account-action-btn account-action-btn-danger inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2.5 py-1.5 rounded-md border border-border hover:border-destructive/30"
+							>
+								@icon.Trash2(icon.Props{Class: "size-3.5"})
+								Delete
+							</button>
+						}
+					}
+				</div>
 			</div>
-			if account.IsDeleting {
-				<button type="button" class="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 px-2.5 py-1.5 rounded-md border border-amber-300/40 dark:border-amber-500/30 bg-amber-100/50 dark:bg-amber-500/10 cursor-default" disabled>
-					@icon.RefreshCw(icon.Props{Class: "size-3.5 animate-spin"})
-					Deleting
-				</button>
-			} else {
-				<button
-					class="account-action-btn inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-md border border-border"
-					hx-get={ fmt.Sprintf("/api/accounts/%s/edit", account.ID) }
-					hx-target="#edit-account-container"
-					hx-swap="innerHTML"
-				>
-					@icon.Pencil(icon.Props{Class: "size-3.5"})
-					Edit
-				</button>
-				<button
-					id={ fmt.Sprintf("test-btn-%s", account.ID) }
-					data-test-btn
-					data-account-id={ account.ID }
-					class="account-action-btn inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-all duration-300 px-2.5 py-1.5 rounded-md border border-border"
-					hx-post={ fmt.Sprintf("/api/accounts/%s/test", account.ID) }
-					hx-swap="none"
-				>
-					<span data-test-btn-content class="inline-flex items-center gap-1.5">
-						@icon.Wifi(icon.Props{Class: "size-3.5"})
-						Test
-					</span>
-				</button>
-				if account.Provider == "gmail" {
-					@GmailReauthForm(account)
-				}
-				@dialog.Trigger(dialog.TriggerProps{For: fmt.Sprintf("delete-account-%s", account.ID)}) {
-					<button
-						type="button"
-						class="account-action-btn account-action-btn-danger inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2.5 py-1.5 rounded-md border border-border hover:border-destructive/30"
-					>
-						@icon.Trash2(icon.Props{Class: "size-3.5"})
-						Delete
-					</button>
-				}
-			}
+			<div class="mt-4 space-y-2 border-t border-border/60 pt-3">
+				@AccountServiceToggle(account, "email", "Email", "Fetch new messages and keep mail folders up to date.", account.EmailSyncEnabled, true)
+				@AccountServiceToggle(account, "contacts", "Contacts", accountContactSyncToggleDescription(account), account.ContactSyncEnabled, accountContactSyncConfigurable(account))
+			</div>
 		</div>
 		@dialog.Dialog(dialog.Props{ID: fmt.Sprintf("delete-account-%s", account.ID)}) {
 			@dialog.Content(dialog.ContentProps{Class: "sm:max-w-md"}) {
@@ -1245,6 +1262,76 @@ templ SettingsAccountCard(account models.Account) {
 			}
 		}
 	</div>
+}
+templ AccountServiceToggle(account models.Account, service string, label string, description string, enabled bool, configurable bool) {
+	<form
+		hx-post={ fmt.Sprintf("/api/accounts/%s/services", account.ID) }
+		hx-target={ fmt.Sprintf("#account-card-%s", account.ID) }
+		hx-swap="outerHTML"
+		class={
+			"flex items-center gap-3 rounded-md border border-border/70 bg-card/60 px-3 py-2.5",
+			templ.KV("opacity-60", !configurable),
+		}
+	>
+		<input type="hidden" name="service" value={ service }/>
+		<span class="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground">
+			if service == "email" {
+				@icon.Mail(icon.Props{Class: "size-4"})
+			} else {
+				@icon.Users(icon.Props{Class: "size-4"})
+			}
+		</span>
+		<div class="min-w-0 flex-1">
+			<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-semibold text-foreground">
+				<span>{ label }</span>
+				if service == "contacts" && account.ContactSyncEnabled {
+					<span class="font-medium text-muted-foreground">{ contactProviderLabel(account) }</span>
+				}
+			</div>
+			<p class="mt-0.5 truncate text-[11px] text-muted-foreground">{ description }</p>
+		</div>
+		<div class="flex shrink-0 items-center gap-2">
+			<span class="w-6 text-right text-[11px] font-semibold text-muted-foreground">{ serviceStateLabel(enabled) }</span>
+			@switchcomp.Switch(switchcomp.Props{
+				ID:       fmt.Sprintf("account-%s-%s-sync", account.ID, service),
+				Name:     "enabled",
+				Value:    "true",
+				Checked:  enabled,
+				Disabled: !configurable,
+				Attributes: templ.Attributes{
+					"onchange":   "this.form.requestSubmit()",
+					"aria-label": fmt.Sprintf("Toggle %s for %s", label, account.Email),
+				},
+			})
+		</div>
+	</form>
+}
+
+func serviceStateLabel(enabled bool) string {
+	if enabled {
+		return "On"
+	}
+	return "Off"
+}
+
+func accountContactSyncConfigurable(account models.Account) bool {
+	return strings.TrimSpace(account.Provider) == "gmail" || strings.TrimSpace(account.ContactSyncProvider) != ""
+}
+
+func accountContactSyncToggleDescription(account models.Account) string {
+	if accountContactSyncConfigurable(account) {
+		return "Pull provider contacts into Gofer."
+	}
+	return "Configure contacts in Edit first."
+}
+
+func accountProviderName(provider string) string {
+	switch strings.TrimSpace(provider) {
+	case "gmail":
+		return "Gmail"
+	default:
+		return "IMAP"
+	}
 }
 
 templ AccountColorPopover(account models.Account) {
@@ -1290,10 +1377,10 @@ templ AccountColorPopover(account models.Account) {
 						data-account-color-custom
 					/>
 					<span class="ml-auto text-xs text-muted-foreground" data-account-color-status></span>
+					</div>
 				</div>
-			</div>
+			}
 		}
-	}
 }
 
 templ AccountSignaturesSettings(accounts []models.AccountSignatureData) {
@@ -1720,7 +1807,7 @@ templ AddAccountDialog() {
 		@dialog.Trigger() {
 			<span></span>
 		}
-		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-4xl"}) {
+		@dialog.Content(dialog.ContentProps{Class: "account-wizard-dialog sm:max-w-4xl"}) {
 			@dialog.Header() {
 				@dialog.Title() {
 					Add Account
@@ -1731,19 +1818,76 @@ templ AddAccountDialog() {
 			}
 			@selectbox.Script()
 			<style>
-				.account-wizard-step { display:flex; width:100%; align-items:flex-start; gap:.75rem; border-radius:var(--radius); border:1px solid transparent; padding:.75rem; text-align:left; transition:background .2s,border-color .2s,color .2s,opacity .2s; }
-				.account-wizard-step:hover:not(:disabled) { background: hsl(var(--accent) / .55); }
-				.account-wizard-step[data-active="true"] { border-color: hsl(var(--border)); background: hsl(var(--card)); color: hsl(var(--foreground)); box-shadow: 0 1px 0 hsl(var(--border)); }
+				.account-wizard-section { border:1px solid var(--border); border-radius:var(--radius); background:color-mix(in srgb, var(--background) 55%, transparent); padding:.4rem; transition:background .16s ease,border-color .16s ease,box-shadow .16s ease; }
+				.account-wizard-section[data-active="true"] { border-color:color-mix(in srgb, var(--primary) 38%, var(--border)); background:var(--card); box-shadow:0 1px 0 var(--border); }
+				.account-wizard-section + .account-wizard-section { margin-top:.5rem; }
+				.account-wizard-section-heading { display:flex; width:100%; align-items:flex-start; gap:.75rem; border-radius:calc(var(--radius) * .75); border:1px solid transparent; padding:.65rem; text-align:left; color:var(--foreground); transition:background .16s ease,border-color .16s ease,color .16s ease,opacity .16s ease; }
+				.account-wizard-section-title { flex:1; min-width:0; display:flex; align-items:flex-start; gap:.75rem; border-radius:calc(var(--radius) * .75); text-align:left; }
+				.account-wizard-section-heading:hover:not(:disabled) { background:var(--accent); color:var(--accent-foreground); }
+				.account-wizard-section-heading[data-active="true"] { border-color:var(--border); background:var(--background); }
+				.account-wizard-section-heading:disabled { cursor:not-allowed; opacity:.5; }
+				.account-wizard-step { display:flex; width:100%; align-items:flex-start; gap:.65rem; border-radius:calc(var(--radius) * .75); border:1px solid transparent; padding:.55rem .6rem; text-align:left; color:var(--muted-foreground); transition:background .16s ease,border-color .16s ease,color .16s ease,opacity .16s ease; }
+				.account-wizard-step:hover:not(:disabled) { background:var(--accent); color:var(--accent-foreground); }
+				.account-wizard-step[data-active="true"] { border-color:var(--border); background:var(--background); color:var(--foreground); }
 				.account-wizard-step:disabled { cursor:not-allowed; opacity:.5; }
-				.account-wizard-index { display:flex; height:1.5rem; width:1.5rem; flex-shrink:0; align-items:center; justify-content:center; border-radius:calc(var(--radius) * .75); background:hsl(var(--muted)); font-size:.7rem; font-weight:800; color:hsl(var(--muted-foreground)); }
-				.account-wizard-step[data-active="true"] .account-wizard-index { background:hsl(var(--primary)); color:hsl(var(--primary-foreground)); }
-				.account-wizard-panel { display:flex; height:clamp(28rem, 62vh, 42rem); flex-direction:column; padding-right:.25rem; }
-				.account-wizard-scroll { flex:1; min-height:0; overflow-y:auto; padding-right:.25rem; padding-bottom:.75rem; }
-				.account-wizard-controls { flex-shrink:0; margin-top:.5rem; border-top:1px solid hsl(var(--border)); padding-top:.75rem; padding-bottom:2px; }
+				.account-wizard-substeps { display:grid; gap:.25rem; margin:.15rem 0 .1rem 1.15rem; border-left:1px solid var(--border); padding-left:.55rem; }
+				.account-wizard-index { display:flex; height:1.5rem; min-width:1.5rem; flex-shrink:0; align-items:center; justify-content:center; border-radius:calc(var(--radius) * .75); background:var(--muted); padding:0 .35rem; font-size:.7rem; font-weight:800; color:var(--muted-foreground); }
+				.account-wizard-section[data-active="true"] > .account-wizard-section-heading .account-wizard-index,
+				.account-wizard-section-heading[data-active="true"] .account-wizard-index,
+				.account-wizard-step[data-active="true"] .account-wizard-index { background:var(--primary); color:var(--primary-foreground); }
+				.account-wizard-viewport { min-height:0; height:100%; overflow:hidden; }
+				.account-wizard-viewport > .flex { height:100%; align-items:stretch; }
+				.account-wizard-viewport [data-wizard-step] { min-height:0; height:100%; }
+				.account-wizard-dialog [data-tui-dialog-panel] { height:calc(100vh - 2rem); max-height:calc(100vh - 2rem); grid-template-rows:auto minmax(0,1fr) auto; }
+				.account-wizard-shell { min-height:0; height:100%; grid-template-rows:auto minmax(0,1fr); }
+				@media (min-width: 768px) { .account-wizard-shell { grid-template-rows:minmax(0,1fr); } }
+				.account-wizard-shell > aside { min-height:0; height:100%; overflow-y:auto; }
+				.account-wizard-panel { display:flex; height:100%; min-height:0; flex-direction:column; overflow:hidden; padding-right:.25rem; }
+				.account-wizard-scroll { flex:1; min-height:0; overflow-y:auto; padding:6px calc(.25rem + 6px) calc(1rem + 6px) 6px; }
+				.account-wizard-sticky-header { position:sticky; top:-6px; z-index:20; margin:-6px -6px 1rem; padding:6px 6px .75rem; background:var(--card); box-shadow:0 1px 0 color-mix(in oklab, var(--border) 70%, transparent); }
+				.account-wizard-controls { flex-shrink:0; margin-top:.5rem; border-top:1px solid var(--border); background:var(--card); padding-top:.75rem; padding-bottom:2px; }
+				.account-wizard-panel .account-wizard-controls { display:none; }
+				.account-wizard-card-footer { min-height:3.25rem; border-top:1px solid var(--border); background:var(--card); padding-top:.75rem; padding-bottom:2px; transition:opacity .12s ease; }
+				.account-wizard-card-footer[data-switching="true"] { opacity:0; pointer-events:none; }
+				.account-wizard-card-footer > [data-wizard-footer-step] { display:none !important; }
+				.account-wizard-card-footer > [data-wizard-footer-step][data-active="true"] { display:flex !important; }
 			</style>
 			<script>
 				var _wizStep = 0;
-				function wizardGo(step) {
+				var _wizardFooterTimers = {};
+				function setWizardFooter(root, step, immediate) {
+					if (!root) return;
+					var footer = root.querySelector('.account-wizard-card-footer');
+					if (!footer) return;
+					root.querySelectorAll('[data-wizard-footer-step]').forEach(function(item) {
+						if (item.parentElement !== footer) item.remove();
+					});
+					var key = root.id || 'wizard-footer';
+					if (_wizardFooterTimers[key]) window.clearTimeout(_wizardFooterTimers[key]);
+					footer.dataset.switching = immediate ? 'false' : 'true';
+					function applyFooterStep() {
+						var seen = {};
+						Array.prototype.slice.call(footer.children).reverse().forEach(function(item) {
+							if (!item || !item.hasAttribute || !item.hasAttribute('data-wizard-footer-step')) return;
+							var itemStep = item.dataset.wizardFooterStep;
+							if (seen[itemStep]) {
+								item.remove();
+								return;
+							}
+							seen[itemStep] = true;
+							var active = +itemStep === +step;
+							item.dataset.active = String(active);
+							item.classList.toggle('hidden', !active);
+						});
+						footer.dataset.switching = 'false';
+					}
+					if (immediate) {
+						applyFooterStep();
+						return;
+					}
+					_wizardFooterTimers[key] = window.setTimeout(applyFooterStep, 180);
+				}
+				function wizardGo(step, immediate) {
 					_wizStep = step;
 					var track = document.getElementById('wizard-track');
 					var root = document.getElementById('add-account-dialog');
@@ -1752,13 +1896,70 @@ templ AddAccountDialog() {
 					if (step > 3) step = 3;
 					if (step === 3) {
 						var contactStep = root.querySelector('[data-account-wizard-step="3"]');
-						if (contactStep) contactStep.disabled = false;
+						if (contactStep) contactStep.disabled = !addContactsEnabled();
 					}
 					track.style.transform = 'translateX(-' + (step * 25) + '%)';
 					root.querySelectorAll('[data-account-wizard-step]').forEach(function(item) {
 						item.dataset.active = String(+item.dataset.accountWizardStep === step);
 					});
+					root.querySelectorAll('[data-wizard-section-steps]').forEach(function(section) {
+						var steps = (section.dataset.wizardSectionSteps || '').split(',');
+						section.dataset.active = String(steps.indexOf(String(step)) !== -1);
+					});
+					setWizardFooter(root, step, !!immediate);
 				}
+				function addContactsEnabled() {
+					var toggle = document.querySelector('[data-add-contact-sync-switch]');
+					return !toggle || toggle.checked;
+				}
+				function syncAddContactStep() {
+					var step = document.querySelector('#add-account-dialog [data-account-wizard-step="3"]');
+					var content = document.getElementById('add-step-3-content');
+					var ready = !!(content && content.children.length);
+					if (step) step.disabled = !ready || !addContactsEnabled();
+				}
+				function maybeGoAddContacts() {
+					if (addContactsEnabled()) {
+						wizardGo(3);
+					} else {
+						window.location.href = '/settings/accounts';
+					}
+				}
+				function syncWizardServiceContent(root) {
+					root = root || document;
+					root.querySelectorAll('[data-wizard-service-content]').forEach(function(content) {
+						var service = content.dataset.wizardServiceContent;
+						var toggle = root.querySelector('[data-wizard-service-switch="' + service + '"]');
+						var enabled = !toggle || toggle.checked;
+						content.classList.toggle('opacity-50', !enabled);
+						content.classList.toggle('pointer-events-none', !enabled);
+						content.classList.toggle('select-none', !enabled);
+						content.setAttribute('aria-disabled', String(!enabled));
+						content.querySelectorAll('input, select, textarea, button').forEach(function(el) {
+							if (!el.hasAttribute('data-wizard-original-tabindex')) el.setAttribute('data-wizard-original-tabindex', el.getAttribute('tabindex') || '');
+							if (enabled) {
+								var original = el.getAttribute('data-wizard-original-tabindex');
+								if (original === '') el.removeAttribute('tabindex'); else el.setAttribute('tabindex', original);
+							} else {
+								el.setAttribute('tabindex', '-1');
+							}
+						});
+					});
+				}
+				document.addEventListener('click', function(event) {
+					var button = event.target && event.target.closest ? event.target.closest('[data-account-wizard-action]') : null;
+					if (!button) return;
+					var step = Number(button.dataset.accountWizardTargetStep || 0);
+					if (button.dataset.accountWizardAction === 'wizardGo') wizardGo(step);
+					if (button.dataset.accountWizardAction === 'editWizardGo' && typeof editWizardGo === 'function') editWizardGo(step);
+				});
+				document.addEventListener('change', function(event) {
+					if (event.target && event.target.matches && event.target.matches('[data-add-contact-sync-switch]')) syncAddContactStep();
+					if (event.target && event.target.matches && event.target.matches('[data-wizard-service-switch]')) {
+						var root = event.target.closest('#add-account-dialog,#edit-account-dialog') || document;
+						syncWizardServiceContent(root);
+					}
+				});
 				function toggleSmtpAuth(checked) {
 					var fields = document.getElementById('smtp-auth-fields');
 					var inputs = fields.querySelectorAll('input');
@@ -1773,7 +1974,51 @@ templ AddAccountDialog() {
 						if (sp && p) sp.value = p.value;
 					}
 				}
-				function discoverCardDAV(accountID, fieldsID, statusID) {
+				function contactSyncSaveButtons(accountID) {
+					return document.querySelectorAll('[data-contact-sync-save-button][data-account-id="' + accountID + '"]');
+				}
+				function contactSyncSetSaveButton(accountID, label, disabled, continueMode) {
+					contactSyncSaveButtons(accountID).forEach(function(button) {
+						button.textContent = label;
+						button.disabled = !!disabled;
+						if (continueMode) {
+							button.type = 'button';
+							button.removeAttribute('form');
+							button.onclick = function() { document.getElementById('edit-account-form').requestSubmit(); };
+						} else {
+							button.type = 'submit';
+							button.setAttribute('form', 'account-contact-sync-form-' + accountID);
+							button.onclick = null;
+						}
+					});
+				}
+				function contactSyncSaving(accountID) {
+					contactSyncSetSaveButton(accountID, 'Saving...', true, false);
+				}
+				function contactSyncSaved(accountID, ok) {
+					if (!ok) {
+						contactSyncSetSaveButton(accountID, 'Save', false, false);
+						return;
+					}
+					contactSyncSetSaveButton(accountID, 'Success', true, false);
+					window.setTimeout(function() {
+						contactSyncSetSaveButton(accountID, 'Continue', false, true);
+					}, 2500);
+				}
+				function contactSyncResetSave(accountID) {
+					contactSyncSetSaveButton(accountID, 'Save', false, false);
+				}
+				function toggleCardDAVAuth(checkbox) {
+					var form = checkbox && checkbox.closest ? checkbox.closest('form') : null;
+					if (!form) return;
+					var fields = form.querySelector('[data-carddav-credential-fields]');
+					if (!fields) return;
+					fields.classList.toggle('opacity-50', checkbox.checked);
+					fields.querySelectorAll('input[name="username"], input[name="password"]').forEach(function(input) {
+						input.disabled = checkbox.checked;
+					});
+				}
+				function discoverCardDAV(accountID, fieldsID, statusID, autodiscover) {
 					var fields = document.getElementById(fieldsID);
 					var status = document.getElementById(statusID);
 					if (!fields || !status) return;
@@ -1784,6 +2029,7 @@ templ AddAccountDialog() {
 						if (!input.name || input.disabled) return;
 						body.append(input.name, input.value || '');
 					});
+					if (autodiscover) body.append('autodiscover', '1');
 					function renderDiscoveryProgress(completed, total, endpoint) {
 						var percent = total > 0 ? Math.max(0, Math.min(100, Math.round((completed / total) * 100))) : 0;
 						var label = total > 0 ? 'Testing ' + Math.min(completed + 1, total) + ' of ' + total + ' CardDAV checks' : 'Preparing CardDAV discovery...';
@@ -1852,6 +2098,7 @@ templ AddAccountDialog() {
 							return;
 						}
 						var pickerSection = fields.querySelector('[data-carddav-addressbook-section]');
+						if (pickerSection) pickerSection.classList.remove('hidden');
 						var existingInputs = fields.querySelectorAll('input[name="addressbook_url"]');
 						var selected = {};
 						existingInputs.forEach(function(input) { if (input.value) selected[input.value] = true; });
@@ -1870,12 +2117,19 @@ templ AddAccountDialog() {
 						books.forEach(function(book) {
 							var row = document.createElement('label');
 							row.className = 'flex w-full items-start gap-3 rounded-md border border-border bg-card px-3 py-2 text-xs transition-colors hover:bg-accent';
+							var checkWrap = document.createElement('div');
+							checkWrap.className = 'relative mt-0.5 inline-flex items-center';
 							var check = document.createElement('input');
 							check.type = 'checkbox';
 							check.name = 'addressbook_url';
 							check.value = book.url || '';
 							check.checked = !!selected[book.url] || Object.keys(selected).length === 0;
-							check.className = 'mt-0.5';
+							check.className = 'peer size-4 shrink-0 rounded-sm border border-input shadow-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50 checked:bg-primary checked:text-primary-foreground checked:border-primary indeterminate:bg-primary indeterminate:text-primary-foreground indeterminate:border-primary appearance-none cursor-pointer transition-shadow relative';
+							var checkIcon = document.createElement('div');
+							checkIcon.className = 'absolute inset-0 pointer-events-none flex items-center justify-center text-primary-foreground opacity-0 peer-checked:opacity-100';
+							checkIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5" data-lucide="icon"><path d="M20 6 9 17l-5-5"></path></svg>';
+							checkWrap.appendChild(check);
+							checkWrap.appendChild(checkIcon);
 							var hiddenName = document.createElement('input');
 							hiddenName.type = 'hidden';
 							hiddenName.name = 'addressbook_name';
@@ -1901,12 +2155,13 @@ templ AddAccountDialog() {
 							radio.name = 'default_addressbook_url';
 							radio.value = book.url || '';
 							radio.disabled = !check.checked;
+							radio.className = 'relative h-4 w-4 before:absolute before:left-1/2 before:top-1/2 before:h-1.5 before:w-1.5 before:-translate-x-1/2 before:-translate-y-1/2 appearance-none rounded-full border-2 border-primary before:content-[\'\'] before:rounded-full before:bg-background checked:border-primary checked:bg-primary checked:before:visible focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed';
 							defaultWrap.appendChild(radio);
 							defaultWrap.appendChild(document.createTextNode('Default for new contacts'));
 							content.appendChild(name);
 							content.appendChild(url);
 							content.appendChild(defaultWrap);
-							row.appendChild(check);
+							row.appendChild(checkWrap);
 							row.appendChild(hiddenID);
 							row.appendChild(hiddenName);
 							row.appendChild(content);
@@ -1941,7 +2196,79 @@ templ AddAccountDialog() {
 					var button = event.target && event.target.closest ? event.target.closest('[data-carddav-discover]') : null;
 					if (!button) return;
 					event.preventDefault();
-					discoverCardDAV(button.dataset.accountId || '', button.dataset.fieldsId || '', button.dataset.statusId || '');
+					discoverCardDAV(button.dataset.accountId || '', button.dataset.fieldsId || '', button.dataset.statusId || '', button.dataset.carddavAutodiscover === 'true');
+				});
+				document.addEventListener('click', function(event) {
+					var button = event.target && event.target.closest ? event.target.closest('[data-carddav-manual]') : null;
+					if (!button) return;
+					event.preventDefault();
+					var fields = document.getElementById(button.dataset.fieldsId || '');
+					if (!fields) return;
+					var manual = fields.querySelector('[data-carddav-manual-addressbook]');
+					if (!manual) return;
+					manual.classList.remove('hidden');
+					var input = manual.querySelector('input[name="addressbook_url"]');
+					if (input) input.focus();
+				});
+				document.addEventListener('input', function(event) {
+					var form = event.target && event.target.closest ? event.target.closest('[data-contact-sync-form]') : null;
+					if (form) contactSyncResetSave(form.dataset.accountId || '');
+				});
+				document.addEventListener('change', function(event) {
+					var form = event.target && event.target.closest ? event.target.closest('[data-contact-sync-form]') : null;
+					if (form) contactSyncResetSave(form.dataset.accountId || '');
+				});
+				document.body.addEventListener('htmx:beforeRequest', function(event) {
+					var form = event.target && event.target.closest ? event.target.closest('[data-contact-sync-form]') : null;
+					if (form) contactSyncSaving(form.dataset.accountId || '');
+				});
+				document.body.addEventListener('htmx:afterRequest', function(event) {
+					var form = event.target && event.target.closest ? event.target.closest('[data-contact-sync-form]') : null;
+					if (!form) return;
+					var xhr = event.detail && event.detail.xhr ? event.detail.xhr : null;
+					var ok = !!(event.detail && event.detail.successful) && (!xhr || xhr.getResponseHeader('X-Gofer-Status') !== 'error');
+					contactSyncSaved(form.dataset.accountId || '', ok);
+				});
+				function refreshCardDAVBaseURLActions(root) {
+					(root || document).querySelectorAll('[data-carddav-base-url-action]').forEach(function(group) {
+						var fields = document.getElementById(group.dataset.fieldsId || '');
+						var base = fields && fields.querySelector ? fields.querySelector('input[name="base_url"]') : null;
+						var enabled = !!(base && base.value && base.value.trim());
+						var enabledAction = group.querySelector('[data-carddav-enabled-action]');
+						var disabledAction = group.querySelector('[data-carddav-disabled-action]');
+						if (enabledAction) enabledAction.classList.toggle('!hidden', !enabled);
+						if (disabledAction) disabledAction.classList.toggle('!hidden', enabled);
+					});
+				}
+				document.addEventListener('input', function(event) {
+					if (!event.target || !event.target.matches || !event.target.matches('input[name="base_url"]')) return;
+					refreshCardDAVBaseURLActions(document);
+				});
+				document.addEventListener('DOMContentLoaded', function() { refreshCardDAVBaseURLActions(document); });
+				document.body.addEventListener('htmx:afterSwap', function(event) {
+					refreshCardDAVBaseURLActions(event.target || document);
+					var addRoot = document.getElementById('add-account-dialog');
+					if (addRoot && typeof _wizStep !== 'undefined') setWizardFooter(addRoot, _wizStep, true);
+					if (addRoot) syncWizardServiceContent(addRoot);
+					var editRoot = document.getElementById('edit-account-dialog');
+					if (editRoot && typeof _editWizStep !== 'undefined') setWizardFooter(editRoot, _editWizStep, true);
+					if (editRoot) syncWizardServiceContent(editRoot);
+				});
+				document.body.addEventListener('htmx:oobAfterSwap', function() {
+					var addRoot = document.getElementById('add-account-dialog');
+					if (addRoot && typeof _wizStep !== 'undefined') setWizardFooter(addRoot, _wizStep, true);
+					if (addRoot) syncWizardServiceContent(addRoot);
+					var editRoot = document.getElementById('edit-account-dialog');
+					if (editRoot && typeof _editWizStep !== 'undefined') setWizardFooter(editRoot, _editWizStep, true);
+					if (editRoot) syncWizardServiceContent(editRoot);
+				});
+				document.body.addEventListener('htmx:afterSettle', function() {
+					var addRoot = document.getElementById('add-account-dialog');
+					if (addRoot && typeof _wizStep !== 'undefined') setWizardFooter(addRoot, _wizStep, true);
+					if (addRoot) syncWizardServiceContent(addRoot);
+					var editRoot = document.getElementById('edit-account-dialog');
+					if (editRoot && typeof _editWizStep !== 'undefined') setWizardFooter(editRoot, _editWizStep, true);
+					if (editRoot) syncWizardServiceContent(editRoot);
 				});
 				document.addEventListener('DOMContentLoaded', function() {
 					var dlg = document.querySelector('#add-account-dialog dialog[data-tui-dialog-content]');
@@ -1950,39 +2277,25 @@ templ AddAccountDialog() {
 						var track = document.getElementById('wizard-track');
 						if (!track) return;
 						if (dlg.open) {
-							wizardGo(0);
-							var contactStep = document.querySelector('#add-account-dialog [data-account-wizard-step="3"]');
-							if (contactStep) contactStep.disabled = true;
+							wizardGo(0, true);
+							syncAddContactStep();
+							syncWizardServiceContent(document.getElementById('add-account-dialog'));
 						}
 					}).observe(dlg, { attributes: true, attributeFilter: ['open'] });
 				});
 			</script>
-			<div class="grid gap-4 pt-2 md:grid-cols-[13rem_minmax(0,1fr)]">
-				<aside class="rounded-lg border border-border bg-muted/25 p-2 md:min-h-[28rem]">
-					<div class="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Setup steps</div>
-					<button type="button" onclick="wizardGo(0)" class="account-wizard-step" data-account-wizard-step="0" data-active="true">
-						<span class="account-wizard-index">1</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Account</span><span class="block text-xs text-muted-foreground">Name and email</span></span>
-					</button>
-					<button type="button" onclick="wizardGo(1)" class="account-wizard-step" data-account-wizard-step="1" data-active="false">
-						<span class="account-wizard-index">2</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Incoming</span><span class="block text-xs text-muted-foreground">IMAP settings</span></span>
-					</button>
-					<button type="button" onclick="wizardGo(2)" class="account-wizard-step" data-account-wizard-step="2" data-active="false">
-						<span class="account-wizard-index">3</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Outgoing</span><span class="block text-xs text-muted-foreground">SMTP settings</span></span>
-					</button>
-					<button type="button" onclick="wizardGo(3)" class="account-wizard-step" data-account-wizard-step="3" data-active="false" disabled>
-						<span class="account-wizard-index">4</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Contacts</span><span class="block text-xs text-muted-foreground">Optional sync</span></span>
-					</button>
-				</aside>
-				<div id="wizard-viewport" class="overflow-hidden">
+			<div class="account-wizard-shell grid gap-4 pt-2 md:grid-cols-[14.5rem_minmax(0,1fr)]">
+		@AccountWizardAddSidebar()
+				<div id="wizard-viewport" class="account-wizard-viewport">
 					<div id="wizard-track" class="flex items-start transition-transform duration-300 ease-in-out" style="width: 400%">
 						<form id="account-form" hx-post="/api/accounts" hx-target="#add-step-3-content" hx-swap="innerHTML" class="contents">
 						<div class="w-1/4 shrink-0 px-1" data-wizard-step="0">
 							<div class="account-wizard-panel">
-							<div class="account-wizard-scroll">
+							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+								@icon.User(icon.Props{Class: "size-4 text-muted-foreground"})
+								Account details
+							</h4>
 							<div class="space-y-4">
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Email Address</label>
@@ -2014,8 +2327,8 @@ templ AddAccountDialog() {
 
 						<div class="w-1/4 shrink-0 px-1" data-wizard-step="1">
 							<div class="account-wizard-panel">
-							<div class="account-wizard-scroll">
-							<h4 class="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Inbox(icon.Props{Class: "size-4 text-muted-foreground"})
 								Incoming Mail
 								<span class="text-xs font-normal text-muted-foreground">(IMAP)</span>
@@ -2042,7 +2355,7 @@ templ AddAccountDialog() {
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Encryption</label>
 									@selectbox.SelectBox() {
-										@selectbox.Trigger(selectbox.TriggerProps{Name: "imap_tls_mode"}) {
+									@selectbox.Trigger(selectbox.TriggerProps{Name: "imap_tls_mode", DisableClear: true}) {
 											@selectbox.Value(selectbox.ValueProps{Placeholder: "TLS"}) { TLS }
 										}
 										@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
@@ -2105,8 +2418,8 @@ templ AddAccountDialog() {
 
 						<div class="w-1/4 shrink-0 px-1" data-wizard-step="2">
 							<div class="account-wizard-panel">
-							<div class="account-wizard-scroll">
-							<h4 class="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Send(icon.Props{Class: "size-4 text-muted-foreground"})
 								Sending Mail
 								<span class="text-xs font-normal text-muted-foreground">(SMTP)</span>
@@ -2133,7 +2446,7 @@ templ AddAccountDialog() {
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Encryption</label>
 									@selectbox.SelectBox() {
-										@selectbox.Trigger(selectbox.TriggerProps{Name: "smtp_tls_mode"}) {
+									@selectbox.Trigger(selectbox.TriggerProps{Name: "smtp_tls_mode", DisableClear: true}) {
 											@selectbox.Value(selectbox.ValueProps{Placeholder: "TLS"}) { TLS }
 										}
 										@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
@@ -2192,19 +2505,145 @@ templ AddAccountDialog() {
 
 						<div class="w-1/4 shrink-0 px-1" data-wizard-step="3">
 							<div class="account-wizard-panel">
-								<div id="add-step-3-content" hx-on::after-swap="wizardGo(3)"></div>
+								<div id="add-step-3-content" data-wizard-service-content="contacts" hx-on::after-swap="syncAddContactStep(); maybeGoAddContacts()"></div>
 							</div>
 						</div>
 					</div>
+					</div>
 				</div>
-			</div>
+				@AddAccountWizardFooter()
+			}
 		}
+}
+
+templ AccountWizardAddSidebar() {
+	<aside class="rounded-lg border border-border bg-muted/25 p-2 md:min-h-[28rem]">
+		<div class="mb-2 px-2">
+			<div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Setup sections</div>
+			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground/80">Enable/disable the services you need</p>
+		</div>
+		@AccountWizardEmailSection("wizardGo", "", true, true, false)
+		@AccountWizardTopStep("wizardGo", 3, "2", "Contacts", "Optional sync", true, true, "", "contacts", true, false, templ.Attributes{"data-add-contact-sync-switch": ""})
+	</aside>
+}
+
+templ AccountWizardEditSidebar(data models.EditAccountData) {
+	<aside class="rounded-lg border border-border bg-muted/25 p-2 md:min-h-[28rem]">
+		<div class="mb-2 px-2">
+			<div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Settings sections</div>
+			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground/80">Enable/disable the services you need</p>
+		</div>
+		@AccountWizardEmailSection("editWizardGo", data.AccountID, data.EmailSyncEnabled, false, true)
+		@AccountWizardTopStep("editWizardGo", 3, "2", "Contacts", "Optional sync", false, true, data.AccountID, "contacts", data.ContactSync.Enabled, false, nil)
+		@AccountWizardTopStep("editWizardGo", 4, "3", "Finish", "Test results", false, false, "", "", false, false, nil)
+	</aside>
+}
+
+templ AccountWizardEmailSection(goFn string, accountID string, enabled bool, disabled bool, persist bool) {
+	<div class="account-wizard-section" data-wizard-section-steps="0,1,2" data-active="true">
+		<div class="account-wizard-section-heading">
+			<button type="button" data-account-wizard-action={ goFn } data-account-wizard-target-step="0" class="account-wizard-section-title">
+				<span class="account-wizard-index">1</span>
+				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">Mail account setup</span></span>
+			</button>
+			@AccountWizardSectionSwitch(accountID, "email", enabled, disabled, persist, nil)
+		</div>
+		<div class="account-wizard-substeps">
+			@AccountWizardSubStep(goFn, 0, "1.a", "Account details", "Name and email", false, true)
+			@AccountWizardSubStep(goFn, 1, "1.b", "Incoming", "IMAP settings", false, false)
+			@AccountWizardSubStep(goFn, 2, "1.c", "Outgoing", "SMTP settings", false, false)
+		</div>
+	</div>
+}
+
+templ AccountWizardSubStep(goFn string, step int, index string, title string, description string, disabled bool, active bool) {
+	<button type="button" data-account-wizard-action={ goFn } data-account-wizard-target-step={ strconv.Itoa(step) } class="account-wizard-step" data-account-wizard-step={ strconv.Itoa(step) } data-active={ strconv.FormatBool(active) } disabled?={ disabled }>
+		<span class="account-wizard-index">{ index }</span>
+		<span class="min-w-0"><span class="block text-xs font-semibold">{ title }</span><span class="block text-[11px] text-muted-foreground">{ description }</span></span>
+	</button>
+}
+
+templ AccountWizardTopStep(goFn string, step int, index string, title string, description string, disabled bool, section bool, accountID string, service string, enabled bool, switchDisabled bool, attrs templ.Attributes) {
+	<div class="account-wizard-section" data-wizard-section-steps={ strconv.Itoa(step) } data-active="false">
+		<div class="account-wizard-section-heading">
+			<button type="button" data-account-wizard-action={ goFn } data-account-wizard-target-step={ strconv.Itoa(step) } class="account-wizard-section-title" data-account-wizard-step={ strconv.Itoa(step) } data-active="false" disabled?={ disabled }>
+				<span class="account-wizard-index">{ index }</span>
+				<span class="min-w-0"><span class="block text-sm font-semibold">{ title }</span><span class="block text-xs text-muted-foreground">{ description }</span></span>
+			</button>
+			if service != "" {
+				@AccountWizardSectionSwitch(accountID, service, enabled, switchDisabled, accountID != "", attrs)
+			}
+		</div>
+	</div>
+}
+
+templ AccountWizardSectionSwitch(accountID string, service string, enabled bool, disabled bool, persist bool, attrs templ.Attributes) {
+	<form
+		class="shrink-0 pt-0.5"
+		if persist {
+			hx-post={ fmt.Sprintf("/api/accounts/%s/services", accountID) }
+			hx-swap="none"
+		}
+	>
+		if persist {
+			<input type="hidden" name="service" value={ service }/>
+		}
+		@switchcomp.Switch(switchcomp.Props{
+			ID:         fmt.Sprintf("account-wizard-%s-%s", accountID, service),
+			Name:       "enabled",
+			Value:      "true",
+			Checked:    enabled,
+			Disabled:   disabled,
+			Attributes: mergeTemplAttrs(attrs, templ.Attributes{"data-wizard-service-switch": service, "onchange": "if (this.form.hasAttribute('hx-post')) this.form.requestSubmit()"}),
+		})
+	</form>
+}
+
+func mergeTemplAttrs(base templ.Attributes, extra templ.Attributes) templ.Attributes {
+	if base == nil {
+		base = templ.Attributes{}
 	}
+	for k, v := range extra {
+		base[k] = v
+	}
+	return base
+}
+
+templ AddAccountWizardFooter() {
+	<div id="add-wizard-footer" class="account-wizard-card-footer">
+		<div data-wizard-footer-step="0" data-active="true" class="flex justify-end">
+			<button type="button" onclick="wizardGo(1)" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+				Next
+				@icon.ChevronRight(icon.Props{Class: "size-4"})
+			</button>
+		</div>
+		<div data-wizard-footer-step="1" data-active="false" class="hidden flex justify-between">
+			<button type="button" onclick="wizardGo(0)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
+				@icon.ArrowLeft(icon.Props{Class: "size-4"})
+				Back
+			</button>
+			<button type="button" onclick="wizardGo(2)" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+				Next
+				@icon.ChevronRight(icon.Props{Class: "size-4"})
+			</button>
+		</div>
+		<div data-wizard-footer-step="2" data-active="false" class="hidden flex justify-between">
+			<button type="button" onclick="wizardGo(1)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
+				@icon.ArrowLeft(icon.Props{Class: "size-4"})
+				Back
+			</button>
+			<button type="submit" form="account-form" class="btn-skeuo inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg">
+				@icon.Plus(icon.Props{Class: "size-4"})
+				Add Account
+			</button>
+		</div>
+		<div id="add-wizard-footer-step-3" data-wizard-footer-step="3" data-active="false" class="hidden"></div>
+	</div>
 }
 
 templ EditAccountDialog(data models.EditAccountData) {
 	@dialog.Dialog(dialog.Props{ID: "edit-account-dialog"}) {
-		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-4xl"}) {
+		@dialog.Content(dialog.ContentProps{Class: "account-wizard-dialog sm:max-w-4xl"}) {
 			@dialog.Header() {
 				@dialog.Title() {
 					Edit Account
@@ -2215,21 +2654,22 @@ templ EditAccountDialog(data models.EditAccountData) {
 			}
 			<script>
 				var _editWizStep = 0;
-				function editWizardGo(step) {
+				function editWizardGo(step, immediate) {
 					_editWizStep = step;
 					var track = document.getElementById('edit-wizard-track');
 					var root = document.getElementById('edit-account-dialog');
 					if (!track || !root) return;
 					if (step < 0) step = 0;
 					if (step > 4) step = 4;
-					if (step === 4) {
-						var finishStep = root.querySelector('[data-account-wizard-step="4"]');
-						if (finishStep) finishStep.disabled = false;
-					}
 					track.style.transform = 'translateX(-' + (step * 20) + '%)';
 					root.querySelectorAll('[data-account-wizard-step]').forEach(function(item) {
 						item.dataset.active = String(+item.dataset.accountWizardStep === step);
 					});
+					root.querySelectorAll('[data-wizard-section-steps]').forEach(function(section) {
+						var steps = (section.dataset.wizardSectionSteps || '').split(',');
+						section.dataset.active = String(steps.indexOf(String(step)) !== -1);
+					});
+					setWizardFooter(root, step, !!immediate);
 				}
 				function editToggleSmtpAuth(checked) {
 					var fields = document.getElementById('edit-smtp-auth-fields');
@@ -2247,36 +2687,18 @@ templ EditAccountDialog(data models.EditAccountData) {
 					}
 				}
 			</script>
-			<div class="grid gap-4 pt-2 md:grid-cols-[13rem_minmax(0,1fr)]">
-				<aside class="rounded-lg border border-border bg-muted/25 p-2 md:min-h-[28rem]">
-					<div class="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Settings steps</div>
-					<button type="button" onclick="editWizardGo(0)" class="account-wizard-step" data-account-wizard-step="0" data-active="true">
-						<span class="account-wizard-index">1</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Account</span><span class="block text-xs text-muted-foreground">Name and email</span></span>
-					</button>
-					<button type="button" onclick="editWizardGo(1)" class="account-wizard-step" data-account-wizard-step="1" data-active="false">
-						<span class="account-wizard-index">2</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Incoming</span><span class="block text-xs text-muted-foreground">IMAP settings</span></span>
-					</button>
-					<button type="button" onclick="editWizardGo(2)" class="account-wizard-step" data-account-wizard-step="2" data-active="false">
-						<span class="account-wizard-index">3</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Outgoing</span><span class="block text-xs text-muted-foreground">SMTP settings</span></span>
-					</button>
-					<button type="button" onclick="editWizardGo(3)" class="account-wizard-step" data-account-wizard-step="3" data-active="false">
-						<span class="account-wizard-index">4</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Contacts</span><span class="block text-xs text-muted-foreground">Optional sync</span></span>
-					</button>
-					<button type="button" onclick="editWizardGo(4)" class="account-wizard-step" data-account-wizard-step="4" data-active="false" disabled>
-						<span class="account-wizard-index">5</span>
-						<span class="min-w-0"><span class="block text-sm font-semibold">Finish</span><span class="block text-xs text-muted-foreground">Test results</span></span>
-					</button>
-				</aside>
-				<div id="edit-wizard-viewport" class="overflow-hidden">
+			<div class="account-wizard-shell grid gap-4 pt-2 md:grid-cols-[14.5rem_minmax(0,1fr)]">
+		@AccountWizardEditSidebar(data)
+				<div id="edit-wizard-viewport" class="account-wizard-viewport">
 					<div id="edit-wizard-track" class="flex items-start transition-transform duration-300 ease-in-out" style="width: 500%">
-						<form id="edit-account-form" hx-post={ fmt.Sprintf("/api/accounts/%s/edit", data.AccountID) } hx-target="#edit-step-4-content" hx-swap="innerHTML" class="contents">
+						<form id="edit-account-form" hx-post={ fmt.Sprintf("/api/accounts/%s/edit", data.AccountID) } hx-target="#edit-step-4-content" hx-swap="innerHTML" hx-on::after-request="editWizardGo(4)" class="contents">
 						<div class="w-1/5 shrink-0 px-1" data-wizard-step="0">
 							<div class="account-wizard-panel">
-							<div class="account-wizard-scroll">
+							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+								@icon.User(icon.Props{Class: "size-4 text-muted-foreground"})
+								Account details
+							</h4>
 							<div class="space-y-4">
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Email Address</label>
@@ -2307,8 +2729,8 @@ templ EditAccountDialog(data models.EditAccountData) {
 
 						<div class="w-1/5 shrink-0 px-1" data-wizard-step="1">
 							<div class="account-wizard-panel">
-							<div class="account-wizard-scroll">
-							<h4 class="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Inbox(icon.Props{Class: "size-4 text-muted-foreground"})
 								Incoming Mail
 								<span class="text-xs font-normal text-muted-foreground">(IMAP)</span>
@@ -2333,7 +2755,7 @@ templ EditAccountDialog(data models.EditAccountData) {
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Encryption</label>
 									@selectbox.SelectBox() {
-										@selectbox.Trigger(selectbox.TriggerProps{Name: "imap_tls_mode"}) {
+									@selectbox.Trigger(selectbox.TriggerProps{Name: "imap_tls_mode", DisableClear: true}) {
 											@selectbox.Value(selectbox.ValueProps{Placeholder: "TLS"}) { TLS }
 										}
 										@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
@@ -2395,8 +2817,8 @@ templ EditAccountDialog(data models.EditAccountData) {
 
 						<div class="w-1/5 shrink-0 px-1" data-wizard-step="2">
 							<div class="account-wizard-panel">
-							<div class="account-wizard-scroll">
-							<h4 class="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Send(icon.Props{Class: "size-4 text-muted-foreground"})
 								Sending Mail
 								<span class="text-xs font-normal text-muted-foreground">(SMTP)</span>
@@ -2421,7 +2843,7 @@ templ EditAccountDialog(data models.EditAccountData) {
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Encryption</label>
 									@selectbox.SelectBox() {
-										@selectbox.Trigger(selectbox.TriggerProps{Name: "smtp_tls_mode"}) {
+									@selectbox.Trigger(selectbox.TriggerProps{Name: "smtp_tls_mode", DisableClear: true}) {
 											@selectbox.Value(selectbox.ValueProps{Placeholder: "TLS"}) { TLS }
 										}
 										@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
@@ -2469,9 +2891,9 @@ templ EditAccountDialog(data models.EditAccountData) {
 									@icon.ArrowLeft(icon.Props{Class: "size-4"})
 									Back
 								</button>
-								<button type="submit" class="btn-skeuo inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg">
-									@icon.Check(icon.Props{Class: "size-4"})
-									Save Changes
+								<button type="button" onclick="editWizardGo(3)" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+									Next
+									@icon.ChevronRight(icon.Props{Class: "size-4"})
 								</button>
 							</div>
 							</div>
@@ -2480,7 +2902,7 @@ templ EditAccountDialog(data models.EditAccountData) {
 
 						<div class="w-1/5 shrink-0 px-1" data-wizard-step="3">
 							<div class="account-wizard-panel">
-							<div class="account-wizard-scroll">
+							<div class="account-wizard-scroll" data-wizard-service-content="contacts">
 								@ContactSyncSettings(data)
 							</div>
 						<div class="account-wizard-controls flex justify-between gap-2">
@@ -2489,15 +2911,10 @@ templ EditAccountDialog(data models.EditAccountData) {
 									Back
 								</button>
 								<div class="flex flex-wrap justify-end gap-2">
-									<button type="button" hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync/test", data.AccountID) } hx-include={ fmt.Sprintf("#account-contact-sync-fields-%s", data.AccountID) } hx-target={ fmt.Sprintf("#account-contact-sync-status-%s", data.AccountID) } hx-swap="innerHTML" class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent">
-										@icon.RefreshCw(icon.Props{Class: "size-3.5"})
-										Test
+									<button type="submit" form="edit-account-form" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">Skip</button>
+									<button type="submit" form={ fmt.Sprintf("account-contact-sync-form-%s", data.AccountID) } data-contact-sync-save-button data-account-id={ data.AccountID } class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:pointer-events-none disabled:opacity-70">
+										Save
 									</button>
-									<button type="button" hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync", data.AccountID) } hx-include={ fmt.Sprintf("#account-contact-sync-fields-%s", data.AccountID) } hx-target={ fmt.Sprintf("#account-contact-sync-status-%s", data.AccountID) } hx-swap="innerHTML" class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
-										@icon.Check(icon.Props{Class: "size-3.5"})
-										Save contact sync
-									</button>
-									<a href="/settings/accounts" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">Skip</a>
 								</div>
 							</div>
 							</div>
@@ -2506,20 +2923,74 @@ templ EditAccountDialog(data models.EditAccountData) {
 						<div class="w-1/5 shrink-0 px-1" data-wizard-step="4">
 							<div class="account-wizard-panel">
 							<div class="account-wizard-scroll">
-								<div id="edit-step-4-content" hx-on::after-swap="editWizardGo(4)"></div>
+								<div id="edit-step-4-content">
+									@WizardConnectionTestStep(data.AccountID, "edit")
+								</div>
 							</div>
 							</div>
 						</div>
 					</div>
 				</div>
 			</div>
+			@EditAccountWizardFooter(data)
 		}
 	}
 }
 
+templ EditAccountWizardFooter(data models.EditAccountData) {
+	<div id="edit-wizard-footer" class="account-wizard-card-footer">
+		<div data-wizard-footer-step="0" data-active="true" class="flex justify-end">
+			<button type="button" onclick="editWizardGo(1)" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+				Next
+				@icon.ChevronRight(icon.Props{Class: "size-4"})
+			</button>
+		</div>
+		<div data-wizard-footer-step="1" data-active="false" class="hidden flex justify-between">
+			<button type="button" onclick="editWizardGo(0)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
+				@icon.ArrowLeft(icon.Props{Class: "size-4"})
+				Back
+			</button>
+			<button type="button" onclick="editWizardGo(2)" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+				Next
+				@icon.ChevronRight(icon.Props{Class: "size-4"})
+			</button>
+		</div>
+		<div data-wizard-footer-step="2" data-active="false" class="hidden flex justify-between">
+			<button type="button" onclick="editWizardGo(1)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
+				@icon.ArrowLeft(icon.Props{Class: "size-4"})
+				Back
+			</button>
+			<button type="button" onclick="editWizardGo(3)" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+				Next
+				@icon.ChevronRight(icon.Props{Class: "size-4"})
+			</button>
+		</div>
+		<div data-wizard-footer-step="3" data-active="false" class="hidden flex justify-between gap-2">
+			<button type="button" onclick="editWizardGo(2)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
+				@icon.ArrowLeft(icon.Props{Class: "size-4"})
+				Back
+			</button>
+			<div class="flex flex-wrap justify-end gap-2">
+				<button type="submit" form="edit-account-form" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">Skip</button>
+				<button type="submit" form={ fmt.Sprintf("account-contact-sync-form-%s", data.AccountID) } data-contact-sync-save-button data-account-id={ data.AccountID } class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:pointer-events-none disabled:opacity-70">
+					Save
+				</button>
+			</div>
+		</div>
+		<div id="edit-wizard-footer-step-4" data-wizard-footer-step="4" data-active="false" class="hidden flex justify-between gap-2">
+			<button type="button" onclick="editWizardGo(3)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
+				@icon.ArrowLeft(icon.Props{Class: "size-4"})
+				Back
+			</button>
+			<a href="/settings/accounts" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">Done</a>
+		</div>
+	</div>
+}
+
 templ ContactSyncSettings(data models.EditAccountData) {
+	{{ sameCardDAVAuth := strings.TrimSpace(data.ContactSync.Username) == "" || strings.TrimSpace(data.ContactSync.Username) == strings.TrimSpace(data.Username) }}
 	<div class="space-y-3">
-		<div class="mb-3 flex items-start justify-between gap-4">
+		<div class="account-wizard-sticky-header flex items-start justify-between gap-4">
 			<div class="min-w-0">
 				<h4 class="text-sm font-semibold text-foreground flex items-center gap-2">
 					@icon.BookUser(icon.Props{Class: "size-4 text-muted-foreground"})
@@ -2530,34 +3001,52 @@ templ ContactSyncSettings(data models.EditAccountData) {
 			if data.ContactSync.Enabled || data.Provider == "gmail" {
 				<span class="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Enabled</span>
 			} else {
-				<span class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">Not configured</span>
+				<span class="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">Not configured</span>
 			}
 		</div>
 		if data.Provider == "gmail" {
 			<div class="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground leading-relaxed">Gmail contacts use your Google authorization. This account is already available in contact sync targets.</div>
 		} else {
-			<form hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync", data.AccountID) } hx-target={ fmt.Sprintf("#account-contact-sync-status-%s", data.AccountID) } hx-swap="innerHTML" class="space-y-3">
+			<form id={ fmt.Sprintf("account-contact-sync-form-%s", data.AccountID) } data-contact-sync-form data-account-id={ data.AccountID } hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync", data.AccountID) } hx-target={ fmt.Sprintf("#account-contact-sync-status-%s", data.AccountID) } hx-swap="innerHTML" class="space-y-3">
 				<div id={ fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID) } class="grid gap-3 sm:grid-cols-2">
 					<div class="sm:col-span-2">
-						<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Base URL</label>
+						<div class="mb-1.5 flex items-center justify-between gap-2">
+							<label class="text-xs font-medium text-muted-foreground">Base URL</label>
+							<button type="button" data-carddav-discover data-carddav-autodiscover="true" data-account-id={ data.AccountID } data-fields-id={ fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID) } data-status-id={ fmt.Sprintf("account-contact-sync-status-%s", data.AccountID) } class="inline-flex items-center rounded-md border border-border/80 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+								Attempt URL autodiscover
+							</button>
+						</div>
 						@input.Input(input.Props{Name: "base_url", Type: input.TypeURL, Value: data.ContactSync.BaseURL, Placeholder: "https://dav.example.com/"})
 					</div>
-					<div>
-						<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Username</label>
-						@input.Input(input.Props{Name: "username", Type: input.TypeText, Value: data.ContactSync.Username, Placeholder: data.Username})
+					<label class="sm:col-span-2 flex items-center gap-2 cursor-pointer">
+						@checkbox.Checkbox(checkbox.Props{
+							Name:       "use_account_credentials",
+							Value:      "1",
+							Checked:    sameCardDAVAuth,
+							Attributes: templ.Attributes{"onchange": "toggleCardDAVAuth(this)"},
+						})
+						<span class="text-sm">Use same credentials as incoming mail</span>
+					</label>
+					<div class={ "sm:col-span-2 grid gap-3 sm:grid-cols-2", templ.KV("opacity-50", sameCardDAVAuth) } data-carddav-credential-fields>
+						<div>
+							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Username</label>
+							@input.Input(input.Props{Name: "username", Type: input.TypeText, Value: data.ContactSync.Username, Placeholder: data.Username, Disabled: sameCardDAVAuth})
+						</div>
+						<div>
+							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Password or app password</label>
+							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: contactSyncPasswordPlaceholder(data.ContactSync), Disabled: sameCardDAVAuth})
+						</div>
 					</div>
-					<div>
-						<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Password or app password</label>
-						@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: contactSyncPasswordPlaceholder(data.ContactSync)})
-					</div>
-					<div class="sm:col-span-2 rounded-lg border border-border bg-background/45 p-3" data-carddav-addressbook-section>
-						if len(data.ContactSync.AddressBooks) > 1 {
+					if len(data.ContactSync.AddressBooks) > 1 {
+						<div class="sm:col-span-2 rounded-lg border border-border bg-background/45 p-3" data-carddav-addressbook-section>
 							<div class="text-xs font-semibold text-foreground">Selected address books</div>
 							<p class="mt-1 text-[11px] leading-relaxed text-muted-foreground">Select one or more address books to sync. The default is used for new contacts.</p>
 							<div class="mt-3 space-y-2">
 								for i, book := range data.ContactSync.AddressBooks {
 									<label class="flex w-full items-start gap-3 rounded-md border border-primary bg-primary/10 px-3 py-2 text-xs">
-										<input type="checkbox" name="addressbook_url" value={ book.URL } checked class="mt-0.5"/>
+										<span class="mt-0.5 inline-flex">
+											@checkbox.Checkbox(checkbox.Props{Name: "addressbook_url", Value: book.URL, Checked: true})
+										</span>
 										<input type="hidden" name="addressbook_id" value={ book.ID }/>
 										<input type="hidden" name="addressbook_name" value={ book.Name }/>
 										<div class="min-w-0 flex-1">
@@ -2565,9 +3054,9 @@ templ ContactSyncSettings(data models.EditAccountData) {
 											<div class="mt-0.5 truncate text-muted-foreground">{ book.URL }</div>
 											<label class="mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
 												if book.Default || (!contactSyncHasDefaultBook(data.ContactSync.AddressBooks) && i == 0) {
-													<input type="radio" name="default_addressbook_url" value={ book.URL } checked/>
+													@radio.Radio(radio.Props{Name: "default_addressbook_url", Value: book.URL, Checked: true})
 												} else {
-													<input type="radio" name="default_addressbook_url" value={ book.URL }/>
+													@radio.Radio(radio.Props{Name: "default_addressbook_url", Value: book.URL})
 												}
 												Default for new contacts
 											</label>
@@ -2575,19 +3064,23 @@ templ ContactSyncSettings(data models.EditAccountData) {
 									</label>
 								}
 							</div>
-						} else {
-							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Exact address book URL <span class="font-normal text-muted-foreground/80">optional</span></label>
+						</div>
+					} else if strings.TrimSpace(data.ContactSync.AddressBookURL) != "" {
+						<div class="sm:col-span-2 rounded-md border border-border bg-background/35 px-3 py-2" data-carddav-addressbook-section data-carddav-manual-addressbook>
+							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Exact address book URL</label>
 							@input.Input(input.Props{Name: "addressbook_url", Type: input.TypeURL, Value: data.ContactSync.AddressBookURL, Placeholder: "https://dav.example.com/addressbooks/user/default/"})
-							<p class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">Only fill this if you already know the exact CardDAV address book to sync. Otherwise, use Discover and choose one from the results.</p>
-						}
-					</div>
+						</div>
+					} else {
+						<div class="hidden sm:col-span-2 rounded-md border border-border bg-background/35 px-3 py-2" data-carddav-addressbook-section data-carddav-manual-addressbook>
+							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Exact address book URL</label>
+							@input.Input(input.Props{Name: "addressbook_url", Type: input.TypeURL, Placeholder: "https://dav.example.com/addressbooks/user/default/"})
+						</div>
+					}
 				</div>
 				<div id={ fmt.Sprintf("account-contact-sync-status-%s", data.AccountID) } class="min-h-0"></div>
-				<div class="flex justify-end gap-2">
-					<button type="button" data-carddav-discover data-account-id={ data.AccountID } data-fields-id={ fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID) } data-status-id={ fmt.Sprintf("account-contact-sync-status-%s", data.AccountID) } class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent">
-						@icon.Search(icon.Props{Class: "size-3.5"})
-						Discover
-					</button>
+				<div class="flex flex-wrap justify-end gap-2">
+					@CardDAVDiscoverAddressBooksButton(data.AccountID, fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), fmt.Sprintf("account-contact-sync-status-%s", data.AccountID), data.ContactSync.BaseURL)
+					@CardDAVManualAddressBookButton(fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), data.ContactSync.BaseURL)
 				</div>
 			</form>
 		}
@@ -2617,9 +3110,72 @@ func contactSyncHasDefaultBook(books []models.ContactAddressBook) bool {
 	return false
 }
 
+templ CardDAVBaseURLRequiredTooltip(hidden bool) {
+	<span data-carddav-disabled-action class={ "inline-flex", templ.KV("!hidden", hidden) }>
+		@tooltip.Tooltip() {
+			@tooltip.Trigger(tooltip.TriggerProps{Class: "inline-flex"}) {
+				<span class="inline-flex cursor-not-allowed" title="Fill the Base URL first, or use Attempt URL autodiscover.">
+					{ children... }
+				</span>
+			}
+			@tooltip.Content(tooltip.ContentProps{Position: tooltip.PositionTop, ShowArrow: true, Class: "max-w-56 px-3 py-1.5 text-center text-xs leading-relaxed"}) {
+				Fill the Base URL first, or use Attempt URL autodiscover.
+			}
+		}
+	</span>
+}
+
+templ CardDAVDiscoverAddressBooksButton(accountID string, fieldsID string, statusID string, baseURL string) {
+	{{ disabled := strings.TrimSpace(baseURL) == "" }}
+	<span data-carddav-base-url-action data-fields-id={ fieldsID } class="contents">
+		<button type="button" data-carddav-enabled-action data-carddav-discover data-account-id={ accountID } data-fields-id={ fieldsID } data-status-id={ statusID } class={ "inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent", templ.KV("!hidden", disabled) }>
+			@icon.Search(icon.Props{Class: "size-3.5"})
+			Connect and discover address books
+		</button>
+		@CardDAVBaseURLRequiredTooltip(!disabled) {
+			<button type="button" disabled class="pointer-events-none inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground opacity-50">
+				@icon.Search(icon.Props{Class: "size-3.5"})
+				Connect and discover address books
+			</button>
+		}
+	</span>
+}
+
+templ CardDAVManualAddressBookButton(fieldsID string, baseURL string) {
+	{{ disabled := strings.TrimSpace(baseURL) == "" }}
+	<span data-carddav-base-url-action data-fields-id={ fieldsID } class="contents">
+		<button type="button" data-carddav-enabled-action data-carddav-manual data-fields-id={ fieldsID } class={ "inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent", templ.KV("!hidden", disabled) }>
+			@icon.Pencil(icon.Props{Class: "size-3.5"})
+			Enter address book URL manually
+		</button>
+		@CardDAVBaseURLRequiredTooltip(!disabled) {
+			<button type="button" disabled class="pointer-events-none inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-muted-foreground opacity-50">
+				@icon.Pencil(icon.Props{Class: "size-3.5"})
+				Enter address book URL manually
+			</button>
+		}
+	</span>
+}
+
 templ AddAccountPostCreateStep(accountID string) {
+	<div id="add-wizard-footer-step-3" data-wizard-footer-step="3" data-active="false" hx-swap-oob="outerHTML" class="hidden flex-wrap justify-between gap-2">
+		<button type="button" onclick="wizardGo(2)" class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+			@icon.ArrowLeft(icon.Props{Class: "size-4"})
+			Back
+		</button>
+		<div class="flex flex-wrap justify-end gap-2">
+			<a href="/settings/accounts" class="inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent">Done</a>
+			<button type="submit" form={ fmt.Sprintf("add-contact-sync-form-%s", accountID) } class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+				Save
+			</button>
+		</div>
+	</div>
 	<div class="flex h-full flex-col pt-1">
 		<div class="account-wizard-scroll space-y-5">
+		<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+			@icon.BookUser(icon.Props{Class: "size-4 text-muted-foreground"})
+			Contact sync
+		</h4>
 		<div class="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
 			@icon.Check(icon.Props{Class: "size-5 text-emerald-500"})
 			<div class="min-w-0">
@@ -2640,7 +3196,7 @@ templ AddAccountPostCreateStep(accountID string) {
 				<span class="text-xs text-muted-foreground">Testing mail connection...</span>
 			</div>
 		</div>
-		<div class="rounded-lg border border-border bg-background/45 p-4">
+		<form id={ fmt.Sprintf("add-contact-sync-form-%s", accountID) } hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync", accountID) } hx-target={ fmt.Sprintf("#add-contact-sync-status-%s", accountID) } hx-swap="innerHTML" class="rounded-lg border border-border bg-background/45 p-4">
 			<div class="mb-3 flex items-start justify-between gap-4">
 				<div class="min-w-0">
 					<h4 class="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -2654,32 +3210,45 @@ templ AddAccountPostCreateStep(accountID string) {
 			<div id={ fmt.Sprintf("add-contact-sync-fields-%s", accountID) } class="space-y-3">
 				<div class="grid gap-3 sm:grid-cols-2">
 					<div class="sm:col-span-2">
-						<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Base URL</label>
+						<div class="mb-1.5 flex items-center justify-between gap-2">
+							<label class="text-xs font-medium text-muted-foreground">Base URL</label>
+							<button type="button" data-carddav-discover data-carddav-autodiscover="true" data-account-id={ accountID } data-fields-id={ fmt.Sprintf("add-contact-sync-fields-%s", accountID) } data-status-id={ fmt.Sprintf("add-contact-sync-status-%s", accountID) } class="inline-flex items-center rounded-md border border-border/80 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+								Attempt URL autodiscover
+							</button>
+						</div>
 						@input.Input(input.Props{Name: "base_url", Type: input.TypeURL, Placeholder: "https://dav.example.com/"})
 					</div>
-					<div>
-						<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Username</label>
-						@input.Input(input.Props{Name: "username", Type: input.TypeText, Placeholder: "you@example.com"})
+					<label class="flex items-center gap-2 cursor-pointer sm:col-span-2">
+						@checkbox.Checkbox(checkbox.Props{
+							Name:       "use_account_credentials",
+							Value:      "1",
+							Checked:    true,
+							Attributes: templ.Attributes{"onchange": "toggleCardDAVAuth(this)"},
+						})
+						<span class="text-sm">Use same credentials as incoming mail</span>
+					</label>
+					<div class="sm:col-span-2 grid gap-3 sm:grid-cols-2 opacity-50" data-carddav-credential-fields>
+						<div>
+							<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Username</label>
+							@input.Input(input.Props{Name: "username", Type: input.TypeText, Placeholder: "Same as incoming mail", Disabled: true})
+						</div>
+						<div>
+							<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Password or app password</label>
+							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: "Same as incoming mail", Disabled: true})
+						</div>
 					</div>
-					<div>
-						<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Password or app password</label>
-						@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: "App password"})
-					</div>
-					<div class="sm:col-span-2 rounded-lg border border-border bg-background/45 p-3" data-carddav-addressbook-section>
-						<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Exact address book URL <span class="font-normal text-muted-foreground/80">optional</span></label>
+					<div class="hidden sm:col-span-2 rounded-md border border-border bg-background/35 px-3 py-2" data-carddav-addressbook-section data-carddav-manual-addressbook>
+						<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Exact address book URL</label>
 						@input.Input(input.Props{Name: "addressbook_url", Type: input.TypeURL, Placeholder: "https://dav.example.com/addressbooks/user/default/"})
-						<p class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">Only fill this if you already know the exact CardDAV address book to sync. Otherwise, use Discover and choose one from the results.</p>
 					</div>
 				</div>
 			</div>
 			<div id={ fmt.Sprintf("add-contact-sync-status-%s", accountID) } class="mt-3 min-h-0"></div>
 			<div class="mt-4 flex flex-wrap justify-end gap-2">
-				<button type="button" data-carddav-discover data-account-id={ accountID } data-fields-id={ fmt.Sprintf("add-contact-sync-fields-%s", accountID) } data-status-id={ fmt.Sprintf("add-contact-sync-status-%s", accountID) } class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent">
-					@icon.Search(icon.Props{Class: "size-3.5"})
-					Discover
-				</button>
+				@CardDAVDiscoverAddressBooksButton(accountID, fmt.Sprintf("add-contact-sync-fields-%s", accountID), fmt.Sprintf("add-contact-sync-status-%s", accountID), "")
+				@CardDAVManualAddressBookButton(fmt.Sprintf("add-contact-sync-fields-%s", accountID), "")
 			</div>
-		</div>
+		</form>
 		</div>
 		<div class="account-wizard-controls flex flex-wrap justify-between gap-2">
 			<button type="button" onclick="wizardGo(2)" class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
@@ -2687,15 +3256,10 @@ templ AddAccountPostCreateStep(accountID string) {
 				Back
 			</button>
 			<div class="flex flex-wrap justify-end gap-2">
-				<button type="button" hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync/test", accountID) } hx-include={ fmt.Sprintf("#add-contact-sync-fields-%s", accountID) } hx-target={ fmt.Sprintf("#add-contact-sync-status-%s", accountID) } hx-swap="innerHTML" class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent">
-					@icon.RefreshCw(icon.Props{Class: "size-3.5"})
-					Test
-				</button>
-				<button type="button" hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync", accountID) } hx-include={ fmt.Sprintf("#add-contact-sync-fields-%s", accountID) } hx-target={ fmt.Sprintf("#add-contact-sync-status-%s", accountID) } hx-swap="innerHTML" class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
-					@icon.Check(icon.Props{Class: "size-3.5"})
-					Save contact sync
-				</button>
 				<a href="/settings/accounts" class="inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent">Done</a>
+				<button type="submit" form={ fmt.Sprintf("add-contact-sync-form-%s", accountID) } class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+					Save
+				</button>
 			</div>
 		</div>
 	</div>
@@ -2703,10 +3267,36 @@ templ AddAccountPostCreateStep(accountID string) {
 
 templ WizardStepSuccess(heading string, accountID string, wizardType string) {
 	<div class="space-y-4 pt-2">
-		<div class="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-			@icon.Check(icon.Props{Class: "size-5 text-emerald-500"})
-			<p class="text-sm font-medium text-emerald-500">{ heading }</p>
+		<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+			@icon.Check(icon.Props{Class: "size-4 text-muted-foreground"})
+			Finish
+		</h4>
+		<div class="flex items-center gap-3 p-3 rounded-lg bg-muted/35 border border-border">
+			@icon.Check(icon.Props{Class: "size-5 text-muted-foreground"})
+			<p class="text-sm font-medium text-foreground">{ heading }</p>
 		</div>
+		<div
+			id="wizard-test-results"
+			hx-post={ fmt.Sprintf("/api/accounts/%s/test?wizard=%s", accountID, wizardType) }
+			hx-trigger="load"
+			hx-target="#wizard-test-results"
+			hx-swap="innerHTML"
+			class="space-y-3"
+		>
+			<div class="flex items-center justify-center py-4 gap-2">
+				<div class="size-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin"></div>
+				<span class="text-xs text-muted-foreground">Testing connection...</span>
+			</div>
+		</div>
+	</div>
+}
+
+templ WizardConnectionTestStep(accountID string, wizardType string) {
+	<div class="space-y-4 pt-2">
+		<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+			@icon.Check(icon.Props{Class: "size-4 text-muted-foreground"})
+			Finish
+		</h4>
 		<div
 			id="wizard-test-results"
 			hx-post={ fmt.Sprintf("/api/accounts/%s/test?wizard=%s", accountID, wizardType) }
@@ -2748,11 +3338,11 @@ templ ConnectionTestResults(results []models.ConnectionTestResult, accountID str
 				}
 				<div class={
 					"flex items-center gap-3 p-3 rounded-lg border",
-					templ.KV("bg-emerald-500/10 border-emerald-500/20", r.Success),
+					templ.KV("bg-muted/35 border-border", r.Success),
 					templ.KV("bg-destructive/10 border-destructive/20", !r.Success),
 				}>
 					if r.Success {
-						@icon.Check(icon.Props{Class: "size-5 text-emerald-500"})
+						@icon.Check(icon.Props{Class: "size-5 text-muted-foreground"})
 					} else {
 						@icon.X(icon.Props{Class: "size-5 text-destructive"})
 					}
@@ -2760,7 +3350,7 @@ templ ConnectionTestResults(results []models.ConnectionTestResult, accountID str
 						<div class="flex items-center gap-2">
 							<span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{ r.Service }</span>
 							if r.Success {
-								<span class="text-xs text-emerald-500 font-medium">{ r.Message }</span>
+								<span class="text-xs text-muted-foreground font-medium">{ r.Message }</span>
 							}
 						</div>
 						if !r.Success {
@@ -2771,31 +3361,21 @@ templ ConnectionTestResults(results []models.ConnectionTestResult, accountID str
 				</div>
 			}
 		</div>
-		if wizardType != "" {
-			<div class="flex justify-between gap-2 pt-2">
-				if wizardType == "edit" {
-					<button type="button" onclick="editWizardGo(2)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
-						@icon.ArrowLeft(icon.Props{Class: "size-4"})
-						Back
-					</button>
-				} else {
-					<button type="button" onclick="wizardGo(2)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
-						@icon.ArrowLeft(icon.Props{Class: "size-4"})
-						Back
-					</button>
-				}
+		if wizardType == "edit" {
+			<div id="edit-wizard-footer-step-4" data-wizard-footer-step="4" data-active="false" hx-swap-oob="outerHTML" class="hidden justify-between gap-2">
+				<button type="button" onclick="editWizardGo(3)" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
+					@icon.ArrowLeft(icon.Props{Class: "size-4"})
+					Back
+				</button>
 				<div class="flex gap-2">
 					if hasFailure {
-						<a href="/settings/accounts" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
-							Save Anyway
-						</a>
+						<a href="/settings/accounts" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">Save Anyway</a>
 					}
-					<a href="/settings/accounts" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-						Done
-					</a>
+					<a href="/settings/accounts" class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">Done</a>
 				</div>
 			</div>
-		} else {
+		}
+		if wizardType == "" {
 			<button
 				class="w-full inline-flex items-center justify-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors"
 				hx-post={ fmt.Sprintf("/api/accounts/%s/test", accountID) }

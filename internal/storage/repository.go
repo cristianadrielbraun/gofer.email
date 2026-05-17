@@ -1011,6 +1011,24 @@ func (db *DB) GetAccountIDs(ctx context.Context, userID string) ([]string, error
 	return ids, nil
 }
 
+func (db *DB) GetEmailSyncAccountIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := db.Read().QueryContext(ctx, `SELECT id FROM accounts WHERE user_id = ? AND COALESCE(is_deleting, 0) = 0 AND COALESCE(email_sync_enabled, 1) = 1 ORDER BY id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (db *DB) GetAllAccountIDs(ctx context.Context) ([]string, error) {
 	rows, err := db.Read().QueryContext(ctx, `SELECT id FROM accounts WHERE COALESCE(is_deleting, 0) = 0 ORDER BY id`)
 	if err != nil {
@@ -1027,6 +1045,30 @@ func (db *DB) GetAllAccountIDs(ctx context.Context) ([]string, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func (db *DB) GetAllEmailSyncAccountIDs(ctx context.Context) ([]string, error) {
+	rows, err := db.Read().QueryContext(ctx, `SELECT id FROM accounts WHERE COALESCE(is_deleting, 0) = 0 AND COALESCE(email_sync_enabled, 1) = 1 ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (db *DB) IsEmailSyncEnabled(ctx context.Context, accountID string) bool {
+	var enabled int
+	err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(email_sync_enabled, 1) FROM accounts WHERE id = ? AND COALESCE(is_deleting, 0) = 0`, accountID).Scan(&enabled)
+	return err == nil && enabled == 1
 }
 
 func (db *DB) GetAccountUserID(ctx context.Context, accountID string) (string, error) {
@@ -1242,8 +1284,8 @@ func (db *DB) GetFolderHighestUID(ctx context.Context, folderID string) (uint32,
 
 func (db *DB) GetAccounts(ctx context.Context, userID string) ([]models.Account, error) {
 	rows, err := db.Read().QueryContext(ctx,
-		`SELECT a.id, a.provider, a.email_address, a.display_name, a.color, a.initials, COALESCE(a.is_deleting, 0),
-		        CASE WHEN a.provider = 'gmail' THEN 1 ELSE COALESCE(acc.enabled, 0) END AS contact_sync_enabled,
+		`SELECT a.id, a.provider, a.email_address, a.display_name, a.color, a.initials, COALESCE(a.is_deleting, 0), COALESCE(a.email_sync_enabled, 1),
+		        CASE WHEN a.provider = 'gmail' THEN COALESCE(acc.enabled, 1) ELSE COALESCE(acc.enabled, 0) END AS contact_sync_enabled,
 		        CASE WHEN a.provider = 'gmail' THEN 'gmail' ELSE COALESCE(acc.provider, '') END AS contact_sync_provider
 		 FROM accounts a
 		 LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id
@@ -1257,11 +1299,12 @@ func (db *DB) GetAccounts(ctx context.Context, userID string) ([]models.Account,
 	var accounts []models.Account
 	for rows.Next() {
 		var a models.Account
-		var isDeleting, contactSyncEnabled int
-		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &contactSyncEnabled, &a.ContactSyncProvider); err != nil {
+		var isDeleting, emailSyncEnabled, contactSyncEnabled int
+		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &emailSyncEnabled, &contactSyncEnabled, &a.ContactSyncProvider); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		a.IsDeleting = isDeleting == 1
+		a.EmailSyncEnabled = emailSyncEnabled == 1
 		a.ContactSyncEnabled = contactSyncEnabled == 1
 		accounts = append(accounts, a)
 	}
@@ -1280,8 +1323,8 @@ func (db *DB) GetAccounts(ctx context.Context, userID string) ([]models.Account,
 
 func (db *DB) GetAccountsIncludingDeleting(ctx context.Context, userID string) ([]models.Account, error) {
 	rows, err := db.Read().QueryContext(ctx,
-		`SELECT a.id, a.provider, a.email_address, a.display_name, a.color, a.initials, COALESCE(a.is_deleting, 0),
-		        CASE WHEN a.provider = 'gmail' THEN 1 ELSE COALESCE(acc.enabled, 0) END AS contact_sync_enabled,
+		`SELECT a.id, a.provider, a.email_address, a.display_name, a.color, a.initials, COALESCE(a.is_deleting, 0), COALESCE(a.email_sync_enabled, 1),
+		        CASE WHEN a.provider = 'gmail' THEN COALESCE(acc.enabled, 1) ELSE COALESCE(acc.enabled, 0) END AS contact_sync_enabled,
 		        CASE WHEN a.provider = 'gmail' THEN 'gmail' ELSE COALESCE(acc.provider, '') END AS contact_sync_provider
 		 FROM accounts a
 		 LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id
@@ -1295,11 +1338,12 @@ func (db *DB) GetAccountsIncludingDeleting(ctx context.Context, userID string) (
 	var accounts []models.Account
 	for rows.Next() {
 		var a models.Account
-		var isDeleting, contactSyncEnabled int
-		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &contactSyncEnabled, &a.ContactSyncProvider); err != nil {
+		var isDeleting, emailSyncEnabled, contactSyncEnabled int
+		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &emailSyncEnabled, &contactSyncEnabled, &a.ContactSyncProvider); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		a.IsDeleting = isDeleting == 1
+		a.EmailSyncEnabled = emailSyncEnabled == 1
 		a.ContactSyncEnabled = contactSyncEnabled == 1
 		accounts = append(accounts, a)
 	}

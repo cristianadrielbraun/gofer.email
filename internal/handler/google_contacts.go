@@ -74,7 +74,9 @@ func builtinAccountContactSync(provider string) bool {
 
 func (h *Handler) accountSupportsContactSync(ctx context.Context, userID string, account contactSyncAccount) bool {
 	if builtinAccountContactSync(account.Provider) {
-		return true
+		var enabled int
+		err := h.db.Read().QueryRowContext(ctx, `SELECT enabled FROM account_contact_sync_configs WHERE account_id = ? AND user_id = ?`, account.ID, userID).Scan(&enabled)
+		return err == sql.ErrNoRows || (err == nil && enabled == 1)
 	}
 	cfg, err := h.accountStore.GetContactSyncConfig(ctx, userID, account.ID)
 	return err == nil && cfg.Enabled && cfg.Provider == providers.ProviderCardDAV
@@ -138,7 +140,7 @@ func (h *Handler) contactSyncAccounts(ctx context.Context, userID, accountID str
 		SELECT a.id, a.email_address,
 		       CASE WHEN a.provider = 'gmail' THEN 'gmail' ELSE COALESCE(acc.provider, '') END AS contact_provider
 		FROM accounts a
-		LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id AND acc.enabled = 1
+		LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id
 		WHERE a.id = ? AND a.user_id = ? AND COALESCE(a.is_deleting, 0) = 0`, accountID, userID).Scan(&account.ID, &account.Email, &account.Provider)
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -156,7 +158,7 @@ func (h *Handler) contactSyncAccounts(ctx context.Context, userID, accountID str
 		SELECT a.id, a.email_address,
 		       CASE WHEN a.provider = 'gmail' THEN 'gmail' ELSE COALESCE(acc.provider, '') END AS contact_provider
 		FROM accounts a
-		LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id AND acc.enabled = 1
+		LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id
 		WHERE a.user_id = ? AND COALESCE(a.is_deleting, 0) = 0
 		ORDER BY a.email_address COLLATE NOCASE`, userID)
 	if err != nil {
@@ -729,6 +731,11 @@ func isGoogleNotFound(err error, apiErr *googleAPIError) bool {
 
 func htmlStatus(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if status >= 400 {
+		w.Header().Set("X-Gofer-Status", "error")
+	} else {
+		w.Header().Set("X-Gofer-Status", "ok")
+	}
 	if status >= 400 {
 		status = http.StatusOK
 	}

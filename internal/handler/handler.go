@@ -154,6 +154,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/accounts", h.handleCreateAccount)
 	mux.HandleFunc("GET /api/accounts/{id}/edit", h.handleGetEditAccount)
 	mux.HandleFunc("POST /api/accounts/{id}/edit", h.handleUpdateAccount)
+	mux.HandleFunc("POST /api/accounts/{id}/services", h.handleUpdateAccountService)
 	mux.HandleFunc("POST /api/accounts/{id}/color", h.handleUpdateAccountColor)
 	mux.HandleFunc("POST /api/accounts/{id}/contacts/sync", h.handleSaveAccountContactSync)
 	mux.HandleFunc("POST /api/accounts/{id}/contacts/sync/test", h.handleTestAccountContactSync)
@@ -1589,6 +1590,59 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	views.WizardStepSuccess("Account updated", accountID, "edit").Render(r.Context(), w)
 }
 
+func (h *Handler) handleUpdateAccountService(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := h.userID(ctx)
+	accountID := r.PathValue("id")
+	if accountID == "" {
+		http.Error(w, "account id required", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	enabled := r.FormValue("enabled") == "true"
+	switch r.FormValue("service") {
+	case "email":
+		if err := h.accountStore.SetEmailSyncEnabled(ctx, userID, accountID, enabled); err != nil {
+			http.Error(w, "could not update email sync", http.StatusInternalServerError)
+			return
+		}
+		if enabled {
+			h.syncer.StartAccount(context.Background(), accountID)
+		} else {
+			h.syncer.StopAccount(accountID)
+		}
+	case "contacts":
+		if err := h.accountStore.SetContactSyncEnabled(ctx, userID, accountID, enabled); err != nil {
+			http.Error(w, "could not update contact sync", http.StatusInternalServerError)
+			return
+		}
+		if enabled {
+			go func() {
+				bg, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				if _, err := h.SyncContactAccount(bg, accountID); err != nil && !errors.Is(err, errContactSyncAlreadyRunning) {
+					log.Printf("contacts sync %s after service enable: %v", accountID, err)
+				}
+			}()
+		}
+	default:
+		http.Error(w, "unknown service", http.StatusBadRequest)
+		return
+	}
+
+	account, err := h.accountStore.GetAccountByID(ctx, accountID)
+	if err != nil || account == nil {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	views.SettingsAccountCard(*account).Render(ctx, w)
+}
+
 func (h *Handler) handleUpdateAccountColor(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 	if accountID == "" {
@@ -1960,6 +2014,9 @@ func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Accou
 
 	var accountStatuses []models.AccountSyncStatus
 	for _, account := range accounts {
+		if !account.EmailSyncEnabled {
+			continue
+		}
 		folders, err := h.db.GetFoldersForAccount(ctx, account.ID)
 		if err != nil {
 			continue

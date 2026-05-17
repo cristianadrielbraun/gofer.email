@@ -11,6 +11,7 @@ type Account struct {
 	Initials            string
 	IsActive            bool
 	IsDeleting          bool
+	EmailSyncEnabled    bool
 	ContactSyncEnabled  bool
 	ContactSyncProvider string
 	ContactAddressBooks []ContactAddressBook

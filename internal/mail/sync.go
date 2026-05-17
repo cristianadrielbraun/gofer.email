@@ -75,6 +75,19 @@ func (o *SyncOrchestrator) StopAccount(accountID string) {
 	delete(o.running, accountID)
 }
 
+func (o *SyncOrchestrator) StartAccount(ctx context.Context, accountID string) {
+	if !o.db.IsEmailSyncEnabled(ctx, accountID) {
+		return
+	}
+	o.mu.Lock()
+	_, running := o.cancelFuncs[accountID]
+	o.mu.Unlock()
+	if running {
+		return
+	}
+	go o.startAccount(ctx, accountID)
+}
+
 func (o *SyncOrchestrator) RestartIDLEWatchers(ctx context.Context) {
 	o.mu.Lock()
 	for accountID, watchers := range o.idleWatchers {
@@ -85,7 +98,7 @@ func (o *SyncOrchestrator) RestartIDLEWatchers(ctx context.Context) {
 	}
 	o.mu.Unlock()
 
-	accounts, err := o.db.GetAllAccountIDs(ctx)
+	accounts, err := o.db.GetAllEmailSyncAccountIDs(ctx)
 	if err != nil {
 		return
 	}
@@ -95,6 +108,9 @@ func (o *SyncOrchestrator) RestartIDLEWatchers(ctx context.Context) {
 	}
 }
 func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID string) {
+	if !o.db.IsEmailSyncEnabled(ctx, accountID) {
+		return
+	}
 	cfg, err := o.accountStore.GetConfig(ctx, accountID)
 	if err != nil {
 		log.Printf("idle %s: config: %v", accountID, err)
@@ -152,7 +168,7 @@ func (o *SyncOrchestrator) getIdleFoldersForAccount(ctx context.Context, account
 
 func (o *SyncOrchestrator) Start(ctx context.Context) {
 	log.Printf("sync: startup scan started")
-	accounts, err := o.db.GetAllAccountIDs(ctx)
+	accounts, err := o.db.GetAllEmailSyncAccountIDs(ctx)
 	if err != nil {
 		log.Printf("sync start: get accounts: %v", err)
 		return
@@ -176,6 +192,10 @@ func (o *SyncOrchestrator) Start(ctx context.Context) {
 }
 
 func (o *SyncOrchestrator) startAccount(ctx context.Context, accountID string) {
+	if !o.db.IsEmailSyncEnabled(ctx, accountID) {
+		log.Printf("sync: account %s email sync disabled", accountID)
+		return
+	}
 	log.Printf("sync: account %s initial sync started", accountID)
 	if err := o.syncAccount(ctx, accountID); err != nil {
 		log.Printf("sync account %s: %v", accountID, err)
@@ -212,6 +232,9 @@ func (o *SyncOrchestrator) runPeriodicSync(ctx context.Context, accountID string
 }
 
 func (o *SyncOrchestrator) periodicSync(ctx context.Context, accountID string) {
+	if !o.db.IsEmailSyncEnabled(ctx, accountID) {
+		return
+	}
 	folders, err := o.db.GetFoldersForAccount(ctx, accountID)
 	if err != nil {
 		log.Printf("periodic %s: get folders: %v", accountID, err)
@@ -386,6 +409,9 @@ func convertFlagUpdates(imapUpdates []imap.FlagUpdate) []storage.FlagUpdate {
 }
 
 func (o *SyncOrchestrator) SyncAccount(ctx context.Context, accountID string) {
+	if !o.db.IsEmailSyncEnabled(ctx, accountID) {
+		return
+	}
 	o.mu.Lock()
 	if o.running[accountID] {
 		o.mu.Unlock()
@@ -408,6 +434,9 @@ func (o *SyncOrchestrator) SyncAccount(ctx context.Context, accountID string) {
 }
 
 func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string) error {
+	if !o.db.IsEmailSyncEnabled(ctx, accountID) {
+		return nil
+	}
 	cfg, err := o.accountStore.GetConfig(ctx, accountID)
 	if err != nil {
 		return err

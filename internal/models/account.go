@@ -38,6 +38,7 @@ type EditAccountData struct {
 	AuthMethod        string
 	SmtpUsername      string
 	SameSmtpAuth      bool
+	EmailSyncEnabled  bool
 	Signatures        []Signature
 	SignatureSettings AccountSignatureSettings
 	ContactSync       ContactSyncConfig

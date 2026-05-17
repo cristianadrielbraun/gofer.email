@@ -127,6 +127,9 @@ func unifiedFolders(accounts []models.Account) []models.Folder {
 	unreadByRole := make(map[string]int)
 	seenRole := make(map[string]bool)
 	for _, account := range accounts {
+		if !account.EmailSyncEnabled {
+			continue
+		}
 		collectUnifiedFolders(account.Folders, unreadByRole, seenRole)
 	}
 

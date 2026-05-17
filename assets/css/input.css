@@ -685,10 +685,12 @@
   transform-origin: left;
 }
 
-.gofer-toast-progress[data-variant="success"] { background: #22c55e; }
-.gofer-toast-progress[data-variant="error"] { background: #ef4444; }
-.gofer-toast-progress[data-variant="warning"] { background: #eab308; }
-.gofer-toast-progress[data-variant="info"] { background: #3b82f6; }
+.gofer-toast-progress[data-variant="success"] { background: var(--muted-foreground); }
+.gofer-toast-progress[data-variant="error"] { background: var(--destructive); }
+.gofer-toast-progress[data-variant="warning"] { background: var(--muted-foreground); }
+.gofer-toast-progress[data-variant="info"] { background: var(--muted-foreground); }
+
+.gofer-toast-icon-success { color: var(--success); }
 
 .gofer-toast-dismiss {
   display: inline-flex;

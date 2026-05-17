@@ -2031,11 +2031,11 @@ function _composeToastConfig(status) {
 }
 
 function _goferToastIcon(icon) {
-  if (icon === "success") return '<svg class="size-[22px] text-green-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>'
-  if (icon === "warning") return '<svg class="size-[22px] text-yellow-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
-  if (icon === "error") return '<svg class="size-[22px] text-red-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>'
-  if (icon === "spinner") return '<svg class="size-[22px] text-blue-500 mr-3 flex-shrink-0 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>'
-  return '<svg class="size-[22px] text-blue-500 mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+  if (icon === "success") return '<svg class="gofer-toast-icon-success size-[22px] mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>'
+  if (icon === "warning") return '<svg class="size-[22px] text-muted-foreground mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
+  if (icon === "error") return '<svg class="size-[22px] text-destructive mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>'
+  if (icon === "spinner") return '<svg class="size-[22px] text-muted-foreground mr-3 flex-shrink-0 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>'
+  return '<svg class="size-[22px] text-muted-foreground mr-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
 }
 
 function dismissGoferToast(toast) {
@@ -2084,6 +2084,43 @@ function showGoferToast(opts) {
     toast._goferToastTimer = setTimeout(function () { dismissGoferToast(toast) }, duration)
   }
   return toast
+}
+
+function handleContactSidebarSyncStart() {
+  showGoferToast({
+    id: "contact-sync-toast",
+    title: "Syncing contacts",
+    description: "Checking connected address books...",
+    variant: "info",
+    icon: "spinner",
+    position: "bottom-right",
+    duration: 0,
+    dismissible: false,
+  })
+}
+
+function handleContactSidebarSyncResult(event) {
+  var xhr = event && event.detail ? event.detail.xhr : null
+  var ok = !!(event && event.detail && event.detail.successful) && (!xhr || xhr.getResponseHeader("X-Gofer-Status") !== "error")
+  var message = "Contact sync finished."
+  if (xhr && xhr.responseText) {
+    var div = document.createElement("div")
+    div.innerHTML = xhr.responseText
+    message = (div.textContent || "").trim() || message
+  }
+  showGoferToast({
+    id: "contact-sync-toast",
+    title: ok ? "Contacts synced" : "Contact sync failed",
+    description: message,
+    variant: ok ? "success" : "error",
+    icon: ok ? "success" : "error",
+    position: "bottom-right",
+    duration: ok ? 4500 : 8000,
+    dismissible: true,
+  })
+  if (ok && window.htmx) {
+    htmx.ajax("GET", window.location.pathname + window.location.search, { target: "#main-content", swap: "outerHTML" })
+  }
 }
 
   var _composeActive = false

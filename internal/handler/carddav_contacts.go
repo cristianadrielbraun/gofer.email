@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -128,6 +129,17 @@ func (h *Handler) handleSaveAccountContactSync(w http.ResponseWriter, r *http.Re
 	password := r.FormValue("password")
 	cfg.Enabled = cfg.BaseURL != "" || len(cfg.AddressBooks) > 0 || cfg.Username != "" || password != ""
 	if cfg.Enabled {
+		if cfg.Username == "" || r.FormValue("use_account_credentials") == "1" {
+			accountEmail, accountUsername, _, _, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
+			if err != nil {
+				htmlStatus(w, http.StatusBadRequest, "Account is required.")
+				return
+			}
+			cfg.Username = accountUsername
+			if cfg.Username == "" {
+				cfg.Username = accountEmail
+			}
+		}
 		if cfg.AddressBookURL == "" && len(cfg.AddressBooks) == 0 {
 			cfg.AddressBookURL = cfg.BaseURL
 			cfg.AddressBooks = contactSyncAddressBooksFromURL(cfg.AddressBookURL)
@@ -141,6 +153,14 @@ func (h *Handler) handleSaveAccountContactSync(w http.ResponseWriter, r *http.Re
 			password, err = h.contactSyncPasswordOrAccount(ctx, userID, accountID, "")
 			if err != nil || password == "" {
 				htmlStatus(w, http.StatusBadRequest, "CardDAV password is required.")
+				return
+			}
+		}
+		for _, book := range cfg.AddressBooks {
+			bookCfg := cfg
+			bookCfg.AddressBookURL = book.URL
+			if err := testCardDAVAddressBook(ctx, bookCfg, password); err != nil {
+				htmlStatus(w, http.StatusBadRequest, "CardDAV save failed: could not connect to "+contactAddressBookLabel(book)+": "+err.Error())
 				return
 			}
 		}
@@ -160,7 +180,74 @@ func (h *Handler) handleSaveAccountContactSync(w http.ResponseWriter, r *http.Re
 			log.Printf("contacts sync %s after save: %v", accountID, err)
 		}
 	}()
-	htmlStatus(w, http.StatusOK, "CardDAV contact sync settings saved.")
+	htmlContactSyncSaved(w, accountID, cfg)
+}
+
+func htmlContactSyncSaved(w http.ResponseWriter, accountID string, cfg models.ContactSyncConfig) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Gofer-Status", "ok")
+	w.WriteHeader(http.StatusOK)
+	books := contactSyncSelectedBooks(cfg.AddressBooks)
+	defaultBook := contactSyncDefaultBook(books)
+	message := `<div class="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground"><div class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 text-muted-foreground"><path d="M20 6 9 17l-5-5"></path></svg><span>CardDAV contact sync settings saved and verified.</span></div></div>`
+	_, _ = w.Write([]byte(message))
+	summary := contactSyncSavedSummaryHTML(books, defaultBook)
+	_, _ = w.Write([]byte(`<div id="account-contact-sync-fields-` + html.EscapeString(accountID) + `" hx-swap-oob="outerHTML" class="grid gap-3 sm:grid-cols-2">` + summary + `</div>`))
+	_, _ = w.Write([]byte(`<div id="add-contact-sync-fields-` + html.EscapeString(accountID) + `" hx-swap-oob="outerHTML" class="space-y-3">` + summary + `</div>`))
+}
+
+func contactSyncSavedSummaryHTML(books []models.ContactAddressBook, defaultBook models.ContactAddressBook) string {
+	bookNames := make([]string, 0, len(books))
+	for _, book := range books {
+		bookNames = append(bookNames, contactAddressBookLabel(book))
+	}
+	defaultName := contactAddressBookLabel(defaultBook)
+	return `<div class="sm:col-span-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground"><div class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-muted-foreground"><path d="M20 6 9 17l-5-5"></path></svg><div class="min-w-0"><div class="font-semibold text-foreground">Contact sync saved</div><p class="mt-1 leading-relaxed">Synced address books: ` + html.EscapeString(contactSyncHumanList(bookNames)) + `.</p><p class="mt-1 leading-relaxed">Default for new contacts: ` + html.EscapeString(defaultName) + `.</p></div></div></div>`
+}
+
+func contactSyncSelectedBooks(books []models.ContactAddressBook) []models.ContactAddressBook {
+	selected := make([]models.ContactAddressBook, 0, len(books))
+	for _, book := range books {
+		if book.URL != "" {
+			selected = append(selected, book)
+		}
+	}
+	return selected
+}
+
+func contactSyncDefaultBook(books []models.ContactAddressBook) models.ContactAddressBook {
+	for _, book := range books {
+		if book.Default {
+			return book
+		}
+	}
+	if len(books) > 0 {
+		return books[0]
+	}
+	return models.ContactAddressBook{Name: "None"}
+}
+
+func contactSyncHumanList(items []string) string {
+	if len(items) == 0 {
+		return "none"
+	}
+	if len(items) == 1 {
+		return items[0]
+	}
+	if len(items) == 2 {
+		return items[0] + " and " + items[1]
+	}
+	return strings.Join(items[:len(items)-1], ", ") + ", and " + items[len(items)-1]
+}
+
+func contactAddressBookLabel(book models.ContactAddressBook) string {
+	if strings.TrimSpace(book.Name) != "" {
+		return strings.TrimSpace(book.Name)
+	}
+	if strings.TrimSpace(book.URL) != "" {
+		return strings.TrimSpace(book.URL)
+	}
+	return "address book"
 }
 
 func (h *Handler) handleTestAccountContactSync(w http.ResponseWriter, r *http.Request) {
@@ -291,7 +378,14 @@ func (h *Handler) handleDiscoverAccountContactSync(w http.ResponseWriter, r *htt
 			username = accountEmail
 		}
 	}
-	candidates := contactSyncDiscoveryCandidates(baseURL, imapHost, smtpHost, username, accountEmail)
+	autodiscover := r.FormValue("autodiscover") == "1"
+	candidates := contactSyncDiscoveryCandidates(baseURL)
+	if autodiscover {
+		candidates = contactSyncDiscoveryCandidates(baseURL, imapHost, smtpHost, username, accountEmail)
+	} else if len(candidates) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "enter a CardDAV base URL, or use Attempt URL autodiscover")
+		return
+	}
 	password := r.FormValue("password")
 	if password == "" {
 		password, err = h.contactSyncPasswordOrAccount(ctx, userID, accountID, "")
@@ -303,11 +397,11 @@ func (h *Handler) handleDiscoverAccountContactSync(w http.ResponseWriter, r *htt
 
 	log.Printf("contacts carddav discover %s: trying %d candidate(s): %s", accountID, len(candidates), strings.Join(candidates, ", "))
 	if strings.Contains(r.Header.Get("Accept"), "application/x-ndjson") {
-		h.streamCardDAVDiscovery(w, ctx, accountID, candidates, username, password)
+		h.streamCardDAVDiscovery(w, ctx, accountID, candidates, username, password, autodiscover)
 		return
 	}
 
-	books, err := discoverCardDAVAddressBooksAny(ctx, candidates, username, password)
+	books, err := discoverCardDAVAddressBooksCandidates(ctx, candidates, username, password, nil, autodiscover)
 	if err != nil {
 		log.Printf("contacts carddav discover %s: failed: %v", accountID, err)
 		writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -318,7 +412,7 @@ func (h *Handler) handleDiscoverAccountContactSync(w http.ResponseWriter, r *htt
 	_ = json.NewEncoder(w).Encode(map[string]any{"address_books": books})
 }
 
-func (h *Handler) streamCardDAVDiscovery(w http.ResponseWriter, ctx context.Context, accountID string, candidates []string, username, password string) {
+func (h *Handler) streamCardDAVDiscovery(w http.ResponseWriter, ctx context.Context, accountID string, candidates []string, username, password string, autodiscover bool) {
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -332,9 +426,9 @@ func (h *Handler) streamCardDAVDiscovery(w http.ResponseWriter, ctx context.Cont
 	}
 
 	writeEvent(map[string]any{"type": "start", "message": "Preparing CardDAV discovery..."})
-	books, err := discoverCardDAVAddressBooksAnyWithProgress(ctx, candidates, username, password, func(completed, total int, endpoint string) {
+	books, err := discoverCardDAVAddressBooksCandidates(ctx, candidates, username, password, func(completed, total int, endpoint string) {
 		writeEvent(map[string]any{"type": "progress", "completed": completed, "total": total, "endpoint": endpoint})
-	})
+	}, autodiscover)
 	if err != nil {
 		log.Printf("contacts carddav discover %s: failed: %v", accountID, err)
 		writeEvent(map[string]any{"type": "error", "error": err.Error()})
@@ -931,11 +1025,17 @@ func discoverCardDAVAddressBooksAny(ctx context.Context, candidates []string, us
 }
 
 func discoverCardDAVAddressBooksAnyWithProgress(ctx context.Context, candidates []string, username, password string, progress cardDAVDiscoveryProgress) ([]models.ContactAddressBook, error) {
+	return discoverCardDAVAddressBooksCandidates(ctx, candidates, username, password, progress, true)
+}
+
+func discoverCardDAVAddressBooksCandidates(ctx context.Context, candidates []string, username, password string, progress cardDAVDiscoveryProgress, autodiscover bool) ([]models.ContactAddressBook, error) {
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("Could not auto-discover CardDAV because no server URL, username, or email address is available. Enter the provider's CardDAV base URL and try again")
 	}
 	tracker := &cardDAVDiscoveryTracker{progress: progress}
-	candidates = expandCardDAVDiscoveryCandidates(ctx, candidates, tracker)
+	if autodiscover {
+		candidates = expandCardDAVDiscoveryCandidates(ctx, candidates, tracker)
+	}
 	type candidateAttempt struct {
 		candidate string
 		baseURL   string

@@ -103,25 +103,31 @@ func (s *AccountStore) GetConfig(ctx context.Context, accountID string) (*models
 func (s *AccountStore) GetEditData(ctx context.Context, accountID string) (*models.EditAccountData, error) {
 	var data models.EditAccountData
 	data.AccountID = accountID
+	var emailSyncEnabled int
 	err := s.db.Read().QueryRowContext(ctx,
 		`SELECT provider, provider_account_id, email_address, display_name,
 		        imap_host, imap_port, imap_tls_mode,
-		        smtp_host, smtp_port, smtp_tls_mode,
+		        smtp_host, smtp_port, smtp_tls_mode, COALESCE(email_sync_enabled, 1),
 		        username, auth_method, COALESCE(smtp_username, '')
 		 FROM accounts WHERE id = ?`, accountID,
 	).Scan(&data.Provider, &data.ProviderAccountID, &data.EmailAddress, &data.DisplayName,
 		&data.IMAPHost, &data.IMAPPort, &data.IMAPTLSMode,
-		&data.SMTPHost, &data.SMTPPort, &data.SMTPTLSMode,
+		&data.SMTPHost, &data.SMTPPort, &data.SMTPTLSMode, &emailSyncEnabled,
 		&data.Username, &data.AuthMethod, &data.SmtpUsername)
 	if err != nil {
 		return nil, fmt.Errorf("query account edit data: %w", err)
 	}
+	data.EmailSyncEnabled = emailSyncEnabled == 1
 	data.SameSmtpAuth = data.SmtpUsername == "" || data.SmtpUsername == data.Username
 	userID, err := s.db.GetAccountUserID(ctx, accountID)
 	if err == nil && userID != "" {
 		data.Signatures, _ = s.db.ListSignatures(ctx, userID)
 		data.SignatureSettings, _ = s.db.GetAccountSignatureSettings(ctx, userID, accountID)
 		data.ContactSync, _ = s.GetContactSyncConfig(ctx, userID, accountID)
+		if data.Provider == "gmail" && data.ContactSync.Provider != "gmail" {
+			data.ContactSync.Provider = "gmail"
+			data.ContactSync.Enabled = true
+		}
 	}
 	return &data, nil
 }
@@ -540,6 +546,65 @@ func (s *AccountStore) UpdateAccountColor(ctx context.Context, userID, accountID
 	return nil
 }
 
+func (s *AccountStore) SetEmailSyncEnabled(ctx context.Context, userID, accountID string, enabled bool) error {
+	value := 0
+	if enabled {
+		value = 1
+	}
+	res, err := s.db.Write().ExecContext(ctx,
+		`UPDATE accounts SET email_sync_enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND COALESCE(is_deleting, 0) = 0`,
+		value, accountID, userID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *AccountStore) SetContactSyncEnabled(ctx context.Context, userID, accountID string, enabled bool) error {
+	value := 0
+	if enabled {
+		value = 1
+	}
+	var provider string
+	if err := s.db.Read().QueryRowContext(ctx,
+		`SELECT provider FROM accounts WHERE id = ? AND user_id = ? AND COALESCE(is_deleting, 0) = 0`,
+		accountID, userID).Scan(&provider); err != nil {
+		return err
+	}
+	if provider == "gmail" {
+		_, err := s.db.Write().ExecContext(ctx, `
+			INSERT INTO account_contact_sync_configs (account_id, user_id, provider, enabled)
+			VALUES (?, ?, 'gmail', ?)
+			ON CONFLICT(account_id) DO UPDATE SET
+				user_id = excluded.user_id,
+				provider = 'gmail',
+				enabled = excluded.enabled,
+				updated_at = CURRENT_TIMESTAMP`, accountID, userID, value)
+		return err
+	}
+	res, err := s.db.Write().ExecContext(ctx,
+		`UPDATE account_contact_sync_configs SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE account_id = ? AND user_id = ?`,
+		value, accountID, userID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *AccountStore) DeleteAccount(ctx context.Context, accountID string) error {
 	_, err := s.db.Write().ExecContext(ctx, `DELETE FROM accounts WHERE id = ?`, accountID)
 	return err
@@ -552,21 +617,22 @@ func (s *AccountStore) MarkAccountDeleting(ctx context.Context, accountID string
 
 func (s *AccountStore) GetAccountByID(ctx context.Context, accountID string) (*models.Account, error) {
 	var a models.Account
-	var contactSyncEnabled int
+	var emailSyncEnabled, contactSyncEnabled int
 	err := s.db.Read().QueryRowContext(ctx,
-		`SELECT a.id, a.provider, a.email_address, a.display_name, a.color, a.initials,
-		        CASE WHEN a.provider = 'gmail' THEN 1 ELSE COALESCE(acc.enabled, 0) END AS contact_sync_enabled,
+		`SELECT a.id, a.provider, a.email_address, a.display_name, a.color, a.initials, COALESCE(a.email_sync_enabled, 1),
+		        CASE WHEN a.provider = 'gmail' THEN COALESCE(acc.enabled, 1) ELSE COALESCE(acc.enabled, 0) END AS contact_sync_enabled,
 		        CASE WHEN a.provider = 'gmail' THEN 'gmail' ELSE COALESCE(acc.provider, '') END AS contact_sync_provider
 		 FROM accounts a
 		 LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id
 		 WHERE a.id = ?`, accountID,
-	).Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &contactSyncEnabled, &a.ContactSyncProvider)
+	).Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &emailSyncEnabled, &contactSyncEnabled, &a.ContactSyncProvider)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	a.EmailSyncEnabled = emailSyncEnabled == 1
 	a.ContactSyncEnabled = contactSyncEnabled == 1
 	return &a, nil
 }

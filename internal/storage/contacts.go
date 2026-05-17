@@ -159,7 +159,7 @@ func (db *DB) ListContactSyncStatuses(ctx context.Context, userID string) ([]mod
 		       COALESCE(NULLIF(a.display_name, ''), a.email_address) AS account_name,
 		       a.email_address,
 		       CASE WHEN a.provider = 'gmail' THEN 'gmail' ELSE COALESCE(acc.provider, '') END AS contact_provider,
-		       CASE WHEN a.provider = 'gmail' THEN 1 ELSE COALESCE(acc.enabled, 0) END AS enabled,
+		       CASE WHEN a.provider = 'gmail' THEN COALESCE(acc.enabled, 1) ELSE COALESCE(acc.enabled, 0) END AS enabled,
 		       CASE WHEN a.provider = 'gmail' OR acc.account_id IS NOT NULL THEN 1 ELSE 0 END AS capable,
 		       acc.last_started_at,
 		       acc.last_success_at,
@@ -209,6 +209,7 @@ func (db *DB) MarkContactSyncStarted(ctx context.Context, userID, accountID, pro
 	enabled := 0
 	if provider == "gmail" {
 		enabled = 1
+		_ = db.Read().QueryRowContext(ctx, `SELECT COALESCE(enabled, 1) FROM account_contact_sync_configs WHERE account_id = ? AND user_id = ?`, accountID, userID).Scan(&enabled)
 	}
 	_, err := db.Write().ExecContext(ctx, `
 		INSERT INTO account_contact_sync_configs (account_id, user_id, provider, enabled, last_started_at)
@@ -216,7 +217,7 @@ func (db *DB) MarkContactSyncStarted(ctx context.Context, userID, accountID, pro
 		ON CONFLICT(account_id) DO UPDATE SET
 			user_id = excluded.user_id,
 			provider = excluded.provider,
-			enabled = CASE WHEN excluded.provider = 'gmail' THEN 1 ELSE account_contact_sync_configs.enabled END,
+			enabled = account_contact_sync_configs.enabled,
 			last_started_at = CURRENT_TIMESTAMP,
 			updated_at = CURRENT_TIMESTAMP`, accountID, userID, provider, enabled)
 	return err
@@ -233,6 +234,7 @@ func (db *DB) MarkContactSyncSuccess(ctx context.Context, userID, accountID, pro
 	enabled := 0
 	if provider == "gmail" {
 		enabled = 1
+		_ = db.Read().QueryRowContext(ctx, `SELECT COALESCE(enabled, 1) FROM account_contact_sync_configs WHERE account_id = ? AND user_id = ?`, accountID, userID).Scan(&enabled)
 	}
 	syncToken = strings.TrimSpace(syncToken)
 	_, err := db.Write().ExecContext(ctx, `
@@ -241,7 +243,7 @@ func (db *DB) MarkContactSyncSuccess(ctx context.Context, userID, accountID, pro
 		ON CONFLICT(account_id) DO UPDATE SET
 			user_id = excluded.user_id,
 			provider = excluded.provider,
-			enabled = CASE WHEN excluded.provider = 'gmail' THEN 1 ELSE account_contact_sync_configs.enabled END,
+			enabled = account_contact_sync_configs.enabled,
 			last_sync_token = CASE WHEN excluded.last_sync_token != '' THEN excluded.last_sync_token ELSE account_contact_sync_configs.last_sync_token END,
 			last_success_at = CURRENT_TIMESTAMP,
 			last_import_count = excluded.last_import_count,
@@ -258,6 +260,7 @@ func (db *DB) MarkContactSyncError(ctx context.Context, userID, accountID, provi
 	enabled := 0
 	if provider == "gmail" {
 		enabled = 1
+		_ = db.Read().QueryRowContext(ctx, `SELECT COALESCE(enabled, 1) FROM account_contact_sync_configs WHERE account_id = ? AND user_id = ?`, accountID, userID).Scan(&enabled)
 	}
 	message = strings.TrimSpace(message)
 	_, err := db.Write().ExecContext(ctx, `
@@ -266,7 +269,7 @@ func (db *DB) MarkContactSyncError(ctx context.Context, userID, accountID, provi
 		ON CONFLICT(account_id) DO UPDATE SET
 			user_id = excluded.user_id,
 			provider = excluded.provider,
-			enabled = CASE WHEN excluded.provider = 'gmail' THEN 1 ELSE account_contact_sync_configs.enabled END,
+			enabled = account_contact_sync_configs.enabled,
 			last_error = excluded.last_error,
 			updated_at = CURRENT_TIMESTAMP`, accountID, userID, provider, enabled, message)
 	return err

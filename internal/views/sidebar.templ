@@ -272,29 +272,44 @@ templ SidebarHeader(accounts []models.Account, activeApp string) {
 				<img src="/assets/logo.svg" alt="Gofer" class="h-8 w-8 shrink-0 p-1"/>
 				<span class="text-lg font-bold tracking-tight text-sidebar-accent-foreground" style="font-family: var(--font-serif)">Gofer</span>
 			</div>
-			@dropdown.Dropdown() {
-				@dropdown.Trigger() {
-					@button.Button(button.Props{
-						Variant: button.VariantGhost,
-						Size:    button.SizeIcon,
-						Class:   "h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-					}) {
-						@icon.Plus(icon.Props{Class: "size-4"})
+			if activeApp == "contacts" {
+				<button
+					type="button"
+					hx-post="/api/settings/contacts/accounts/sync"
+					hx-swap="none"
+					hx-on::before-request="handleContactSidebarSyncStart()"
+					hx-on::after-request="handleContactSidebarSyncResult(event)"
+					class="inline-flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+					aria-label="Sync contacts now"
+					title="Sync contacts now"
+				>
+					@icon.RefreshCw(icon.Props{Class: "size-4"})
+				</button>
+			} else {
+				@dropdown.Dropdown() {
+					@dropdown.Trigger() {
+						@button.Button(button.Props{
+							Variant: button.VariantGhost,
+							Size:    button.SizeIcon,
+							Class:   "h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+						}) {
+							@icon.Plus(icon.Props{Class: "size-4"})
+						}
 					}
-				}
-				@dropdown.Content() {
-					@dropdown.Item() {
-						<a href="/" class="flex items-center gap-2 w-full">
-							@icon.MailPlus(icon.Props{Class: "size-4"})
-							Compose Email
-						</a>
-					}
-					@dropdown.Separator()
-					@dropdown.Item() {
-						<a href="/" class="flex items-center gap-2 w-full">
-							@icon.FolderPlus(icon.Props{Class: "size-4"})
-							New Folder
-						</a>
+					@dropdown.Content() {
+						@dropdown.Item() {
+							<a href="/" class="flex items-center gap-2 w-full">
+								@icon.MailPlus(icon.Props{Class: "size-4"})
+								Compose Email
+							</a>
+						}
+						@dropdown.Separator()
+						@dropdown.Item() {
+							<a href="/" class="flex items-center gap-2 w-full">
+								@icon.FolderPlus(icon.Props{Class: "size-4"})
+								New Folder
+							</a>
+						}
 					}
 				}
 			}
@@ -362,7 +377,9 @@ templ SidebarFolderTree(accounts []models.Account, activeFolder string, uiSettin
 	<nav class="flex-1 overflow-y-auto px-3 pt-2 pb-3">
 		@SidebarUnifiedSection(accounts, activeFolder, uiSettings)
 		for _, account := range accounts {
-			@SidebarAccountSection(account, activeFolder, uiSettings)
+			if account.EmailSyncEnabled {
+				@SidebarAccountSection(account, activeFolder, uiSettings)
+			}
 		}
 	</nav>
 }
