@@ -873,6 +873,43 @@
   100% { transform: translateY(0); opacity: 1; }
 }
 
+.mail-filter-tristate {
+  border-radius: var(--radius);
+}
+
+.mail-filter-tristate [data-mail-tristate-option],
+.mail-filter-tristate-indicator {
+  border-radius: calc(var(--radius) * 0.75);
+}
+
+.mail-filter-tristate [data-mail-tristate-option] {
+  transition: color 200ms ease;
+}
+
+.mail-filter-tristate-indicator {
+  position: absolute;
+  top: 0.125rem;
+  bottom: 0.125rem;
+  left: 0.125rem;
+  width: calc((100% - 0.25rem) / 3);
+  pointer-events: none;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  transform: translateX(100%);
+  transition: transform 200ms ease;
+}
+
+[data-mail-tristate-value="unread"] > .mail-filter-tristate-indicator,
+[data-mail-tristate-value="no"] > .mail-filter-tristate-indicator {
+  transform: translateX(0);
+}
+
+[data-mail-tristate-value="read"] > .mail-filter-tristate-indicator,
+[data-mail-tristate-value="yes"] > .mail-filter-tristate-indicator {
+  transform: translateX(200%);
+}
+
 .account-color-marker {
   border-radius: 9999px;
 }

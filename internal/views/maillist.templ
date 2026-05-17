@@ -100,18 +100,20 @@ templ MailListToolbar(viewMode string) {
 					<div class="grid gap-2 px-2">
 						<div class="space-y-1">
 							<div class="text-[11px] font-medium text-muted-foreground">Status</div>
-							<div class="inline-grid h-7 w-full grid-cols-3 rounded-md border border-border bg-background p-0.5 text-[11px]" data-mail-tristate="status" data-mail-tristate-value="">
-								<button type="button" data-mail-tristate-option="unread" class="rounded px-1.5 text-muted-foreground hover:text-foreground">Unread</button>
-								<button type="button" data-mail-tristate-option="" class="rounded px-1.5 bg-card text-foreground shadow-sm">Any</button>
-								<button type="button" data-mail-tristate-option="read" class="rounded px-1.5 text-muted-foreground hover:text-foreground">Read</button>
+							<div class="mail-filter-tristate relative inline-grid h-7 w-full grid-cols-3 overflow-hidden border border-border bg-background p-0.5 text-[11px]" data-mail-tristate="status" data-mail-tristate-value="">
+								<div class="mail-filter-tristate-indicator" data-mail-tristate-indicator></div>
+								<button type="button" data-mail-tristate-option="unread" class="relative z-10 px-1.5 text-muted-foreground hover:text-foreground">Unread</button>
+								<button type="button" data-mail-tristate-option="" class="relative z-10 px-1.5 text-foreground">Any</button>
+								<button type="button" data-mail-tristate-option="read" class="relative z-10 px-1.5 text-muted-foreground hover:text-foreground">Read</button>
 							</div>
 						</div>
 						<div class="space-y-1">
 							<div class="text-[11px] font-medium text-muted-foreground">Attachments</div>
-							<div class="inline-grid h-7 w-full grid-cols-3 rounded-md border border-border bg-background p-0.5 text-[11px]" data-mail-tristate="attachments" data-mail-tristate-value="">
-								<button type="button" data-mail-tristate-option="no" class="rounded px-1.5 text-muted-foreground hover:text-foreground">No</button>
-								<button type="button" data-mail-tristate-option="" class="rounded px-1.5 bg-card text-foreground shadow-sm">Any</button>
-								<button type="button" data-mail-tristate-option="yes" class="rounded px-1.5 text-muted-foreground hover:text-foreground">Yes</button>
+							<div class="mail-filter-tristate relative inline-grid h-7 w-full grid-cols-3 overflow-hidden border border-border bg-background p-0.5 text-[11px]" data-mail-tristate="attachments" data-mail-tristate-value="">
+								<div class="mail-filter-tristate-indicator" data-mail-tristate-indicator></div>
+								<button type="button" data-mail-tristate-option="no" class="relative z-10 px-1.5 text-muted-foreground hover:text-foreground">No</button>
+								<button type="button" data-mail-tristate-option="" class="relative z-10 px-1.5 text-foreground">Any</button>
+								<button type="button" data-mail-tristate-option="yes" class="relative z-10 px-1.5 text-muted-foreground hover:text-foreground">Yes</button>
 							</div>
 						</div>
 						<div class="grid grid-cols-3 gap-6 pt-0.5 text-center">

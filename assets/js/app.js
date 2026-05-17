@@ -615,9 +615,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var buttons = control.querySelectorAll("[data-mail-tristate-option]")
       for (var i = 0; i < buttons.length; i++) {
         var active = buttons[i].getAttribute("data-mail-tristate-option") === (value || "")
-        buttons[i].classList.toggle("bg-card", active)
         buttons[i].classList.toggle("text-foreground", active)
-        buttons[i].classList.toggle("shadow-sm", active)
         buttons[i].classList.toggle("text-muted-foreground", !active)
       }
     }

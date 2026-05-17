@@ -268,3 +268,13 @@
 [data-theme="minimal"] label:has(input[role="switch"]:checked) > div::after {
   translate: 1.0625rem 0;
 }
+
+[data-theme="minimal"] label:has(input[data-mail-filter-input][role="switch"]) > div::after {
+  height: 0.75rem;
+  width: 0.75rem;
+  margin-left: 0;
+}
+
+[data-theme="minimal"] label:has(input[data-mail-filter-input][role="switch"]:checked) > div::after {
+  translate: 1rem 0;
+}
