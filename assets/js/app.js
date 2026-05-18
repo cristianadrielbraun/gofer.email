@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", function () {
   setupProcessingStatus()
   setupBodyPrefetch()
   setupEmailBodyModeTabs()
+  setupMailSyncCancelControls()
   refreshSidebarUnread()
 
   function setupContactsList() {
@@ -1043,6 +1044,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var data
       try { data = JSON.parse(e.data) } catch (_) { return }
       if (!data || !data.folder_id) return
+      updateMailSyncFolderProgress("started", data)
       syncStatesByFolder[data.folder_id] = {
         active: true,
         current: data.current || 0,
@@ -1059,6 +1061,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var data
       try { data = JSON.parse(e.data) } catch (_) { return }
       if (!data || !data.folder_id) return
+      updateMailSyncFolderProgress("progress", data)
       syncStatesByFolder[data.folder_id] = {
         active: true,
         current: data.current || 0,
@@ -1075,6 +1078,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var data
       try { data = JSON.parse(e.data) } catch (_) { return }
       if (!data || !data.folder_id) return
+      updateMailSyncFolderProgress("complete", data)
       syncStatesByFolder[data.folder_id] = {
         active: false,
         current: 0,
@@ -2056,6 +2060,8 @@ function _goferToastIcon(icon) {
 
 function dismissGoferToast(toast) {
   if (!toast || !toast.isConnected) return
+  if (toast._goferToastDismissing) return
+  toast._goferToastDismissing = true
   if (toast._goferToastTimer) clearTimeout(toast._goferToastTimer)
   toast.style.transition = "opacity 300ms, transform 300ms"
   toast.style.opacity = "0"
@@ -2063,12 +2069,28 @@ function dismissGoferToast(toast) {
   setTimeout(function () { if (toast.isConnected) toast.remove() }, 300)
 }
 
+function removeGoferToastNow(toast) {
+  if (!toast || !toast.isConnected) return
+  if (toast._goferToastTimer) clearTimeout(toast._goferToastTimer)
+  toast.remove()
+}
+
 function showGoferToast(opts) {
   opts = opts || {}
   var id = opts.id || "gofer-toast-" + Date.now()
   var existing = document.getElementById(id)
-  if (existing) dismissGoferToast(existing)
+  while (existing) {
+    removeGoferToastNow(existing)
+    existing = document.getElementById(id)
+  }
   var duration = Number(opts.duration || 0)
+  var actionHTML = ""
+  if (opts.actionLabel || opts.secondaryActionLabel) {
+    actionHTML = '<div class="mt-2 flex items-center gap-3 text-xs font-semibold">'
+    if (opts.actionLabel) actionHTML += '<span class="underline underline-offset-2">' + _escapeComposeHTML(opts.actionLabel) + '</span>'
+    if (opts.secondaryActionLabel) actionHTML += '<button type="button" class="text-xs font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 disabled:opacity-50" data-gofer-toast-secondary' + (opts.secondaryActionDisabled ? ' disabled aria-disabled="true"' : '') + '>' + _escapeComposeHTML(opts.secondaryActionLabel) + '</button>'
+    actionHTML += '</div>'
+  }
   var toast = document.createElement("div")
   toast.id = id
   toast.dataset.tuiToast = ""
@@ -2076,6 +2098,7 @@ function showGoferToast(opts) {
   toast.dataset.position = opts.position || "top-center"
   toast.dataset.variant = opts.variant || "default"
   toast.className = "z-50 fixed pointer-events-auto p-4 w-fit max-w-[calc(100vw-2rem)] md:max-w-[680px] animate-in fade-in slide-in-from-bottom-4 duration-300 data-[position=top-right]:top-0 data-[position=top-right]:right-0 data-[position=top-left]:top-0 data-[position=top-left]:left-0 data-[position=top-center]:top-0 data-[position=top-center]:left-1/2 data-[position=top-center]:-translate-x-1/2 data-[position=bottom-right]:bottom-0 data-[position=bottom-right]:right-0 data-[position=bottom-left]:bottom-0 data-[position=bottom-left]:left-0 data-[position=bottom-center]:bottom-0 data-[position=bottom-center]:left-1/2 data-[position=bottom-center]:-translate-x-1/2 data-[position*=top]:slide-in-from-top-4 data-[position*=bottom]:slide-in-from-bottom-4"
+  if (opts.width) toast.style.width = opts.width
   toast.innerHTML =
     '<div class="gofer-toast-card" data-variant="' + _escapeComposeHTML(opts.variant || "default") + '">' +
       (duration > 0 ? '<div class="gofer-toast-progress-wrap"><div class="toast-progress gofer-toast-progress" data-variant="' + _escapeComposeHTML(opts.variant || "default") + '"></div></div>' : '') +
@@ -2083,11 +2106,39 @@ function showGoferToast(opts) {
       '<span class="flex-1 min-w-0">' +
         (opts.title ? '<p class="text-sm font-semibold truncate">' + _escapeComposeHTML(opts.title) + '</p>' : '') +
         (opts.description ? '<p class="text-sm opacity-90 mt-1">' + _escapeComposeHTML(opts.description) + '</p>' : '') +
+        actionHTML +
       '</span>' +
       (opts.dismissible ? '<button type="button" class="gofer-toast-dismiss" aria-label="Close" data-tui-toast-dismiss>x</button>' : '') +
     '</div>'
   var dismiss = toast.querySelector("[data-tui-toast-dismiss]")
   if (dismiss) dismiss.addEventListener("click", function () { dismissGoferToast(toast) })
+  var secondary = toast.querySelector("[data-gofer-toast-secondary]")
+  if (secondary && !opts.secondaryActionDisabled && typeof opts.onSecondaryAction === "function") {
+    secondary.addEventListener("click", function (e) {
+      e.preventDefault()
+      e.stopPropagation()
+      opts.onSecondaryAction(e)
+    })
+  }
+  if (typeof opts.onClick === "function") {
+    var card = toast.querySelector(".gofer-toast-card")
+    if (card) {
+      card.setAttribute("role", "button")
+      card.setAttribute("tabindex", "0")
+      card.style.cursor = "pointer"
+      card.addEventListener("click", function (e) {
+        if (e.target && e.target.closest && e.target.closest("[data-tui-toast-dismiss]")) return
+        if (e.target && e.target.closest && e.target.closest("[data-gofer-toast-secondary]")) return
+        opts.onClick(e)
+      })
+      card.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" && e.key !== " ") return
+        if (e.target && e.target.closest && e.target.closest("[data-gofer-toast-secondary]")) return
+        e.preventDefault()
+        opts.onClick(e)
+      })
+    }
+  }
   document.body.appendChild(toast)
   if (duration > 0) {
     var progress = toast.querySelector(".gofer-toast-progress")
@@ -2104,6 +2155,82 @@ function showGoferToast(opts) {
 
 var _mailSyncRunID = ""
 var _mailSyncActive = false
+var _mailSyncCancelRequested = false
+var _mailSyncState = createMailSyncProgressState("")
+
+function createMailSyncProgressState(runID) {
+  return {
+    runID: runID || "",
+    active: false,
+    status: "idle",
+    startedAt: 0,
+    completedAt: 0,
+    total: 0,
+    done: 0,
+    parallelism: 0,
+    failures: 0,
+    skipped: 0,
+    cancelled: 0,
+    notDone: 0,
+    accounts: Object.create(null),
+    accountOrder: [],
+  }
+}
+
+function resetMailSyncProgressState(runID) {
+  _mailSyncCancelRequested = false
+  _mailSyncState = createMailSyncProgressState(runID || "")
+  _mailSyncState.active = true
+  _mailSyncState.status = "syncing"
+  _mailSyncState.startedAt = Date.now()
+  renderMailSyncProgressDialog()
+}
+
+function stopMailSyncProgressState(status) {
+  _mailSyncState.active = false
+  _mailSyncState.status = status || _mailSyncState.status || "idle"
+  _mailSyncState.completedAt = Date.now()
+  renderMailSyncProgressDialog()
+}
+
+function setupMailSyncCancelControls() {
+  document.addEventListener("click", function (e) {
+    var button = e.target && e.target.closest ? e.target.closest("[data-mail-sync-cancel]") : null
+    if (!button) return
+    e.preventDefault()
+    cancelMailSync()
+  })
+}
+
+function cancelMailSync() {
+  if (_mailSyncCancelRequested || !(_mailSyncRunID || _mailSyncState.runID)) return
+  _mailSyncCancelRequested = true
+  renderMailSyncProgressDialog()
+  showMailSyncToast({
+    id: "mail-sync-toast",
+    title: "Cancelling mail sync",
+    description: "Stopping the foreground sync...",
+    variant: "info",
+    icon: "spinner",
+    position: "bottom-right",
+    duration: 0,
+    dismissible: false,
+  })
+  fetch("/api/mail/sync/cancel", { method: "POST" }).catch(function () {
+    _mailSyncCancelRequested = false
+    renderMailSyncProgressDialog()
+    showGoferToast({
+      id: "mail-sync-toast",
+      title: "Could not cancel sync",
+      description: "Try again in a moment.",
+      variant: "error",
+      icon: "error",
+      position: "bottom-right",
+      duration: 6000,
+      dismissible: true,
+    })
+  })
+}
 
 function _goferResponseText(xhr, fallback) {
   if (xhr && xhr.responseText) {
@@ -2123,6 +2250,271 @@ function _mailSyncAccountsLabel(count) {
   return count === 1 ? "1 account" : count + " accounts"
 }
 
+function showMailSyncToast(opts) {
+  opts = opts || {}
+  opts.width = opts.width || "min(24rem, calc(100vw - 2rem))"
+  opts.onClick = openMailSyncProgressDialog
+  opts.actionLabel = opts.actionLabel || "View progress"
+  if (opts.cancelable && !_mailSyncCancelRequested) {
+    opts.secondaryActionLabel = opts.secondaryActionLabel || "Cancel"
+    opts.onSecondaryAction = opts.onSecondaryAction || cancelMailSync
+    opts.secondaryActionDisabled = !(_mailSyncRunID || _mailSyncState.runID)
+  }
+  return showGoferToast(opts)
+}
+
+function _mailSyncStatusLabel(status) {
+  if (status === "synced" || status === "complete") return "Done"
+  if (status === "cancelled") return "Cancelled"
+  if (status === "error") return "Failed"
+  if (status === "skipped") return "Already running"
+  if (status === "queued") return "Queued"
+  if (status === "syncing") return "Syncing"
+  return "Waiting"
+}
+
+function _mailSyncStatusClass(status) {
+  if (status === "synced" || status === "complete") return "text-emerald-600 dark:text-emerald-400"
+  if (status === "error") return "text-destructive"
+  if (status === "skipped" || status === "cancelled") return "text-amber-600 dark:text-amber-400"
+  return "text-muted-foreground"
+}
+
+function _mailSyncAccountLabel(accountID) {
+  var sections = document.querySelectorAll("[data-sidebar-account]")
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].getAttribute("data-sidebar-account") !== accountID) continue
+    var label = sections[i].querySelector("[data-sidebar-account-toggle] .flex-1")
+    if (label && label.textContent.trim()) return label.textContent.trim()
+  }
+  return accountID || "Account"
+}
+
+function _mailSyncFolderLabel(folderID, role) {
+  var links = document.querySelectorAll('a[hx-get^="/folder/"]')
+  for (var i = 0; i < links.length; i++) {
+    if (links[i].getAttribute("hx-get") !== "/folder/" + folderID) continue
+    var label = links[i].querySelector(".flex-1")
+    if (label && label.textContent.trim()) return label.textContent.trim()
+  }
+  if (role) return role.charAt(0).toUpperCase() + role.slice(1)
+  return folderID || "Folder"
+}
+
+function _mailSyncAccountFolderTotal(accountID) {
+  if (!accountID) return 0
+  var sections = document.querySelectorAll("[data-sidebar-account]")
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].getAttribute("data-sidebar-account") !== accountID) continue
+    return sections[i].querySelectorAll('a[hx-get^="/folder/"]').length
+  }
+  return 0
+}
+
+function _mailSyncCompletedFolderCount(account) {
+  var count = 0
+  var ids = account && account.folderOrder ? account.folderOrder : []
+  for (var i = 0; i < ids.length; i++) {
+    var folder = account.folders[ids[i]]
+    if (folder && folder.status === "complete") count++
+  }
+  return count
+}
+
+function _mailSyncAccountProgressPercent(account) {
+  if (!account) return 0
+  if (account.status === "synced" || account.status === "complete" || account.status === "skipped" || account.status === "error" || account.status === "cancelled") return 100
+  var total = _mailSyncCount(account.totalFolders) || account.folderOrder.length
+  var done = Math.min(_mailSyncCount(account.syncedFolders), total)
+  if (total > 0) return Math.max(account.status === "syncing" ? 8 : 0, Math.min(100, Math.round((done / total) * 100)))
+  return account.status === "syncing" ? 28 : 0
+}
+
+function _mailSyncAccountFolderMeta(account) {
+  var total = _mailSyncCount(account.totalFolders) || account.folderOrder.length
+  var done = Math.min(_mailSyncCount(account.syncedFolders), total)
+  if (account.status === "queued") return "Waiting for account"
+  if (account.status === "skipped") return "Already running"
+  if (account.status === "cancelled") return total ? ("Cancelled after " + done + " / " + total + " folders") : "Cancelled"
+  if (account.status === "error") return total ? (done + " / " + total + " folders before error") : "Sync failed"
+  if (!total) return account.status === "syncing" ? "Checking folders..." : _mailSyncStatusLabel(account.status)
+  return "Synced " + done + " / " + total + " folders"
+}
+
+function ensureMailSyncAccount(accountID, index) {
+  accountID = accountID || "__unknown__"
+  var account = _mailSyncState.accounts[accountID]
+  if (!account) {
+    account = {
+      id: accountID,
+      index: index || _mailSyncState.accountOrder.length + 1,
+      label: _mailSyncAccountLabel(accountID),
+      status: "queued",
+      totalFolders: _mailSyncAccountFolderTotal(accountID),
+      syncedFolders: 0,
+      currentFolderLabel: "",
+      folders: Object.create(null),
+      folderOrder: [],
+      error: "",
+    }
+    _mailSyncState.accounts[accountID] = account
+    _mailSyncState.accountOrder.push(accountID)
+  } else if (index && (!account.index || index < account.index)) {
+    account.index = index
+  }
+  return account
+}
+
+function updateMailSyncStateFromManual(phase, data) {
+  var runID = data && data.run_id ? data.run_id : ""
+  if (phase === "started" || (runID && _mailSyncState.runID && _mailSyncState.runID !== runID)) {
+    resetMailSyncProgressState(runID)
+  } else if (runID && !_mailSyncState.runID) {
+    _mailSyncState.runID = runID
+  }
+
+  _mailSyncState.active = phase !== "complete"
+  _mailSyncState.status = phase === "complete" ? (data.status || "ok") : "syncing"
+  _mailSyncState.total = _mailSyncCount(data.accounts_total) || _mailSyncState.total
+  _mailSyncState.done = _mailSyncCount(data.accounts_done)
+  _mailSyncState.parallelism = _mailSyncCount(data.parallelism) || _mailSyncState.parallelism
+  _mailSyncState.failures = _mailSyncCount(data.failures)
+  _mailSyncState.skipped = _mailSyncCount(data.skipped)
+  _mailSyncState.cancelled = _mailSyncCount(data.cancelled)
+  _mailSyncState.notDone = _mailSyncCount(data.not_done)
+  if (!_mailSyncState.startedAt) _mailSyncState.startedAt = Date.now()
+  if (phase === "complete") _mailSyncState.completedAt = Date.now()
+
+  if (data.account_id) {
+    var account = ensureMailSyncAccount(data.account_id, _mailSyncCount(data.account_index))
+    account.status = data.status || account.status
+    account.error = data.error || account.error || ""
+    account.totalFolders = _mailSyncCount(data.account_folders_total) || account.totalFolders || _mailSyncAccountFolderTotal(data.account_id)
+    account.syncedFolders = _mailSyncCount(data.account_folders_done) || account.syncedFolders
+    if (account.status === "synced" && account.totalFolders) account.syncedFolders = account.totalFolders
+  }
+  renderMailSyncProgressDialog()
+}
+
+function updateMailSyncFolderProgress(phase, data) {
+  if (!_mailSyncActive && !_mailSyncState.active) return
+  if (!data || !data.account_id || !data.folder_id) return
+  var account = ensureMailSyncAccount(data.account_id, 0)
+  if (account.status === "queued") account.status = "syncing"
+  if (data.account_folders_total) account.totalFolders = _mailSyncCount(data.account_folders_total)
+  if (!account.totalFolders) account.totalFolders = _mailSyncAccountFolderTotal(data.account_id)
+  var folder = account.folders[data.folder_id]
+  if (!folder) {
+    folder = {
+      id: data.folder_id,
+      label: data.current_folder || _mailSyncFolderLabel(data.folder_id, data.folder_role || ""),
+      role: data.folder_role || "",
+      status: "syncing",
+      current: 0,
+      total: 0,
+      updatedAt: Date.now(),
+    }
+    account.folders[data.folder_id] = folder
+    account.folderOrder.push(data.folder_id)
+  }
+  if (data.current_folder) folder.label = data.current_folder
+  folder.status = phase === "complete" ? "complete" : "syncing"
+  folder.current = _mailSyncCount(data.current)
+  folder.total = _mailSyncCount(data.total) || folder.total
+  folder.updatedAt = Date.now()
+  account.currentFolderLabel = folder.label
+  if (data.account_folders_done) account.syncedFolders = _mailSyncCount(data.account_folders_done)
+  else account.syncedFolders = _mailSyncCompletedFolderCount(account)
+  renderMailSyncProgressDialog()
+}
+
+function openMailSyncProgressDialog() {
+  var dialog = document.getElementById("mail-sync-progress-dialog")
+  if (!dialog) return
+  renderMailSyncProgressDialog()
+  if (window.tui && window.tui.dialog) {
+    window.tui.dialog.open("mail-sync-progress-dialog")
+    return
+  }
+  var content = dialog.querySelector("[data-tui-dialog-content]")
+  if (!content || content.open) return
+  try { content.showModal() } catch (_) {}
+}
+
+function closeMailSyncProgressDialog() {
+  var dialog = document.getElementById("mail-sync-progress-dialog")
+  if (!dialog) return
+  if (window.tui && window.tui.dialog) {
+    window.tui.dialog.close("mail-sync-progress-dialog")
+    return
+  }
+  var content = dialog.querySelector("[data-tui-dialog-content]")
+  if (content && content.open) content.close()
+}
+
+function renderMailSyncProgressDialog() {
+  var dialog = document.getElementById("mail-sync-progress-dialog")
+  if (!dialog) return
+  var total = _mailSyncState.total || _mailSyncState.accountOrder.length
+  var done = _mailSyncState.done || 0
+  var pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : (_mailSyncState.active ? 5 : 100)
+  var subtitle = "Sync finished with issues"
+  if (_mailSyncState.active) subtitle = "Sync is running"
+  else if (_mailSyncState.status === "ok") subtitle = "Sync finished"
+  else if (_mailSyncState.status === "cancelled") subtitle = "Sync cancelled"
+  else if (_mailSyncState.status === "already-running") subtitle = "Mail sync is already running"
+  else if (_mailSyncState.status === "error" && total === 0) subtitle = "Sync could not start"
+  if (_mailSyncState.parallelism > 1 && _mailSyncState.active) subtitle += ", up to " + _mailSyncState.parallelism + " accounts at a time"
+  var subtitleEl = dialog.querySelector("[data-mail-sync-dialog-subtitle]")
+  var summaryEl = dialog.querySelector("[data-mail-sync-dialog-summary]")
+  var percentEl = dialog.querySelector("[data-mail-sync-dialog-percent]")
+  var barEl = dialog.querySelector("[data-mail-sync-dialog-bar]")
+  var cancelButtons = dialog.querySelectorAll("[data-mail-sync-cancel]")
+  if (subtitleEl) subtitleEl.textContent = subtitle
+  if (summaryEl) {
+    if (total) summaryEl.textContent = done + " of " + total + " accounts checked"
+    else if (_mailSyncState.active) summaryEl.textContent = "Preparing account sync..."
+    else if (_mailSyncState.status === "already-running") summaryEl.textContent = "Another sync is already running."
+    else if (_mailSyncState.status === "error") summaryEl.textContent = "Could not start mail sync."
+    else summaryEl.textContent = "No account progress available."
+  }
+  if (percentEl) percentEl.textContent = pct + "%"
+  if (barEl) barEl.style.width = pct + "%"
+  var canCancel = _mailSyncState.active && !!(_mailSyncRunID || _mailSyncState.runID)
+  for (var cancelIndex = 0; cancelIndex < cancelButtons.length; cancelIndex++) {
+    cancelButtons[cancelIndex].classList.toggle("hidden", !canCancel)
+    cancelButtons[cancelIndex].disabled = _mailSyncCancelRequested
+    cancelButtons[cancelIndex].textContent = _mailSyncCancelRequested ? "Cancelling..." : "Cancel"
+  }
+
+  var accountsEl = dialog.querySelector("[data-mail-sync-dialog-accounts]")
+  if (!accountsEl) return
+  var ids = _mailSyncState.accountOrder.slice().sort(function (a, b) {
+    return (_mailSyncState.accounts[a].index || 0) - (_mailSyncState.accounts[b].index || 0)
+  })
+  if (!ids.length) {
+    accountsEl.innerHTML = '<div class="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Waiting for account progress...</div>'
+    return
+  }
+  var html = ""
+  for (var i = 0; i < ids.length; i++) {
+    var account = _mailSyncState.accounts[ids[i]]
+    var accountPct = _mailSyncAccountProgressPercent(account)
+    var folderMeta = _mailSyncAccountFolderMeta(account)
+    html += '<div class="rounded-lg border border-border bg-background/45 p-3">' +
+      '<div class="flex items-center justify-between gap-3">' +
+        '<div class="min-w-0"><div class="truncate text-sm font-semibold">' + _escapeComposeHTML(account.label) + '</div>' +
+        '<div class="mt-1 truncate text-xs text-muted-foreground">' + _escapeComposeHTML(folderMeta) + '</div>' +
+        (account.currentFolderLabel && account.status === "syncing" ? '<div class="mt-1 truncate text-xs text-muted-foreground">Current: ' + _escapeComposeHTML(account.currentFolderLabel) + '</div>' : '') +
+        (account.error ? '<div class="mt-1 truncate text-xs text-destructive">' + _escapeComposeHTML(account.error) + '</div>' : '') + '</div>' +
+        '<div class="shrink-0 text-xs font-medium ' + _mailSyncStatusClass(account.status) + '">' + _mailSyncStatusLabel(account.status) + '</div>' +
+      '</div>' +
+      '<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary transition-all" style="width:' + accountPct + '%"></div></div>'
+    html += '</div>'
+  }
+  accountsEl.innerHTML = html
+}
+
 function _setMailSyncButtonBusy(busy) {
   var buttons = document.querySelectorAll("[data-mail-sidebar-sync-button]")
   for (var i = 0; i < buttons.length; i++) {
@@ -2135,8 +2527,9 @@ function _setMailSyncButtonBusy(busy) {
 function handleMailSidebarSyncStart() {
   _mailSyncRunID = ""
   _mailSyncActive = true
+  resetMailSyncProgressState("")
   _setMailSyncButtonBusy(true)
-  showGoferToast({
+  showMailSyncToast({
     id: "mail-sync-toast",
     title: "Syncing mail",
     description: "Checking connected mailboxes...",
@@ -2145,6 +2538,7 @@ function handleMailSidebarSyncStart() {
     position: "bottom-right",
     duration: 0,
     dismissible: false,
+    cancelable: true,
   })
 }
 
@@ -2155,6 +2549,7 @@ function handleMailSidebarSyncResult(event) {
   if (!ok) {
     _mailSyncActive = false
     _mailSyncRunID = ""
+    stopMailSyncProgressState("error")
     _setMailSyncButtonBusy(false)
     showGoferToast({
       id: "mail-sync-toast",
@@ -2172,6 +2567,7 @@ function handleMailSidebarSyncResult(event) {
   if (xhr && xhr.getResponseHeader("X-Gofer-Mail-Sync-Running") === "true") {
     _mailSyncActive = false
     _mailSyncRunID = ""
+    stopMailSyncProgressState("already-running")
     _setMailSyncButtonBusy(false)
     showGoferToast({
       id: "mail-sync-toast",
@@ -2187,7 +2583,8 @@ function handleMailSidebarSyncResult(event) {
   }
 
   _mailSyncRunID = xhr ? (xhr.getResponseHeader("X-Gofer-Mail-Sync-Run-ID") || "") : ""
-  showGoferToast({
+  if (_mailSyncRunID) _mailSyncState.runID = _mailSyncRunID
+  showMailSyncToast({
     id: "mail-sync-toast",
     title: "Syncing mail",
     description: message,
@@ -2196,6 +2593,7 @@ function handleMailSidebarSyncResult(event) {
     position: "bottom-right",
     duration: 0,
     dismissible: false,
+    cancelable: true,
   })
 }
 
@@ -2207,6 +2605,7 @@ function handleMailManualSyncEvent(phase, data) {
   if (!_mailSyncRunID && runID) _mailSyncRunID = runID
   _mailSyncActive = true
   _setMailSyncButtonBusy(true)
+  updateMailSyncStateFromManual(phase, data)
 
   var total = _mailSyncCount(data.accounts_total)
   var done = _mailSyncCount(data.accounts_done)
@@ -2214,22 +2613,27 @@ function handleMailManualSyncEvent(phase, data) {
   var parallelism = _mailSyncCount(data.parallelism)
   var failures = _mailSyncCount(data.failures)
   var skipped = _mailSyncCount(data.skipped)
+  var cancelled = _mailSyncCount(data.cancelled)
   var notDone = _mailSyncCount(data.not_done)
 
   if (phase === "complete") {
     var status = data.status || "ok"
-    var title = status === "error" ? "Mail sync failed" : (status === "partial" ? "Mail sync partly finished" : "Mail synced")
-    var variant = status === "error" ? "error" : (status === "partial" ? "warning" : "success")
-    var icon = status === "error" ? "error" : (status === "partial" ? "warning" : "success")
+    var title = status === "cancelled" ? "Mail sync cancelled" : (status === "error" ? "Mail sync failed" : (status === "partial" ? "Mail sync partly finished" : "Mail synced"))
+    var variant = status === "error" ? "error" : (status === "partial" || status === "cancelled" ? "warning" : "success")
+    var icon = status === "error" ? "error" : (status === "partial" || status === "cancelled" ? "warning" : "success")
     var description = "Checked " + _mailSyncAccountsLabel(total || done) + "."
+    if (status === "cancelled" && total) description = "Stopped after checking " + done + " of " + total + " accounts."
+    else if (status === "cancelled") description = "Mail sync was stopped."
     if (failures > 0 && skipped > 0) description += " " + failures + " failed, " + skipped + " already running."
     else if (failures > 0) description += " " + failures + " failed."
     else if (skipped > 0) description += " " + skipped + " already running."
+    if (cancelled > 0) description += " " + cancelled + " cancelled."
     if (notDone > 0) description += " " + notDone + " did not finish."
     _mailSyncActive = false
+    _mailSyncCancelRequested = false
     _mailSyncRunID = ""
     _setMailSyncButtonBusy(false)
-    showGoferToast({
+    showMailSyncToast({
       id: "mail-sync-toast",
       title: title,
       description: description,
@@ -2252,15 +2656,16 @@ function handleMailManualSyncEvent(phase, data) {
     else if (data.status === "error") message = "Account failed (" + done + " / " + total + ")."
     else if (done && total) message = "Checked " + done + " of " + total + " accounts."
   }
-  showGoferToast({
+  showMailSyncToast({
     id: "mail-sync-toast",
-    title: "Syncing mail",
-    description: message,
+    title: _mailSyncCancelRequested ? "Cancelling mail sync" : "Syncing mail",
+    description: _mailSyncCancelRequested ? "Stopping the foreground sync..." : message,
     variant: "info",
     icon: "spinner",
     position: "bottom-right",
     duration: 0,
     dismissible: false,
+    cancelable: !_mailSyncCancelRequested,
   })
 }
 

@@ -59,6 +59,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			@ChooseAccountTypeDialog()
 			@GmailAccountDialog()
 			@AddAccountDialog()
+			@MailSyncProgressDialog()
 			<div id="edit-account-container"></div>
 			<script src="/assets/js/htmx.min.js"></script>
 			<script src="/assets/js/virtual-scroll.js"></script>
@@ -97,6 +98,34 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			</script>
 		</body>
 	</html>
+}
+
+templ MailSyncProgressDialog() {
+	@dialog.Dialog(dialog.Props{ID: "mail-sync-progress-dialog"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-2xl max-h-[calc(100vh-2rem)]"}) {
+			@dialog.Header() {
+				@dialog.Title() { Mail sync progress }
+				@dialog.Description() {
+					<span class="inline-flex items-center gap-2">
+						<span data-mail-sync-dialog-subtitle>Waiting for sync details...</span>
+						<button type="button" class="hidden text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-60" data-mail-sync-cancel>Cancel</button>
+					</span>
+				}
+			}
+			<div class="min-h-0 space-y-4">
+				<div class="space-y-2">
+					<div class="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+						<span data-mail-sync-dialog-summary>Preparing...</span>
+						<span data-mail-sync-dialog-percent>0%</span>
+					</div>
+					<div class="h-2 overflow-hidden rounded-full bg-muted">
+						<div class="h-full rounded-full bg-primary transition-all" data-mail-sync-dialog-bar style="width:0%"></div>
+					</div>
+				</div>
+				<div class="min-h-0 space-y-2 overflow-y-auto" style="max-height:min(28rem,calc(100vh - 14rem))" data-mail-sync-dialog-accounts></div>
+			</div>
+		}
+	}
 }
 
 templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings, activeTab string, uiSettings map[string]string, signatureData []models.AccountSignatureData) {

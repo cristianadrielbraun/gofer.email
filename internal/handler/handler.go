@@ -186,6 +186,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /compose/attachments/{id}", h.handleComposeAttachmentDelete)
 	mux.HandleFunc("GET /api/events", h.handleSSE)
 	mux.HandleFunc("POST /api/mail/sync", h.handleSyncMail)
+	mux.HandleFunc("POST /api/mail/sync/cancel", h.handleCancelSyncMail)
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 	mux.HandleFunc("GET /api/system/processing", h.handleProcessingStatus)
 	mux.HandleFunc("POST /api/messages/{id}/prefetch-body", h.handlePrefetchBody)
@@ -2747,6 +2748,14 @@ func (h *Handler) handleSyncMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	htmlStatus(w, http.StatusOK, fmt.Sprintf("Mail sync started for %d accounts.", len(accountIDs)))
+}
+
+func (h *Handler) handleCancelSyncMail(w http.ResponseWriter, r *http.Request) {
+	if h.syncer.CancelManualSync(h.userID(r.Context())) {
+		htmlStatus(w, http.StatusOK, "Mail sync cancellation requested.")
+		return
+	}
+	htmlStatus(w, http.StatusOK, "No mail sync is running.")
 }
 
 func (h *Handler) handleProcessingStatus(w http.ResponseWriter, r *http.Request) {
