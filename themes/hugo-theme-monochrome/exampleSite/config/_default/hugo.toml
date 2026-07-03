@@ -1,0 +1,18 @@
+baseURL = "https://example.com"
+locale = "en"
+title = "Monochrome"
+theme = "hugo-theme-monochrome"
+defaultContentLanguage = "en"
+enableEmoji = true
+enableGitInfo = true
+
+[pagination]
+pagerSize = 5
+
+[taxonomies]
+category = "categories"
+tag = "tags"
+series = "series"
+
+[outputs]
+home = ["HTML", "RSS", "JSON"]

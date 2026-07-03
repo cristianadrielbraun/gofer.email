@@ -1,0 +1,172 @@
+{{ define "content" }}
+<div class="gofer-landing">
+    <div class="gofer-page-top">
+        <a class="gofer-body-brand" href="{{ .Site.Home.RelPermalink }}" aria-label="Gofer home">
+            <img src="/images/gofer-logo.svg" width="42" height="42" alt="">
+            <span>Gofer</span>
+        </a>
+        <div class="gofer-body-tools" aria-label="Page tools">
+            <a id="github_link" class="gofer-icon-button outline-button gofer-github-link" href="https://github.com/cristianadrielbraun/gofer" title="GitHub" aria-label="Gofer on GitHub" rel="me">
+                {{- partial "svg/simple.html" (dict "name" "github") -}}
+            </a>
+            <div id="theme_tool" class="gofer-theme-tool">
+                <button id="dark_mode_btn" class="gofer-icon-button outline-button" title='{{ i18n "dark_mode_btn_tooltip" }}' type="button">
+                    {{- partial "svg/feather.html" (dict "name" "moon") -}}
+                </button>
+                <button id="light_mode_btn" class="gofer-icon-button outline-button" title='{{ i18n "light_mode_btn_tooltip" }}' type="button">
+                    {{- partial "svg/feather.html" (dict "name" "sun") -}}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <section class="gofer-hero" aria-labelledby="hero-title">
+        <div class="gofer-hero-copy">
+            <p class="gofer-kicker">Open source email client</p>
+            <h1 id="hero-title">Email client, built in Go.</h1>
+            <p class="gofer-lede">Gofer runs locally, serves a web UI, keeps a SQLite copy, and talks directly to IMAP, Gmail, and Outlook.</p>
+            <div class="gofer-actions" aria-label="Primary actions">
+                <a class="gofer-button gofer-button-primary" href="https://github.com/cristianadrielbraun/gofer">Open the repo</a>
+                <a class="gofer-button gofer-button-secondary" href="#run">Run it locally</a>
+            </div>
+        </div>
+        <figure class="gofer-hero-media">
+            <img class="gofer-hero-light" src="/screenshots/emails-card-minimal-light.png" alt="Gofer mail list showing card view with synced mail" width="2862" height="1599" loading="eager" decoding="async">
+            <img class="gofer-hero-dark" src="/screenshots/emails-card-classic-dark.png" alt="Gofer mail list showing card view in the classic dark theme" width="2862" height="1599" loading="eager" decoding="async">
+        </figure>
+    </section>
+
+    <section class="gofer-section gofer-summary" aria-labelledby="summary-title">
+        <div>
+            <p class="gofer-kicker">What it is</p>
+            <h2 id="summary-title" class="gofer-stack-title">
+                <span>Mail first.</span>
+                <span>Contacts too.</span>
+                <span>Calendar... soon?</span>
+            </h2>
+        </div>
+        <div class="gofer-summary-grid">
+            <article>
+                <h3>Lightweight, not light-duty</h3>
+                <p>Search, folders, labels, attachments, signatures, aliases, translations, filters, and themes.</p>
+            </article>
+            <article>
+                <h3>SQLite under it</h3>
+                <p>Because it's still enough for 99% of cases. You do not need Postgres. Not for this.</p>
+            </article>
+            <article>
+                <h3>Mail first, contacts too</h3>
+                <p>Email is the main thing. Contacts are already there through vCard, CardDAV, Google, and Outlook.</p>
+            </article>
+            <article>
+                <h3>Still early</h3>
+                <p>Usable for real mail. Calendar, multi-user, OAuth polish, and better diagnostics are still ahead.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="gofer-section gofer-account-focus" aria-labelledby="accounts-title">
+        <div class="gofer-section-head">
+            <p class="gofer-kicker">Why it exists</p>
+            <h2 id="accounts-title">Multi-account webmail should not be this hard to find.</h2>
+            <p>We have shared docs, video calls, and full IDEs in the browser. Why do most webmails feel stuck in the early 00s?</p>
+        </div>
+        <div class="gofer-account-grid">
+            <article>
+                <span>Multi-account by design</span>
+                <p>Mix IMAP, Gmail, and Outlook accounts in the same UI without treating one as the special one.</p>
+            </article>
+            <article>
+                <span>Unified folders</span>
+                <p>Read Inbox, Sent, Drafts, Archive, and custom folders across accounts when that is what you need.</p>
+            </article>
+            <article>
+                <span>Still account-aware</span>
+                <p>Send, reply, move, labels, and provider-specific actions keep the right account context.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="gofer-section gofer-providers" aria-labelledby="providers-title">
+        <div class="gofer-section-head">
+            <p class="gofer-kicker">How accounts work</p>
+            <h2 id="providers-title">IMAP when it fits, provider APIs when they fit better.</h2>
+        </div>
+        <div class="gofer-provider-list">
+            <article>
+                <span>Generic mail</span>
+                <strong>IMAP and SMTP</strong>
+                <p>Regular mail accounts use the boring path: sync folders, fetch bodies, send messages, and keep state locally.</p>
+            </article>
+            <article>
+                <span>Gmail</span>
+                <strong>Gmail API and People API</strong>
+                <p>Gmail uses Google APIs for mail and contacts instead of pretending Gmail is just another IMAP server.</p>
+            </article>
+            <article>
+                <span>Outlook</span>
+                <strong>Microsoft Graph</strong>
+                <p>Outlook goes through Graph for mail, contacts, categories, attachments, and the usual message actions.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="screenshots" class="gofer-section gofer-gallery" aria-labelledby="screenshots-title">
+        <div class="gofer-section-head gofer-gallery-head">
+            <div>
+                <p class="gofer-kicker">A look around</p>
+                <h2 id="screenshots-title">A few current screens.</h2>
+                <p class="gofer-gallery-subtitle">By the way, these are probably outdated already</p>
+            </div>
+            <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/tree/master/screenshots">See the rest on GitHub</a>
+        </div>
+        <div class="gofer-shot-grid">
+            <div class="gofer-shot-column">
+                <figure class="gofer-shot">
+                    <img src="/screenshots/settings-classic-light.png" alt="Gofer settings screen in the classic light theme" width="2621" height="1457" loading="lazy" decoding="async">
+                </figure>
+                <figure class="gofer-shot">
+                    <img src="/screenshots/settings-email-sync.png" alt="Gofer email sync settings" width="1964" height="1274" loading="lazy" decoding="async">
+                </figure>
+                <figure class="gofer-shot">
+                    <img src="/screenshots/settings-accounts.png" alt="Gofer account settings screen" width="1964" height="1274" loading="lazy" decoding="async">
+                </figure>
+            </div>
+            <div class="gofer-shot-column">
+                <figure class="gofer-shot">
+                    <img src="/screenshots/contacts-card.png" alt="Gofer contacts card view" width="2862" height="1599" loading="lazy" decoding="async">
+                </figure>
+                <figure class="gofer-shot">
+                    <img src="/screenshots/settings-minimal-dark.png" alt="Gofer settings screen in the minimal dark theme" width="1978" height="1167" loading="lazy" decoding="async">
+                </figure>
+                <figure class="gofer-shot">
+                    <img src="/screenshots/settings-compose-display.png" alt="Gofer compose and display settings screen" width="2015" height="1642" loading="lazy" decoding="async">
+                </figure>
+            </div>
+        </div>
+    </section>
+
+    <section id="run" class="gofer-section gofer-run" aria-labelledby="run-title">
+        <div>
+            <p class="gofer-kicker">Trying it</p>
+            <h2 id="run-title">Run it locally.</h2>
+            <p>From source, you need <a class="gofer-inline-link" href="https://go.dev/" target="_blank" rel="noopener noreferrer">Go</a>, <a class="gofer-inline-link" href="https://templ.guide/" target="_blank" rel="noopener noreferrer">templ</a>, <a class="gofer-inline-link" href="https://tailwindcss.com/" target="_blank" rel="noopener noreferrer">Tailwind CSS</a>, and <a class="gofer-inline-link" href="https://taskfile.dev/" target="_blank" rel="noopener noreferrer">Task</a>. <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/releases" target="_blank" rel="noopener noreferrer">Release builds</a> already include the generated web assets. Gofer is open source under the <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>.</p>
+        </div>
+        <div class="gofer-code-card">
+            <pre><code>git clone https://github.com/cristianadrielbraun/gofer.git
+cd gofer
+task dev</code></pre>
+            <p>Then open <code>http://local.localhost:8090</code>.</p>
+        </div>
+    </section>
+
+    <section class="gofer-section" aria-labelledby="note-title">
+        <div class="gofer-warning-block">
+            <p class="gofer-kicker">Heads up</p>
+            <h2 id="note-title">Not ready for the public Internet yet.</h2>
+            <p>Gofer is still early. It is fine to run locally, but public-facing setup, OAuth flows, operational hardening, and diagnostics still need more work.</p>
+            <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/blob/master/README.md">Read the README</a>
+        </div>
+    </section>
+</div>
+{{ end }}

@@ -1,0 +1,612 @@
+:root {
+  --gofer-font-sans: "Nunito Sans", ui-sans-serif, system-ui, sans-serif;
+  --gofer-font-serif: "Fraunces", ui-serif, Georgia, serif;
+  --gofer-accent: #bf6530;
+  --gofer-accent-strong: #9f4f25;
+  --gofer-line: color-mix(in srgb, var(--color-border), transparent 18%);
+  --gofer-muted-bg: color-mix(in srgb, var(--color-background-overlay), var(--color-background) 35%);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--gofer-font-sans);
+}
+
+main {
+  width: 100%;
+}
+
+.gofer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--gofer-font-serif);
+  font-optical-sizing: auto;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  transform: translateY(2px);
+}
+
+.gofer-brand img {
+  display: block;
+  border-radius: 0;
+}
+
+.gofer-page-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: clamp(2rem, 4vw, 3rem);
+}
+
+.gofer-body-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--color-text);
+  font-family: var(--gofer-font-serif);
+  font-size: clamp(1.75rem, 3vw, 2.35rem);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.gofer-body-brand:hover {
+  color: var(--color-text);
+}
+
+.gofer-body-brand img {
+  display: block;
+  width: clamp(2.25rem, 4vw, 3rem);
+  height: clamp(2.25rem, 4vw, 3rem);
+  border-radius: 0;
+}
+
+.gofer-body-tools,
+.gofer-theme-tool {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gofer-icon-button {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: 0 0 auto;
+}
+
+.gofer-icon-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.gofer-github-link {
+  color: var(--color-text);
+}
+
+.gofer-github-link:hover {
+  color: var(--color-text);
+}
+
+.gofer-landing {
+  width: min(1120px, calc(100vw - 2rem));
+  margin: 0 auto;
+}
+
+.gofer-landing * {
+  box-sizing: border-box;
+}
+
+.gofer-hero-copy,
+.gofer-hero-media,
+.gofer-summary-grid article,
+.gofer-provider-list article,
+.gofer-code-card,
+.gofer-warning-block > * {
+  min-width: 0;
+}
+
+.gofer-hero {
+  min-height: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: center;
+  padding: clamp(1rem, 3vw, 2rem) 0 clamp(3rem, 6vw, 4.5rem);
+}
+
+.gofer-kicker {
+  margin: 0 0 0.85rem;
+  color: var(--gofer-accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, liberation mono, courier new, monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.gofer-hero h1,
+.gofer-section h2 {
+  margin: 0;
+  color: var(--color-text);
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.gofer-hero h1 {
+  max-width: 10.6em;
+  font-size: clamp(2.55rem, 5vw, 4.6rem);
+}
+
+.gofer-lede {
+  max-width: 38rem;
+  margin: 1.35rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: clamp(1.05rem, 1.45vw, 1.24rem);
+  line-height: 1.55;
+}
+
+.gofer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.8rem;
+}
+
+.gofer-button {
+  display: inline-flex;
+  min-height: 2.7rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gofer-line);
+  border-radius: 3px;
+  padding: 0.7rem 1rem;
+  color: var(--color-text);
+  font-weight: 700;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.gofer-button:hover {
+  border-color: var(--gofer-accent);
+  color: var(--color-text);
+}
+
+.gofer-button:active {
+  transform: translateY(1px);
+}
+
+.gofer-button-primary {
+  border-color: var(--gofer-accent);
+  background: var(--gofer-accent);
+  color: #fff7ed;
+}
+
+.gofer-button-primary:hover {
+  background: var(--gofer-accent-strong);
+  color: #fff7ed;
+}
+
+.gofer-button-secondary {
+  background: transparent;
+}
+
+.gofer-hero-media,
+.gofer-shot {
+  margin: 0;
+}
+
+.gofer-hero-media {
+  align-self: center;
+}
+
+.gofer-hero-media img,
+.gofer-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--gofer-line);
+  border-radius: 6px;
+  background: var(--color-background-card);
+}
+
+html[data-theme="light"] .gofer-hero-dark,
+html[data-theme="dark"] .gofer-hero-light {
+  display: none;
+}
+
+html[data-theme="dark"] .gofer-hero-dark {
+  display: block;
+}
+
+.gofer-section {
+  padding: clamp(3rem, 7vw, 5.5rem) 0;
+  border-top: 1px solid var(--gofer-line);
+}
+
+.gofer-section-head {
+  max-width: 40rem;
+  margin-bottom: 1.8rem;
+}
+
+.gofer-section h2 {
+  max-width: 12em;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+}
+
+.gofer-stack-title span {
+  display: block;
+  white-space: nowrap;
+}
+
+.gofer-section h2.gofer-stack-title {
+  font-size: clamp(2rem, 3.4vw, 3rem);
+}
+
+.gofer-section h3 {
+  margin: 0 0 0.55rem;
+  font-size: 1.05rem;
+}
+
+.gofer-section p {
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+
+.gofer-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(2rem, 5vw, 4rem);
+}
+
+.gofer-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.gofer-summary-grid article,
+.gofer-provider-list article,
+.gofer-code-card {
+  border: 1px solid var(--gofer-line);
+  border-radius: 6px;
+  background: var(--gofer-muted-bg);
+  padding: 1.1rem;
+}
+
+.gofer-summary-grid p,
+.gofer-provider-list p,
+.gofer-account-grid p,
+.gofer-code-card p {
+  margin: 0;
+}
+
+.gofer-account-focus .gofer-section-head {
+  max-width: none;
+}
+
+.gofer-account-focus .gofer-section-head h2 {
+  max-width: none;
+}
+
+.gofer-account-focus .gofer-section-head p:last-child {
+  max-width: none;
+  margin: 1.1rem 0 0;
+}
+
+.gofer-account-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.gofer-account-grid article {
+  border-left: 2px solid var(--gofer-accent);
+  padding: 0.1rem 0 0.1rem 1rem;
+}
+
+.gofer-account-grid span {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.gofer-providers {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: clamp(2rem, 5vw, 4rem);
+}
+
+.gofer-provider-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.gofer-provider-list article {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(9rem, 0.75fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.gofer-provider-list span {
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, liberation mono, courier new, monospace;
+  font-size: 0.86rem;
+}
+
+.gofer-provider-list strong {
+  color: var(--color-text);
+}
+
+.gofer-shot-grid {
+  max-width: 980px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.gofer-gallery-head {
+  max-width: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.gofer-gallery-head h2 {
+  max-width: none;
+}
+
+.gofer-gallery-subtitle {
+  margin: 0.75rem 0 0;
+  color: var(--color-text-secondary);
+}
+
+.gofer-gallery-head .gofer-inline-link {
+  margin-bottom: 0.3rem;
+}
+
+.gofer-shot-column {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.gofer-shot {
+  display: block;
+  width: 100%;
+}
+
+.gofer-run {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+
+.gofer-run p {
+  max-width: 34rem;
+}
+
+.gofer-code-card pre {
+  max-width: 100%;
+  margin: 0;
+  overflow-x: auto;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.gofer-code-card code {
+  background: transparent;
+}
+
+.gofer-code-card p {
+  margin-top: 1rem;
+}
+
+.gofer-warning-block {
+  border-radius: 6px;
+  background: #fcf8e3;
+  color: #8a6d3b;
+  padding: clamp(1.2rem, 3vw, 1.6rem);
+}
+
+.gofer-warning-block .gofer-kicker,
+.gofer-warning-block h2,
+.gofer-warning-block p,
+.gofer-warning-block .gofer-inline-link {
+  color: inherit;
+}
+
+.gofer-warning-block .gofer-kicker {
+  margin-bottom: 0.7rem;
+}
+
+.gofer-warning-block h2 {
+  max-width: 12em;
+  color: inherit;
+}
+
+.gofer-warning-block p {
+  max-width: 48rem;
+  margin: 1rem 0 0;
+}
+
+.gofer-warning-block .gofer-inline-link {
+  display: inline-flex;
+  margin-top: 1.1rem;
+}
+
+.gofer-inline-link {
+  color: var(--gofer-accent);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.gofer-inline-link:hover {
+  color: var(--gofer-accent-strong);
+}
+
+footer.gofer-footer {
+  width: min(1120px, calc(100vw - 2rem));
+  margin: 0 auto 2rem;
+  color: var(--color-text-footer);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.gofer-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border-top: 1px solid var(--gofer-line);
+  padding-top: 1.5rem;
+}
+
+.gofer-footer-copy {
+  margin: 0;
+}
+
+.gofer-backed-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--color-text-footer);
+  white-space: nowrap;
+}
+
+.gofer-backed-by:hover {
+  color: var(--color-text);
+}
+
+.gofer-backed-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-text);
+}
+
+.gofer-backed-brand img {
+  display: block;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0;
+}
+
+html[data-theme="dark"] {
+  --gofer-accent: #d68a4d;
+  --gofer-accent-strong: #f0a96d;
+}
+
+html[data-theme="dark"] .gofer-button-primary {
+  color: #21140d;
+}
+
+html[data-theme="dark"] .gofer-warning-block {
+  background: #3d3424;
+  color: #f0d49a;
+}
+
+@media screen and (max-width: 63.99rem) {
+  .gofer-hero,
+  .gofer-summary,
+  .gofer-providers,
+  .gofer-run {
+    grid-template-columns: 1fr;
+  }
+
+  .gofer-hero {
+    min-height: auto;
+  }
+
+  .gofer-provider-list article {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .gofer-account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gofer-footer-inner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .gofer-gallery-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .gofer-shot-grid {
+    max-width: none;
+  }
+}
+
+@media screen and (min-width: 64rem) {
+  .gofer-body-brand {
+    gap: 0.9rem;
+    font-size: clamp(2.25rem, 3.7vw, 3.25rem);
+  }
+
+  .gofer-body-brand img {
+    width: clamp(3.25rem, 4.7vw, 4rem);
+    height: clamp(3.25rem, 4.7vw, 4rem);
+  }
+}
+
+@media screen and (max-width: 47.99rem) {
+  .gofer-landing {
+    width: min(100%, calc(100vw - 1rem));
+  }
+
+  .gofer-page-top {
+    margin-bottom: 2rem;
+  }
+
+  .gofer-hero {
+    padding-top: 0.5rem;
+  }
+
+  .gofer-hero h1 {
+    font-size: clamp(2.3rem, 14vw, 3.5rem);
+  }
+
+  .gofer-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .gofer-summary-grid,
+  .gofer-shot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gofer-backed-by {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+}

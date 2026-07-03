@@ -1,0 +1,23 @@
+{{- $icon_vendor := .Get "vendor" -}}
+{{- $icon_link := .Get "link" -}}
+{{- $icon_name := .Get "name" -}}
+{{- $icon_width := .Get "width" | default "24px" -}}
+{{- $icon_height := .Get "height" | default "24px" -}}
+
+<div class="icon">
+    {{ if $icon_link }}
+        <a rel="noopener" target="_blank" href="{{ $icon_link }}" aria-label="{{ $icon_name }}">
+    {{ else }}
+        <div>
+    {{ end }}
+        {{ if eq $icon_vendor "feather" }}
+            {{ partial "svg/feather.html" (dict "name" $icon_name "width" $icon_width "height" $icon_height) }}
+        {{ else if eq $icon_vendor "simple" }}
+            {{ partial "svg/simple.html" (dict "name" $icon_name "width" $icon_width "height" $icon_height) }}
+        {{ end }}
+    {{ if $icon_link }}
+        </a>
+    {{ else }}
+        </div>
+    {{ end }}
+</div>

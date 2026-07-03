@@ -1,0 +1,51 @@
+baseURL: https://gofer.email/
+locale: en-US
+title: Gofer
+theme: hugo-theme-monochrome
+enableRobotsTXT: true
+enableGitInfo: false
+
+pagination:
+  pagerSize: 6
+
+outputs:
+  home:
+    - HTML
+
+disableKinds:
+  - taxonomy
+  - term
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    codeFences: false
+    noClasses: true
+    style: monokai
+
+params:
+  navbar_title: '<span class="gofer-brand"><img src="/images/gofer-logo.svg" width="28" height="28" alt="">Gofer</span>'
+  navbar_width: extra-wide
+  hide_navbar_on_scroll: false
+  footer: 'MIT licensed. Built with Go, Hugo, and Monochrome.'
+  color_scheme: system
+  enable_zooming_js: true
+  enable_header_anchor: false
+  enable_toc: false
+  enable_site_search: false
+  enable_math: false
+  enable_open_graph: true
+  enable_twitter_cards: true
+  author:
+    name: Cristián Braun
+
+menus:
+  navbar:
+    - name: Run locally
+      url: "#run"
+      weight: 20
+    - name: Screenshots
+      url: "#screenshots"
+      weight: 30

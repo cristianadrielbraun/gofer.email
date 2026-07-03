@@ -1,0 +1,20 @@
+{{ if .Params.balloon_resources }}
+    <div class="balloon-layout">
+        {{ partial "balloon/head-item.html" . }}
+        {{ $pages := (.Store.Get "states").resource_pages }}
+
+        {{ if $pages }}
+            {{ $max_idx := sub (len $pages) 1 }}
+            {{ $page_store := .Store }}
+
+            {{ range $index, $value := (sort $pages "Params.weight" "asc") }}
+                {{ partial "balloon/title-item.html" . }}
+                {{ partial "balloon/card-item.html" (dict "ctx" . "last_item" (eq $index $max_idx) "store" $page_store) }}
+            {{ end }}
+        {{ else }}
+            <span>{{ i18n "no_page_under_resources" (dict "resources_name" "balloon_resources" "resources_path" .Params.balloon_resources ) }}</span>
+        {{ end }}
+    </div>
+{{ else }}
+    <span>{{ i18n "resources_not_found" (dict "resources_name" "balloon_resources")}}</span>
+{{ end }}

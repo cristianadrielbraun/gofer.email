@@ -1,0 +1,127 @@
+html, button, input, select, textarea,
+.pure-g [class *= "pure-u"] {
+  font-family: system-ui,-apple-system,segoe ui,Roboto,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji;
+}
+
+code, kbd, pre {
+  font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,liberation mono,courier new,monospace;
+}
+
+main {
+  @include my-8;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 2rem;
+  width: $sm_main_width;
+}
+
+@media screen and (min-width: $md_min_width) {
+  main {
+    margin-top: 2rem;
+    width: $md_main_width;
+  }
+}
+
+@media screen and (min-width: $lg_min_width) {
+  main {
+    margin-top: 2rem;
+    width: $lg_main_width;
+  }
+}
+
+@media screen and (min-width: $xl_min_width) {
+  main {
+    margin-top: 2.5rem;
+    width: $xl_main_width;
+  }
+}
+
+@media screen and (min-width: $xxl_min_width) {
+  main {
+    margin-top: 2.5rem;
+    width: $xxl_main_width;
+  }
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @include font-bold;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+h1 {
+  @include text-3xl;
+}
+
+h2 {
+  @include text-2xl;
+}
+
+h3 {
+  @include text-xl;
+}
+
+h4 {
+  @include text-lg;
+}
+
+h5 {
+  @include text-base;
+}
+
+h6 {
+  @include text-sm;
+}
+
+figure {
+  margin: 0;
+}
+
+img {
+  max-width: 100%;
+  border-radius: 3px;
+}
+
+input {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  border: none;
+}
+
+mark {
+  background-color: var(--color-background-mark);
+  color: var(--color-text-mark);
+}
+
+details > summary {
+  cursor: pointer;
+}
+
+details[open] > summary {
+  cursor: pointer;
+}
+
+.content-margin {
+  @include my-8;
+}
+
+.hidden {
+  display: none;
+}
+
+hr {
+  border-color: var(--color-border);
+}
+
+// https://github.com/mathjax/MathJax/issues/3001
+.MJX_LiveRegion {
+  background-color: transparent !important;
+}
+
+.MJX_HoverRegion{
+  background-color: transparent !important;
+}
+
+.MJX_ToolTip{
+  background-color: transparent !important;
+}

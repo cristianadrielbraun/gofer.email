@@ -1,0 +1,17 @@
+.icon {
+  display: flex;
+
+  > * {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  a {
+    color: var(--color-text);
+
+    &:hover {
+      color: var(--color-text-secondary);
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{{ with (.Store.Get "params").footer }}
+<footer>
+    <article>
+        {{- . | safeHTML -}}
+    </article>
+</footer>
+{{ end }}
