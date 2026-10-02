@@ -26,7 +26,7 @@ markup:
     style: monokai
 
 params:
-  navbar_title: '<span class="gofer-brand"><img src="/images/gofer-logo.svg" width="28" height="28" alt="">Gofer</span>'
+  navbar_title: '<span class="gofer-brand"><img src="/images/gofer-logo.svg" width="36" height="36" alt="">Gofer</span>'
   navbar_width: extra-wide
   hide_navbar_on_scroll: false
   footer: 'MIT licensed. Built with Go, Hugo, and Monochrome.'

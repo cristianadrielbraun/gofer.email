@@ -72,8 +72,8 @@ main {
 
 .gofer-body-brand img {
   display: block;
-  width: clamp(2.25rem, 4vw, 3rem);
-  height: clamp(2.25rem, 4vw, 3rem);
+  width: clamp(2.9rem, 5.2vw, 3.9rem);
+  height: clamp(2.9rem, 5.2vw, 3.9rem);
   border-radius: 0;
 }
 
@@ -573,8 +573,8 @@ html[data-theme="dark"] .gofer-warning-block {
   }
 
   .gofer-body-brand img {
-    width: clamp(3.25rem, 4.7vw, 4rem);
-    height: clamp(3.25rem, 4.7vw, 4rem);
+    width: clamp(4.2rem, 6.1vw, 5.2rem);
+    height: clamp(4.2rem, 6.1vw, 5.2rem);
   }
 }
 
