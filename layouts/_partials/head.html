@@ -64,8 +64,10 @@
     {{- partial "resources/js.html" . -}}
 
     {{ if fileExists "/static/user.css" -}}
-        <link rel="stylesheet" href="{{ "user.css" | relURL }}">
+        <link rel="stylesheet" href="{{ "user.css" | relURL }}?v={{ md5 (readFile "static/user.css") }}">
     {{- end }}
+
+    <link rel="stylesheet" href="{{ "preview-controls.css" | relURL }}?v={{ md5 (readFile "static/preview-controls.css") }}">
 
     {{ if templates.Exists "_partials/user_head.html" -}}
         {{ partial "user_head.html" . }}

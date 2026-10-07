@@ -1,9 +1,13 @@
 ---
 title: Gofer
-description: An email and contacts client that runs locally with a web UI, built in Go.
+description: A self-hosted email, contacts, and calendar app built in Go. Runs on your machine or server, opens in the browser, and talks directly to IMAP, Gmail, Outlook, CardDAV, and CalDAV.
 keywords:
   - email client
+  - self-hosted
   - local first
+  - calendar
+  - CalDAV
+  - CardDAV
   - Go
   - SQLite
   - IMAP

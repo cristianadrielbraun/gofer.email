@@ -22,18 +22,48 @@
 
     <section class="gofer-hero" aria-labelledby="hero-title">
         <div class="gofer-hero-copy">
-            <p class="gofer-kicker">Open source email client</p>
-            <h1 id="hero-title">Email client, built in Go.</h1>
-            <p class="gofer-lede">Gofer runs locally, serves a web UI, keeps a SQLite copy, and talks directly to IMAP, Gmail, and Outlook.</p>
+            <p class="gofer-kicker">Open source email, contacts, and calendar</p>
+            <h1 id="hero-title">Self-hosted webmail for all your accounts.</h1>
+            <p class="gofer-lede">Gmail, Outlook, and any IMAP account side by side, with your contacts and calendar. Run it on your own machine or on a server.</p>
             <div class="gofer-actions" aria-label="Primary actions">
                 <a class="gofer-button gofer-button-primary" href="https://github.com/cristianadrielbraun/gofer">Open the repo</a>
-                <a class="gofer-button gofer-button-secondary" href="#run">Run it locally</a>
+                <a class="gofer-button gofer-button-secondary" href="https://github.com/cristianadrielbraun/gofer/releases/latest">Download a release</a>
             </div>
         </div>
-        <figure class="gofer-hero-media">
-            <img class="gofer-hero-light" src="/screenshots/emails-card-minimal-light.png" alt="Gofer mail list showing card view with synced mail" width="2862" height="1599" loading="eager" decoding="async">
-            <img class="gofer-hero-dark" src="/screenshots/emails-card-classic-dark.png" alt="Gofer mail list showing card view in the classic dark theme" width="2862" height="1599" loading="eager" decoding="async">
-        </figure>
+    </section>
+
+    <section id="try" class="gofer-section gofer-demo" aria-labelledby="demo-title">
+        <div class="gofer-section-head">
+            <p class="gofer-kicker">Take a look around</p>
+            <h2 id="demo-title">A little Gofer, right here.</h2>
+            <p>Open a message, explore the calendar, find a contact, or look through settings. Try a different theme while you're here.</p>
+        </div>
+        <div class="gofer-demo-toolbar" aria-label="Interactive demo controls">
+            <div class="gofer-demo-screens" role="group" aria-label="Choose a demo screen">
+                <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="main" aria-pressed="true">Main interface</button>
+                <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="compose" aria-pressed="false">Compose</button>
+                <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="settings-accounts" aria-pressed="false">Accounts</button>
+                <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="settings-sync" aria-pressed="false">Email sync</button>
+            </div>
+            <div class="gofer-demo-themes">
+                <div class="demo-select-control">
+                    <span id="gofer-demo-style-label">Style</span>
+                    <div id="gofer-demo-style" data-demo-select data-value="classic" data-options='{"classic":"Classic","minimal":"Minimal"}' aria-labelledby="gofer-demo-style-label"></div>
+                </div>
+                <div class="demo-select-control">
+                    <span id="gofer-demo-mode-label">Mode</span>
+                    <div id="gofer-demo-mode" data-demo-select data-value="light" data-options='{"light":"Light","dark":"Dark"}' aria-labelledby="gofer-demo-mode-label"></div>
+                </div>
+            </div>
+        </div>
+        <div class="gofer-demo-frame-wrap">
+            <iframe id="gofer-demo-frame" src="/demo/?v={{ md5 (printf "%s%s" (readFile "static/demo/index.html") (readFile "static/demo/demo.js")) }}" title="Gofer interactive demo with fictional mail, calendar events, and contacts" loading="lazy" referrerpolicy="same-origin"></iframe>
+        </div>
+        <div class="gofer-demo-caption">
+            <span>Fictional data · Local preview · Nothing to connect</span>
+            <a id="gofer-demo-expand" class="gofer-inline-link" href="/demo/" target="_blank" rel="noopener">Open larger <span aria-hidden="true">↗</span></a>
+        </div>
+        <noscript><p>The interactive demo needs JavaScript. You can also browse the <a href="https://github.com/cristianadrielbraun/gofer/tree/master/screenshots">screenshots on GitHub</a>.</p></noscript>
     </section>
 
     <section class="gofer-section gofer-summary" aria-labelledby="summary-title">
@@ -42,25 +72,22 @@
             <h2 id="summary-title" class="gofer-stack-title">
                 <span>Mail first.</span>
                 <span>Contacts too.</span>
-                <span>Calendar... soon?</span>
+                <span>And a calendar.</span>
             </h2>
+            <p class="gofer-summary-note">All of it sits in one SQLite database. Tested with over 100k emails across several accounts, no trouble so far. You do not need Postgres. Not for this.</p>
         </div>
-        <div class="gofer-summary-grid">
+        <div class="gofer-pillars">
             <article>
-                <h3>Lightweight, not light-duty</h3>
-                <p>Search, folders, labels, attachments, signatures, aliases, translations, filters, and themes.</p>
+                <h3>Mail</h3>
+                <p>Threads, attachments, drafts with autosave, signatures, scheduled send, and translation. Folders, stars, archive, spam controls, and advanced search filters to find things again.</p>
             </article>
             <article>
-                <h3>SQLite under it</h3>
-                <p>Because it's still enough for 99% of cases. You do not need Postgres. Not for this.</p>
+                <h3>Contacts</h3>
+                <p>Local address books with vCard import and export, plus Google, Outlook, and CardDAV sync. Gofer Sync keeps contacts in step between your accounts.</p>
             </article>
             <article>
-                <h3>Mail first, contacts too</h3>
-                <p>Email is the main thing. Contacts are already there through vCard, CardDAV, Google, and Outlook.</p>
-            </article>
-            <article>
-                <h3>Still early</h3>
-                <p>Usable for real mail. Calendar, multi-user, OAuth polish, and better diagnostics are still ahead.</p>
+                <h3>Calendar</h3>
+                <p>Google Calendar, Outlook, and CalDAV in month and week views. Create events and recurring series, invite guests, RSVP straight from an email, and add Meet or Teams links.</p>
             </article>
         </div>
     </section>
@@ -87,86 +114,152 @@
         </div>
     </section>
 
+    <section class="gofer-section gofer-modes" aria-labelledby="modes-title">
+        <div class="gofer-section-head">
+            <p class="gofer-kicker">Three ways to run it</p>
+            <h2 id="modes-title">From your laptop to a whole organization.</h2>
+            <p>Pick one mode with <code>GOFER_AUTH_MODE</code>. Each one holds as many mailboxes as you like. What changes is who signs in.</p>
+        </div>
+        <ol class="gofer-mode-list">
+            <li>
+                <code>open</code>
+                <h3>Just you, locally</h3>
+                <p>No login at all. Meant for your own machine, and only there.</p>
+            </li>
+            <li>
+                <code>personal</code>
+                <h3>Just you, on a server</h3>
+                <p>One protected profile with all your mailboxes, behind a password, passkeys, or TOTP.</p>
+            </li>
+            <li>
+                <code>managed</code>
+                <h3>Your team or organization</h3>
+                <p>Many users, separate administrators, invitations, MFA policies, and an admin panel.</p>
+            </li>
+        </ol>
+        <p class="gofer-modes-note">Managed mode is being built to scale to thousands of users; that part is still in progress. Signed-in modes support passkeys, TOTP, and Google, Microsoft, or OpenID Connect sign-in. Stored credentials are encrypted, and remote content is blocked by default.</p>
+    </section>
+
     <section class="gofer-section gofer-providers" aria-labelledby="providers-title">
         <div class="gofer-section-head">
             <p class="gofer-kicker">How accounts work</p>
-            <h2 id="providers-title">IMAP when it fits, provider APIs when they fit better.</h2>
+            <h2 id="providers-title">Talks to each provider in its own language.</h2>
         </div>
         <div class="gofer-provider-list">
             <article>
                 <span>Generic mail</span>
-                <strong>IMAP and SMTP</strong>
-                <p>Regular mail accounts use the boring path: sync folders, fetch bodies, send messages, and keep state locally.</p>
+                <strong>IMAP, SMTP, CardDAV, CalDAV</strong>
+                <p>Any standard mail server, plus contacts and calendars from compatible services.</p>
             </article>
             <article>
                 <span>Gmail</span>
-                <strong>Gmail API and People API</strong>
-                <p>Gmail uses Google APIs for mail and contacts instead of pretending Gmail is just another IMAP server.</p>
+                <strong>Gmail, People, and Calendar APIs</strong>
+                <p>Google&#39;s own APIs, instead of pretending Gmail is just another IMAP server.</p>
             </article>
             <article>
                 <span>Outlook</span>
                 <strong>Microsoft Graph</strong>
-                <p>Outlook goes through Graph for mail, contacts, categories, attachments, and the usual message actions.</p>
+                <p>Graph for mail, contacts, calendars, categories, and Teams meetings.</p>
             </article>
         </div>
     </section>
 
-    <section id="screenshots" class="gofer-section gofer-gallery" aria-labelledby="screenshots-title">
-        <div class="gofer-section-head gofer-gallery-head">
+    <section id="stack" class="gofer-section gofer-stack" aria-labelledby="stack-title">
+        <div>
+            <p class="gofer-kicker">Under the hood</p>
+            <h2 id="stack-title">The technical bits.</h2>
+            <p>For the curious. The full dependency list is in <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/blob/master/go.mod" target="_blank" rel="noopener noreferrer">go.mod</a>.</p>
+        </div>
+        <dl class="gofer-spec-list">
             <div>
-                <p class="gofer-kicker">A look around</p>
-                <h2 id="screenshots-title">A few current screens.</h2>
-                <p class="gofer-gallery-subtitle">By the way, these are probably outdated already</p>
+                <dt>Language</dt>
+                <dd>Go</dd>
             </div>
-            <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/tree/master/screenshots">See the rest on GitHub</a>
-        </div>
-        <div class="gofer-shot-grid">
-            <div class="gofer-shot-column">
-                <figure class="gofer-shot">
-                    <img src="/screenshots/settings-classic-light.png" alt="Gofer settings screen in the classic light theme" width="2621" height="1457" loading="lazy" decoding="async">
-                </figure>
-                <figure class="gofer-shot">
-                    <img src="/screenshots/settings-email-sync.png" alt="Gofer email sync settings" width="1964" height="1274" loading="lazy" decoding="async">
-                </figure>
-                <figure class="gofer-shot">
-                    <img src="/screenshots/settings-accounts.png" alt="Gofer account settings screen" width="1964" height="1274" loading="lazy" decoding="async">
-                </figure>
+            <div>
+                <dt>Interface</dt>
+                <dd>Server-rendered with templ and HTMX, styled with Tailwind CSS and templUI. No SPA framework.</dd>
             </div>
-            <div class="gofer-shot-column">
-                <figure class="gofer-shot">
-                    <img src="/screenshots/contacts-card.png" alt="Gofer contacts card view" width="2862" height="1599" loading="lazy" decoding="async">
-                </figure>
-                <figure class="gofer-shot">
-                    <img src="/screenshots/settings-minimal-dark.png" alt="Gofer settings screen in the minimal dark theme" width="1978" height="1167" loading="lazy" decoding="async">
-                </figure>
-                <figure class="gofer-shot">
-                    <img src="/screenshots/settings-compose-display.png" alt="Gofer compose and display settings screen" width="2015" height="1642" loading="lazy" decoding="async">
-                </figure>
+            <div>
+                <dt>Database</dt>
+                <dd>SQLite through modernc.org/sqlite, pure Go with no CGO, and FTS5 for full-text search.</dd>
             </div>
-        </div>
+            <div>
+                <dt>Mail formats</dt>
+                <dd>emersion&#39;s go-imap, go-smtp, go-message, go-vcard, and go-ical.</dd>
+            </div>
+            <div>
+                <dt>Sign-in</dt>
+                <dd>Argon2id passwords, TOTP, WebAuthn passkeys, and OAuth 2 / OpenID Connect.</dd>
+            </div>
+            <div>
+                <dt>Distribution</dt>
+                <dd>One static binary with the web assets embedded. Linux, macOS, and Windows.</dd>
+            </div>
+            <div>
+                <dt>License</dt>
+                <dd>MIT</dd>
+            </div>
+        </dl>
     </section>
 
     <section id="run" class="gofer-section gofer-run" aria-labelledby="run-title">
         <div>
             <p class="gofer-kicker">Trying it</p>
-            <h2 id="run-title">Run it locally.</h2>
-            <p>From source, you need <a class="gofer-inline-link" href="https://go.dev/" target="_blank" rel="noopener noreferrer">Go</a>, <a class="gofer-inline-link" href="https://templ.guide/" target="_blank" rel="noopener noreferrer">templ</a>, <a class="gofer-inline-link" href="https://tailwindcss.com/" target="_blank" rel="noopener noreferrer">Tailwind CSS</a>, and <a class="gofer-inline-link" href="https://taskfile.dev/" target="_blank" rel="noopener noreferrer">Task</a>. <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/releases" target="_blank" rel="noopener noreferrer">Release builds</a> already include the generated web assets. Gofer is open source under the <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>.</p>
+            <h2 id="run-title">Run it yourself.</h2>
+            <p>Download the archive for your system, unpack it, and run <code>gofer</code>. It's a single binary with everything inside: no runtime to install and no database server to set up.</p>
+            <div class="gofer-actions">
+                <a class="gofer-button gofer-button-primary" href="https://github.com/cristianadrielbraun/gofer/releases/latest">Download the latest release</a>
+            </div>
+            <p class="gofer-run-platforms">Linux and macOS on x86-64 and ARM64. Windows on x86-64.</p>
         </div>
-        <div class="gofer-code-card">
-            <pre><code>git clone https://github.com/cristianadrielbraun/gofer.git
-cd gofer
-task dev</code></pre>
-            <p>Then open <code>http://local.localhost:8090</code>.</p>
+        <div>
+            <div class="gofer-code-card gofer-install" data-install>
+                <div class="gofer-install-tabs" role="tablist" aria-label="Operating system">
+                    <button type="button" role="tab" id="install-tab-linux" aria-controls="install-linux" aria-selected="true" data-install-tab="linux">Linux</button>
+                    <button type="button" role="tab" id="install-tab-macos" aria-controls="install-macos" aria-selected="false" data-install-tab="macos">macOS</button>
+                    <button type="button" role="tab" id="install-tab-windows" aria-controls="install-windows" aria-selected="false" data-install-tab="windows">Windows</button>
+                </div>
+                <div id="install-linux" class="gofer-install-panel" role="tabpanel" aria-labelledby="install-tab-linux" data-install-panel="linux">
+                    <h3>Linux</h3>
+                    <pre><code>tar -xzf gofer-*-linux-amd64.tar.gz
+cd gofer-*-linux-amd64
+./gofer</code></pre>
+                    <p>On ARM64, use the <code>linux-arm64</code> archive.</p>
+                </div>
+                <div id="install-macos" class="gofer-install-panel" role="tabpanel" aria-labelledby="install-tab-macos" data-install-panel="macos">
+                    <h3>macOS</h3>
+                    <pre><code>tar -xzf gofer-*-darwin-arm64.tar.gz
+cd gofer-*-darwin-arm64
+./gofer</code></pre>
+                    <p>On an Intel Mac, use the <code>darwin-amd64</code> archive.</p>
+                </div>
+                <div id="install-windows" class="gofer-install-panel" role="tabpanel" aria-labelledby="install-tab-windows" data-install-panel="windows">
+                    <h3>Windows</h3>
+                    <pre><code>Expand-Archive gofer-*-windows-amd64.zip -DestinationPath .
+cd gofer-*-windows-amd64
+.\gofer.exe</code></pre>
+                    <p>In PowerShell. Or unzip it in Explorer and run <code>gofer.exe</code>.</p>
+                </div>
+                <p class="gofer-install-open">Then open <code>http://local.localhost:8090</code> in your browser.</p>
+            </div>
+            <p class="gofer-run-more">On a server, pick <code>personal</code> or <code>managed</code> with <code>GOFER_AUTH_MODE</code> and put Gofer behind an HTTPS reverse proxy. The rest is in <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/blob/master/.env.example" target="_blank" rel="noopener noreferrer">.env.example</a>.</p>
+            <p class="gofer-run-more">Building from source needs <a class="gofer-inline-link" href="https://go.dev/" target="_blank" rel="noopener noreferrer">Go</a>, <a class="gofer-inline-link" href="https://templ.guide/" target="_blank" rel="noopener noreferrer">templ</a>, <a class="gofer-inline-link" href="https://tailwindcss.com/" target="_blank" rel="noopener noreferrer">Tailwind CSS</a>, and <a class="gofer-inline-link" href="https://taskfile.dev/" target="_blank" rel="noopener noreferrer">Task</a>. Clone the repo and run <code>task dev</code>.</p>
         </div>
     </section>
 
     <section class="gofer-section" aria-labelledby="note-title">
         <div class="gofer-warning-block">
             <p class="gofer-kicker">Heads up</p>
-            <h2 id="note-title">Not ready for the public Internet yet.</h2>
-            <p>Gofer is still early. It is fine to run locally, but public-facing setup, OAuth flows, operational hardening, and diagnostics still need more work.</p>
-            <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/blob/master/README.md">Read the README</a>
+            <h2 id="note-title">Pre-1.0. Keep backups.</h2>
+            <p>Gofer is in daily use, but it's still settling. Database migrations run on startup, so back up the data directory, configuration, and secrets together before upgrading. Gmail and Outlook still need your own OAuth app credentials for now, and some calendar actions depend on what the provider allows.</p>
+            <div class="gofer-warning-links">
+                <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/releases/latest">Latest release notes</a>
+                <a class="gofer-inline-link" href="https://github.com/cristianadrielbraun/gofer/blob/master/README.md">Read the README</a>
+            </div>
         </div>
     </section>
 </div>
+<script src="/js/demo-select.js?v={{ md5 (readFile "static/js/demo-select.js") }}" defer></script>
+<script src="/js/demo-section.js?v={{ md5 (readFile "static/js/demo-section.js") }}" defer></script>
+<script src="/js/install-tabs.js?v={{ md5 (readFile "static/js/install-tabs.js") }}" defer></script>
 {{ end }}

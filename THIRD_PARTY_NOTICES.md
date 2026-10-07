@@ -27,6 +27,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Bundled libraries and assets
 
+The interactive demo in `static/demo/` includes rendered UI and assets from
+[Gofer](https://github.com/cristianadrielbraun/gofer), copyright (c) 2026 Cristián
+Braun, under the MIT License. The pinned revision is recorded in
+`static/demo/source.json`; the full license is included in
+[`static/demo/GOFER-LICENSE.txt`](static/demo/GOFER-LICENSE.txt).
+Gofer's component scripts include templui and Floating UI code.
+
 The vendored theme and local site assets include the following third-party
 libraries or asset sets:
 

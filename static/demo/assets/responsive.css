@@ -1,0 +1,24 @@
+
+		html.js [data-hydrate-dropin] .mail-list-item {
+			opacity: 0;
+			transform: translateY(-8px) scale(.985);
+		}
+		[data-app-sidebar] { container-type: inline-size; }
+		.sidebar-app-nav-item { transition: color 200ms ease, padding 200ms ease, gap 200ms ease; }
+		.sidebar-app-nav-label {
+			display: inline-block;
+			max-width: 4.75rem;
+			overflow: hidden;
+			opacity: 1;
+			transform: translateX(0);
+			transition: max-width 200ms ease, opacity 160ms ease, transform 200ms ease;
+		}
+		@container (max-width: 230px) {
+			.sidebar-app-nav-item { gap: 0; padding-inline: .25rem; }
+			.sidebar-app-nav-label {
+				max-width: 0;
+				opacity: 0;
+				transform: translateX(-.25rem);
+			}
+		}
+	

@@ -1,0 +1,42 @@
+{
+  "message-1": {
+    "cs": "<p>Ahoj Alexi,</p><p>Připravila jsem pár nápadů pro podzimní uvedení. Tentokrát je celkové ladění trochu vřelejší: více přírodních textur, klidnější barvy a spousta prostoru pro samotnou tvorbu.</p><h2>Tři věci k prozkoumání</h2><ul><li>Jednodušší úvodní stránka</li><li>Malá sbírka příběhů ze studia</li><li>Osobnější uvítací e-mail</li></ul><p>Ráda bych věděla, co si o tom myslíš, ještě před naší středeční schůzkou.</p><p>Mira</p>",
+    "es": "<p>Hola, Alex:</p><p>He preparado algunas ideas para el lanzamiento de otoño. Esta vez la propuesta es un poco más cálida: más texturas naturales, colores más suaves y mucho espacio para que el trabajo destaque.</p><h2>Tres cosas para explorar</h2><ul><li>Una página de inicio más sencilla</li><li>Una pequeña colección de historias del estudio</li><li>Un correo de bienvenida más personal</li></ul><p>Me encantaría saber qué te parece antes de nuestra revisión del miércoles.</p><p>Mira</p>"
+  },
+  "message-2": {
+    "cs": "<p>Ahoj všem,</p><p>První prototyp je hotový. Animace jsem ponechal nenápadné a ujistil se, že přechody dobře fungují i při ovládání klávesnicí.</p><p>Jeden drobný návrh: nechme na úvodní obrazovce více prostoru obrázkům.</p><p>Uvidíme se na schůzce,<br>Leo</p>",
+    "es": "<p>Hola a los dos:</p><p>El primer prototipo está listo. He mantenido las animaciones sutiles y me he asegurado de que las transiciones también funcionen bien con el teclado.</p><p>Una pequeña sugerencia: dejemos que las imágenes tengan un poco más de protagonismo en la pantalla de inicio.</p><p>Nos vemos en la revisión,<br>Leo</p>"
+  },
+  "message-3": {
+    "cs": "<p>Ahoj Alexi,</p><p>Čtení na tento týden je o tom, jak si všímat maličkostí.</p><h2>Na seznamu</h2><p><strong>Udělat si prostor.</strong> Krátký esej o chvílích mezi projekty.</p><p><strong>Archiv všedních dní.</strong> Fotografova sbírka obyčejných odpolední.</p><p><strong>Dobrá otázka.</strong> Proč záleží na začátku rozhovoru.</p><p>Užij si poklidný víkend,<br>Nora</p>",
+    "es": "<p>Hola, Alex:</p><p>La lista de lecturas de esta semana trata de prestar atención a las pequeñas cosas.</p><h2>En la lista</h2><p><strong>Hacer espacio.</strong> Un breve ensayo sobre los espacios entre proyectos.</p><p><strong>El archivo cotidiano.</strong> Una colección de tardes corrientes de un fotógrafo.</p><p><strong>Una buena pregunta.</strong> Por qué importa el inicio de una conversación.</p><p>Disfruta de un fin de semana tranquilo,<br>Nora</p>"
+  },
+  "message-4": {
+    "cs": "<p>Ahoj!</p><p>V sobotu se nás pár sejde na fotografickou procházku podél řeky. Nic moc organizovaného — jen káva, foťáky a uvidíme, kam nás to zavede.</p><p>Sejdeme se v té malé kavárně v 10?</p><p>Sam</p>",
+    "es": "<p>¡Hola!</p><p>Unos cuantos vamos a quedar el sábado para dar un paseo fotográfico junto al río. Nada demasiado organizado: café, cámaras y a ver adónde acabamos.</p><p>¿Nos vemos en la pequeña cafetería a las 10?</p><p>Sam</p>"
+  },
+  "message-5": {
+    "cs": "<p>Ahoj Alexi,</p><p>Vzorky dorazily dnes ráno a nenatíraný papír vypadá krásně. Barvy jsou jemnější než na obrazovce, ale v dobrém slova smyslu.</p><p>Příští týden je přinesu do studia, aby se na ně mohli všichni podívat.</p><p>Měj se,<br>Inès</p>",
+    "es": "<p>Hola, Alex:</p><p>Las muestras llegaron esta mañana y el papel sin estucar queda precioso. Los colores son más suaves que en la pantalla, en el buen sentido.</p><p>Las llevaré al estudio la semana que viene para que todos puedan verlas.</p><p>Un saludo,<br>Inès</p>"
+  },
+  "message-6": {
+    "cs": "<p>Ahoj týme,</p><p>Díky za včerejší užitečnou schůzku. Tady je krátké shrnutí:</p><ul><li>Zachovat jednoduchou navigaci</li><li>Pro první koncept použít teplou paletu barev</li><li>Před příští schůzkou sdílet funkční prototyp</li></ul><p>Těším se na další kolo.<br>Mira</p>",
+    "es": "<p>Hola, equipo:</p><p>Gracias por la sesión de ayer, fue muy útil. Aquí va un breve resumen:</p><ul><li>Mantener una navegación sencilla</li><li>Usar la paleta cálida para el primer concepto</li><li>Compartir un prototipo funcional antes de la próxima revisión</li></ul><p>Con ganas de la siguiente ronda.<br>Mira</p>"
+  },
+  "message-7": {
+    "cs": "<p>Ahoj Miro,</p><p>Středa v 10 mi vyhovuje. Přinesu nejnovější poznámky a můžeme společně projít prototyp.</p><p>Díky,<br>Alex</p>",
+    "es": "<p>Hola, Mira:</p><p>El miércoles a las 10 me viene bien. Llevaré las últimas notas y podremos revisar el prototipo juntos.</p><p>Gracias,<br>Alex</p>"
+  },
+  "message-8": {
+    "cs": "<p>Ahoj Same,</p><p>Počítej se mnou! Vezmu si ten malý foťák. Uvidíme se v kavárně v 10.</p><p>Alex</p>",
+    "es": "<p>Hola, Sam:</p><p>¡Cuenta conmigo! Llevaré la cámara pequeña. Nos vemos en la cafetería a las 10.</p><p>Alex</p>"
+  },
+  "message-9": {
+    "cs": "<p>Ahoj Alexi,</p><p>Letní kolekce je hotová. Díky za všechnu práci na tomto projektu — výsledek se opravdu povedl.</p><p>Finální soubory jsou připravené pro tiskárnu.</p><p>Inès</p>",
+    "es": "<p>Hola, Alex:</p><p>La colección de verano está terminada. Gracias por todo tu trabajo en este proyecto: ha quedado preciosa.</p><p>Los archivos finales están listos para la imprenta.</p><p>Inès</p>"
+  },
+  "message-10": {
+    "cs": "<p>Ahoj,</p><p>Malá poznámka z archivu: ty nejlepší nápady někdy přijdou, když je přestaneš hledat.</p><p>Zase příště,<br>Nora</p>",
+    "es": "<p>Hola:</p><p>Una pequeña nota del archivo: a veces las mejores ideas llegan cuando dejas de buscarlas.</p><p>Hasta la próxima,<br>Nora</p>"
+  }
+}

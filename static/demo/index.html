@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-theme="classic">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Try Gofer — interactive demo</title>
+  <link rel="icon" href="/demo/assets/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/demo/assets/app.css?v=20261007-native-motion">
+  <link rel="stylesheet" href="/demo/assets/responsive.css?v=20261007-native-motion">
+  <link rel="stylesheet" href="/demo/demo.css?v=20261007-compose-layouts">
+  <link rel="stylesheet" href="/preview-controls.css?v=20261007-full-controls">
+  <script src="/demo/bootstrap.js?v=20261007-site-header-theme"></script>
+  <script defer src="/demo/assets/motion.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/virtual-scroll.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/thread-details.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/calendar-ui.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/dialog.js?v=20261007-native-motion"></script>
+  <script type="module" src="/demo/assets/popover.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/dropdown.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/selectbox.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/checkbox.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/input.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/tabs.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/ui-settings.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/resize.js?v=20261007-native-motion"></script>
+  <script defer src="/demo/assets/translation-ui.js?v=20261007-native-motion"></script>
+  <script defer src="/js/demo-select.js?v=20261007-full-controls"></script>
+  <script defer src="/demo/assets/compose-ui.js?v=20261007-compose-noflash"></script>
+  <script defer src="/demo/compose-editor.js?v=20261007-compose-container"></script>
+  <script defer src="/demo/demo.js?v=20261007-float-default"></script>
+</head>
+<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings='{"theme":"light","theme_style":"classic","sidebar_width":"290px","mail_list_width":"40%","timezone":"Europe/Prague","translation_target_language":"cs"}'>
+  <header class="demo-standalone-tools" aria-label="Demo controls">
+    <div class="gofer-demo-screens" role="group" aria-label="Choose a demo screen">
+      <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="main" aria-pressed="true">Main interface</button>
+      <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="compose" aria-pressed="false">Compose</button>
+      <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="settings-accounts" aria-pressed="false">Accounts</button>
+      <button type="button" class="gofer-button gofer-button-secondary" data-demo-screen="settings-sync" aria-pressed="false">Email sync</button>
+    </div>
+    <div class="gofer-demo-themes">
+      <div class="demo-select-control">
+        <span id="demo-style-label">Style</span>
+        <div id="demo-style" data-demo-style data-demo-select data-value="classic" data-options='{"classic":"Classic","minimal":"Minimal"}' aria-labelledby="demo-style-label"></div>
+      </div>
+      <div class="demo-select-control">
+        <span id="demo-mode-label">Mode</span>
+        <div id="demo-mode" data-demo-mode data-demo-select data-value="light" data-options='{"light":"Light","dark":"Dark"}' aria-labelledby="demo-mode-label"></div>
+      </div>
+    </div>
+    <span>Demo data · Local preview</span>
+  </header>
+  <div id="demo-loading" role="status">Opening Gofer…</div>
+  <div id="demo-root" aria-label="Interactive Gofer demo"></div>
+  <div id="app-pane-dialogs"></div>
+  <button type="button" id="demo-back" hidden>← Back to list</button>
+  <div id="demo-status" role="status" aria-live="polite" class="demo-status" hidden></div>
+</body>
+</html>

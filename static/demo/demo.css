@@ -1,0 +1,68 @@
+/* Demo framing only. The app's colors, typography, surfaces and motion are exported. */
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body { display: flex; flex-direction: column; }
+#demo-root { flex: 1; min-height: 0; }
+#demo-root #app-shell { height: 100%; }
+#demo-root [data-demo-unavailable] { cursor: not-allowed; }
+#demo-loading { display: grid; place-items: center; height: 100%; color: var(--muted-foreground); }
+.demo-standalone-tools {
+  --color-text: #171717;
+  --color-border: #d4d4d4;
+  --color-background: #fff;
+  --color-background-overlay: #ededed;
+  --gofer-font-sans: "Nunito Sans", ui-sans-serif, system-ui, sans-serif;
+  --gofer-accent: #bf6530;
+  --gofer-line: color-mix(in srgb, var(--color-border), transparent 18%);
+  --gofer-muted-bg: color-mix(in srgb, var(--color-background-overlay), var(--color-background) 35%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 1rem;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background);
+  color: var(--color-text);
+  font: 400 12px/1.5 var(--gofer-font-sans);
+  position: relative;
+  z-index: 100;
+}
+html[data-site-mode="dark"] .demo-standalone-tools {
+  --color-text: #ededed;
+  --color-border: #737373;
+  --color-background: #333333;
+  --color-background-overlay: #404040;
+}
+.demo-standalone-tools button { font-family: var(--gofer-font-sans); }
+.demo-standalone-tools > span { margin-left: auto; opacity: 0.65; }
+.demo-standalone-tools :focus-visible { outline: 2px solid var(--gofer-accent); outline-offset: 3px; }
+.demo-embedded .demo-standalone-tools { display: none; }
+/* A real border stays crisp under layout zoom; the app's inset shadow would
+   still paint a fractional-width line. Apply only to embedded Minimal cards. */
+@supports (zoom: 1) {
+  html.demo-embedded[data-theme="minimal"] #mail-list-scroll[data-view-mode="cards"] .mail-list-item[data-mail-selected] > a:not(:focus-visible) {
+    border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+    border-left: 3px solid var(--color-primary);
+    box-shadow: none;
+  }
+  html.demo-embedded[data-theme="minimal"]:not(.dark) #mail-list-scroll[data-view-mode="cards"] .mail-list-item[data-mail-selected] > a:not(:focus-visible) {
+    border-color: #000;
+  }
+}
+.demo-status { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 200; width: max-content; max-width: calc(100% - 32px); padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--foreground); background: var(--card); box-shadow: var(--shadow-raised); font-size: 12px; }
+#demo-back { position: fixed; top: 8px; right: 12px; z-index: 90; padding: 6px 10px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; cursor: pointer; }
+html:not(.demo-embedded) #demo-back { top: calc(var(--demo-header-height, 64px) + 8px); }
+/* Preserve the app's mobile list until the visitor opens a message/contact. */
+@media (max-width: 1023px) {
+  #demo-root #mail-list { width: 100% !important; }
+  #demo-root #main-content > section:not(#mail-list):not(#mail-view) { display: none; }
+  #demo-root.demo-detail-open #mail-list { display: none; }
+  #demo-root.demo-detail-open #mail-view { display: flex; width: 100%; }
+  #demo-root.demo-detail-open #main-content { width: 100%; }
+  #demo-root.demo-detail-open [data-panel="maillist"] { display: none; }
+  #demo-root.demo-compose-open #mail-list { display: none; }
+  #demo-root.demo-compose-open #mail-view { display: flex; width: 100%; }
+  #demo-root.demo-compose-open [data-panel="maillist"] { display: none; }
+  .demo-standalone-tools { gap: 8px; padding: 8px 12px; }
+  .demo-standalone-tools > span { display: none; }
+}

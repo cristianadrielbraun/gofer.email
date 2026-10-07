@@ -43,9 +43,9 @@ params:
 
 menus:
   navbar:
-    - name: Run locally
+    - name: Try it
+      url: "#try"
+      weight: 10
+    - name: Run it
       url: "#run"
       weight: 20
-    - name: Screenshots
-      url: "#screenshots"
-      weight: 30
