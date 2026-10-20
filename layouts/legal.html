@@ -1,0 +1,28 @@
+{{ define "content" }}
+<div class="gofer-landing gofer-legal">
+    <div class="gofer-page-top">
+        <a class="gofer-body-brand" href="{{ .Site.Home.RelPermalink }}" aria-label="Gofer home">
+            <img src="/images/gofer-logo.svg" width="55" height="55" alt="">
+            <span>Gofer</span>
+        </a>
+        <div class="gofer-body-tools" aria-label="Page tools">
+            <a class="gofer-icon-button outline-button gofer-github-link" href="https://github.com/cristianadrielbraun/gofer" title="GitHub" aria-label="Gofer on GitHub" rel="me">
+                {{- partial "svg/simple.html" (dict "name" "github") -}}
+            </a>
+            <div id="theme_tool" class="gofer-theme-tool">
+                <button id="dark_mode_btn" class="gofer-icon-button outline-button" title='{{ i18n "dark_mode_btn_tooltip" }}' type="button">
+                    {{- partial "svg/feather.html" (dict "name" "moon") -}}
+                </button>
+                <button id="light_mode_btn" class="gofer-icon-button outline-button" title='{{ i18n "light_mode_btn_tooltip" }}' type="button">
+                    {{- partial "svg/feather.html" (dict "name" "sun") -}}
+                </button>
+            </div>
+        </div>
+    </div>
+    <article class="gofer-legal-body">
+        <h1>{{ .Title }}</h1>
+        <p class="gofer-legal-updated">Last updated: {{ .Params.updated }}</p>
+        {{ .Content }}
+    </article>
+</div>
+{{ end }}

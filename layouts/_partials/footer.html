@@ -1,7 +1,7 @@
 {{ with (.Store.Get "params").footer }}
 <footer id="site-footer" class="gofer-footer">
     <div class="gofer-footer-inner">
-        <p class="gofer-footer-copy">{{- . | safeHTML -}}</p>
+        <p class="gofer-footer-copy">{{- . | safeHTML -}}<span class="gofer-footer-links"><a href="/privacy/">Privacy</a><a href="/tos/">Terms</a></span></p>
         <a class="gofer-backed-by" href="https://jednasoftware.cz/" aria-label="Backed by Jedna Software" rel="me">
             <span>Backed by</span>
             <span class="gofer-backed-brand">

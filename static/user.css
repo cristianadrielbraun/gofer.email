@@ -883,3 +883,36 @@ html[data-theme="dark"] .gofer-button-primary {
     white-space: normal;
   }
 }
+
+.gofer-footer-links {
+  display: inline-flex;
+  gap: 1rem;
+  margin-left: 1rem;
+}
+
+.gofer-footer-links a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.gofer-legal-body {
+  max-width: 46rem;
+  margin: 0 auto 3rem;
+  line-height: 1.65;
+}
+
+.gofer-legal-body h1 {
+  font-family: var(--gofer-font-serif);
+  margin-bottom: 0.25rem;
+}
+
+.gofer-legal-body h2 {
+  font-family: var(--gofer-font-serif);
+  margin-top: 2rem;
+}
+
+.gofer-legal-updated {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  margin-top: 0;
+}
