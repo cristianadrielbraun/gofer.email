@@ -6,13 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>
         {{- if eq .Kind "home" -}}
-            {{- print .Site.Title -}}
+            {{- print .Title -}}
         {{- else if eq .Kind "section" -}}
             {{- print .CurrentSection.Title " - " .Site.Title }}
         {{- else -}}
             {{- print .Title " - " .Site.Title -}}
         {{- end -}}
     </title>
+    <link rel="canonical" href="{{ .Permalink }}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,6 +33,26 @@
 
     {{ with (.Store.Get "params").author_name }}
     <meta name="author" content="{{ . }}" />
+    {{ end }}
+
+    {{ if .IsHome }}
+    <script type="application/ld+json">
+    {{ dict
+        "@context" "https://schema.org"
+        "@type" "SoftwareApplication"
+        "name" site.Title
+        "description" .Description
+        "url" .Permalink
+        "image" (index .Params.images 0 | absURL)
+        "applicationCategory" "CommunicationApplication"
+        "operatingSystem" "Linux, macOS, Windows"
+        "license" "https://opensource.org/licenses/MIT"
+        "downloadUrl" "https://github.com/cristianadrielbraun/gofer/releases/latest"
+        "sameAs" (slice "https://github.com/cristianadrielbraun/gofer")
+        "author" (dict "@type" "Person" "name" site.Params.author.name)
+        "offers" (dict "@type" "Offer" "price" "0" "priceCurrency" "USD")
+        | jsonify | safeJS }}
+    </script>
     {{ end }}
 
     {{ if (.Store.Get "params").enable_open_graph }}

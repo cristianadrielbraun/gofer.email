@@ -1,5 +1,5 @@
 ---
-title: Gofer
+title: "Gofer: open source webmail, contacts and calendar"
 description: A self-hosted email, contacts, and calendar app built in Go. Runs on your machine or server, opens in the browser, and talks directly to IMAP, JMAP, Gmail, Outlook, CardDAV, and CalDAV.
 keywords:
   - email client
@@ -15,5 +15,5 @@ keywords:
   - Gmail API
   - Microsoft Graph
 images:
-  - /screenshots/emails-card-minimal-light.png
+  - /images/og-image.png
 ---
