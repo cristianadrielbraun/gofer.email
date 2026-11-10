@@ -30,7 +30,7 @@ Gofer's use and transfer of information received from Google APIs adheres to the
 **What Gofer accesses.** When you connect a Google account, Gofer requests access to:
 
 - your Google Account email address and basic profile (name and picture), to identify the account;
-- your Gmail, to show, search, send, organize and delete your mail, using IMAP, SMTP and the Gmail API;
+- your Gmail, to show, search, send, organize and delete your mail, using the Gmail API;
 - your Google Contacts, to show, create, edit and delete contacts and write those changes back to Google;
 - your Google Calendar, to show, create, edit and delete events and calendars. Access to manage all of your calendars is requested only if you choose it.
 
