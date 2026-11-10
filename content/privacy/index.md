@@ -2,14 +2,14 @@
 title: Privacy Policy
 description: How Gofer and gofer.email handle your data.
 layout: legal
-updated: October 20, 2026
+updated: November 10, 2026
 ---
 
 Gofer is free, open source software released under the [MIT license](https://github.com/cristianadrielbraun/gofer/blob/master/LICENSE). You run it yourself, on your own machine or server. This policy covers both the Gofer application and this website, gofer.email.
 
 ## The short version
 
-The Gofer project does not operate a service that receives your data. Your email, contacts, and calendar go from your mail providers to the Gofer instance you run, and nowhere else. We have no servers that see them, and we do not collect, sell, or share them.
+The Gofer project does not operate a service that receives your data. Your email, contacts, and calendar go from your mail providers to the Gofer instance you run. We have no servers that see them, and we do not collect, sell, or share them. The only exceptions are the optional features described below that you turn on or use yourself: sender pictures and message translation.
 
 ## The Gofer application
 
@@ -21,16 +21,29 @@ When you run Gofer, you connect your own accounts (Gmail, Outlook, or any IMAP, 
 
 Because you host Gofer, you are responsible for securing your instance, its database, and its backups. If you run it for other people, you are responsible for how their data is handled.
 
+Gofer is published by Cristian Braun as an open source project. Jedna Software publishes the built-in Google and Microsoft sign-in clients that Gofer uses, and is responsible for them. Privacy and support questions about those clients go to admin@jednasoftware.cz.
+
 ### Google user data
 
-Gofer's use and transfer of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. In particular:
+Gofer's use and transfer of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.
 
-- Google user data is used only to provide the email, contact, and calendar features you see in Gofer.
-- It is not transferred to anyone other than your own Gofer instance, except as needed to comply with law.
-- It is not used or transferred for advertising, and it is not sold.
-- Humans do not read it, because it never reaches the developers.
+**What Gofer accesses.** When you connect a Google account, Gofer requests access to:
 
-You can revoke Gofer's access at any time in your [Google Account permissions](https://myaccount.google.com/permissions).
+- your Google Account email address and basic profile (name and picture), to identify the account;
+- your Gmail, to show, search, send, organize and delete your mail, using IMAP, SMTP and the Gmail API;
+- your Google Contacts, to show, create, edit and delete contacts and write those changes back to Google;
+- your Google Calendar, to show, create, edit and delete events and calendars. Access to manage all of your calendars is requested only if you choose it.
+
+**How it is used.** Google user data is used only to provide the email, contact, and calendar features you see in Gofer. It is not used for advertising, profiling, lending, or to develop, improve or train AI or machine learning models. It is not sold.
+
+**Where it goes.** Google user data is stored only on the Gofer instance you connected. Access and refresh tokens are encrypted there. Your instance talks directly to Google's servers and to your mail providers. It is not sent to the developers. The exceptions are the following features, which you can turn off:
+
+- **Sender pictures.** Gofer looks up pictures for senders using Gravatar and Libravatar, which receive a hash of the sender's email address. It can also fetch the sender's BIMI logo and website icon, which means your instance contacts the DNS and web servers of the sender's domain. Lookups can be turned off with the `GOFER_AVATAR_PROVIDERS` setting.
+- **Translation.** When you ask Gofer to translate a message, the text of that message is sent to Google Translate.
+
+**How long it is kept.** Data stays on your Gofer instance until you delete the account in Gofer, which removes its mail, contacts, calendar data and tokens from the instance. Backups you made yourself are not affected.
+
+**Revoking access.** You can stop Gofer's access at any time in your [Google Account permissions](https://myaccount.google.com/permissions). Once access is revoked, Gofer can no longer read or change the account's data.
 
 ### Microsoft user data
 

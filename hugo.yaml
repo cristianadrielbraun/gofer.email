@@ -29,7 +29,7 @@ params:
   navbar_title: '<span class="gofer-brand"><img src="/images/gofer-logo.svg" width="36" height="36" alt="">Gofer</span>'
   navbar_width: extra-wide
   hide_navbar_on_scroll: false
-  footer: 'MIT licensed. Built with Go, Hugo, and Monochrome.'
+  footer: 'An open source project by Cristian Braun. MIT licensed. Built with Go, Hugo, and Monochrome.'
   color_scheme: system
   enable_zooming_js: true
   enable_header_anchor: false
